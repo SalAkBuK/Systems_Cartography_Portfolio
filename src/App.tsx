@@ -9,13 +9,13 @@ import {
   ExperienceNode,
   OperatorMetadata
 } from './types';
-import { 
-  PROJECTS, 
-  INFRASTRUCTURE_SKILLS, 
-  EXPERIENCE_HISTORY, 
-  ARCHITECTURE_PRINCIPLES,
-  OPERATOR_METADATA
-} from './data/portfolioData';
+import { ARCHITECTURE_PRINCIPLES } from './data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
+  VERIFIED_PROJECTS as PROJECTS,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from './data/verifiedPortfolioData';
 import { TopTelemetryBar } from './components/TopTelemetryBar';
 import { LeftNavigationRail } from './components/LeftNavigationRail';
 import { TopologyCanvas } from './components/TopologyCanvas';
@@ -37,8 +37,28 @@ const STORAGE_KEY_SKILLS = 'sys_cartography_skills';
 const STORAGE_KEY_EXPERIENCE = 'sys_cartography_experience';
 const STORAGE_KEY_OPERATOR = 'sys_cartography_operator';
 const STORAGE_KEY_CV_SOURCE = 'sys_cartography_cv_source';
+const STORAGE_KEY_SCHEMA_VERSION = 'sys_cartography_schema_version';
+const CURRENT_STORAGE_SCHEMA_VERSION = '2';
+
+function migrateStoredPortfolio(): void {
+  try {
+    if (localStorage.getItem(STORAGE_KEY_SCHEMA_VERSION) === CURRENT_STORAGE_SCHEMA_VERSION) return;
+    [
+      STORAGE_KEY_PROJECTS,
+      STORAGE_KEY_GITHUB_SOURCE,
+      STORAGE_KEY_SKILLS,
+      STORAGE_KEY_EXPERIENCE,
+      STORAGE_KEY_OPERATOR,
+      STORAGE_KEY_CV_SOURCE
+    ].forEach(key => localStorage.removeItem(key));
+    localStorage.setItem(STORAGE_KEY_SCHEMA_VERSION, CURRENT_STORAGE_SCHEMA_VERSION);
+  } catch {
+    // Storage can be unavailable in private browsing contexts.
+  }
+}
 
 export default function App() {
+  migrateStoredPortfolio();
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
 
   // Dynamic projects state (loaded from local storage if previously synced, else default flagship projects)
@@ -147,25 +167,30 @@ export default function App() {
 
   // GitHub Sync Handlers
   const handleApplyGitHubSync = useCallback((result: GitHubSyncResult) => {
+    const mergedOperator: OperatorMetadata = {
+      ...result.operator,
+      name: operator.name,
+      handle: operator.handle,
+      role: operator.role,
+      location: operator.location,
+      focus: operator.focus,
+      yearsActive: operator.yearsActive,
+      commitsIndexed: 'Not indexed',
+      productionUptime: 'Not claimed',
+      systemManifesto: operator.systemManifesto,
+      contact: {
+        ...result.operator.contact,
+        ...operator.contact,
+        github: result.operator.contact.github || operator.contact.github
+      }
+    };
     setProjects(result.projects);
     setGitHubSource(result.sourceIdentifier);
-    setCvSource(null);
-    if (result.skills && result.skills.length > 0) {
-      setSkills(result.skills);
-    }
-    if (result.experience && result.experience.length > 0) {
-      setExperience(result.experience);
-    }
-    if (result.operator) {
-      setOperator(result.operator);
-    }
+    setOperator(mergedOperator);
     try {
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
       localStorage.setItem(STORAGE_KEY_GITHUB_SOURCE, result.sourceIdentifier);
-      localStorage.removeItem(STORAGE_KEY_CV_SOURCE);
-      if (result.skills) localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
-      if (result.experience) localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(result.experience));
-      if (result.operator) localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(result.operator));
+      localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(mergedOperator));
     } catch {
       // Storage quota or private mode
     }
@@ -174,24 +199,33 @@ export default function App() {
       setActiveView('projects');
     }
     setDrilledProjectId(null);
-  }, []);
+  }, [operator]);
 
   // CV / Resume Sync Handlers
   const handleApplyCVSync = useCallback((result: ParsedCVSyncResult) => {
-    setProjects(result.projects);
+    const normalizeTitle = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mergedProjects = gitHubSource
+      ? [...projects, ...result.projects.filter(candidate =>
+          !projects.some(existing => {
+            const existingTitle = normalizeTitle(existing.title);
+            const candidateTitle = normalizeTitle(candidate.title);
+            return existingTitle === candidateTitle || existingTitle.includes(candidateTitle) || candidateTitle.includes(existingTitle);
+          })
+        )]
+      : result.projects;
+
+    setProjects(mergedProjects);
     setSkills(result.skills);
     setExperience(result.experience);
     setOperator(result.operator);
     setCvSource(result.sourceDocument);
-    setGitHubSource(null);
 
     try {
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(mergedProjects));
       localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
       localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(result.experience));
       localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(result.operator));
       localStorage.setItem(STORAGE_KEY_CV_SOURCE, result.sourceDocument);
-      localStorage.removeItem(STORAGE_KEY_GITHUB_SOURCE);
     } catch {
       // Storage quota or private mode
     }
@@ -201,7 +235,7 @@ export default function App() {
       setActiveView('projects');
     }
     setDrilledProjectId(null);
-  }, []);
+  }, [gitHubSource, projects]);
 
   const handleResetToDefaultProjects = useCallback(() => {
     setProjects(PROJECTS);
@@ -505,6 +539,8 @@ export default function App() {
         onResetView={handleResetView}
         onOpenResume={() => setIsResumeOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
+        operatorName={operator.name}
+        operatorLocation={operator.location}
       />
 
       {/* CV / Resume Ingestion Modal */}
@@ -562,4 +598,3 @@ export default function App() {
     </div>
   );
 }
-

@@ -61,7 +61,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
           <div className="flex flex-col text-left">
             <span className="text-[8px] opacity-50 tracking-tighter">System ID</span>
             <span className="font-bold text-[10px] text-[#15150F]">
-              {cvSource ? `CV//${cvSource.slice(0, 14).toUpperCase()}` : gitHubSource ? `GH//${gitHubSource.toUpperCase()}` : 'HAFSAH.SYS.PORTFOLIO'}
+              {cvSource ? `CV//${cvSource.slice(0, 14).toUpperCase()}` : gitHubSource ? `GH//${gitHubSource.toUpperCase()}` : 'SALIH.SYSTEMS.PORTFOLIO'}
             </span>
           </div>
         </button>

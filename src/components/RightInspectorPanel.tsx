@@ -24,13 +24,13 @@ import {
   ArchitecturePrinciple,
   OperatorMetadata
 } from '../types';
-import { 
-  OPERATOR_METADATA, 
-  PROJECTS, 
-  INFRASTRUCTURE_SKILLS, 
-  EXPERIENCE_HISTORY,
-  ARCHITECTURE_PRINCIPLES 
-} from '../data/portfolioData';
+import { ARCHITECTURE_PRINCIPLES } from '../data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
+  VERIFIED_PROJECTS as PROJECTS,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from '../data/verifiedPortfolioData';
 
 interface RightInspectorPanelProps {
   selectedProject: ProjectData | null;
@@ -389,7 +389,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-bold text-[#15150F]">{selectedSkill.code} // {selectedSkill.name}</span>
                 <span className="text-[8.5px] bg-[#15150F] text-[#8EA9DA] px-1.5 py-0.5 font-bold">
-                  {selectedSkill.yearsActive} YRS ACTIVE
+                  {selectedSkill.yearsActive > 0 ? `${selectedSkill.yearsActive} YRS ACTIVE` : 'YEARS NOT CLAIMED'}
                 </span>
               </div>
               <div className="text-[9px] text-[#5C5946] mt-1">
@@ -616,7 +616,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               </div>
               <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
                 <span className="text-[7.5px] uppercase font-bold opacity-60">CAREER ACTIVE</span>
-                <span className="text-[14px] font-bold text-[#15150F] block">{activeOperator.yearsActive} YEARS</span>
+                <span className="text-[14px] font-bold text-[#15150F] block">{activeOperator.yearsActive > 0 ? `${activeOperator.yearsActive} YEARS` : 'NOT CLAIMED'}</span>
               </div>
               <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
                 <span className="text-[7.5px] uppercase font-bold opacity-60">COMMITS INDEXED</span>
