@@ -1,6 +1,6 @@
 {
   "name": "Systems Cartography Portfolio",
-  "description": "Precision brutalist systems cartography and technical console portfolio for a software engineer, mapping projects, infrastructure, and architectural evolution.",
+  "description": "Self-hostable brutalist systems cartography portfolio backed by public GitHub repository evidence.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

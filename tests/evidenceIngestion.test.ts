@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCVText } from '../src/services/cvParserService.ts';
 import {
   generateGitHubProfileDetails,
   GitHubRepoRaw,
   transformGitHubRepoToProject
 } from '../src/services/githubService.ts';
-import { mergePortfolioProjects } from '../src/services/portfolioMergeService.ts';
-import { VERIFIED_PROJECTS } from '../src/data/verifiedPortfolioData.ts';
+import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig.ts';
+import { VERIFIED_EXPERIENCE, VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 
 const repo: GitHubRepoRaw = {
   id: 1,
@@ -37,26 +36,16 @@ const repo: GitHubRepoRaw = {
   }
 };
 
-test('maps the reviewed Salih CV to canonical verified data', () => {
-  const result = parseCVText(`
-    FULL-STACK DEVELOPER
-    Salih Mohammad Bukhari
-    LOCATION Rawalpindi, Pakistan
-    TowerDesk Platform
-    PillCheck
-  `, 'Salih_Bukhari_CV.pdf');
+test('owner identity and GitHub source live in one self-hosting configuration', () => {
+  assert.equal(PORTFOLIO_CONFIG.operator.name, 'Salih Mohammad Bukhari');
+  assert.equal(PORTFOLIO_CONFIG.githubTarget, 'https://github.com/SalAkBuK');
+  assert.equal(PORTFOLIO_CONFIG.operator.contact.github, 'https://github.com/SalAkBuK');
+});
 
-  assert.equal(result.operator.name, 'Salih Mohammad Bukhari');
-  assert.equal(result.operator.location, 'Rawalpindi, Pakistan');
-  assert.equal(result.operator.commitsIndexed, 'Not indexed');
-  assert.equal(result.operator.productionUptime, 'Not claimed');
-  assert.deepEqual(result.projects.map(project => project.title), [
-    'TowerDesk Platform',
-    'TowerDesk App',
-    'PillCheck',
-    'AOK Health Solutions',
-    'Psych Websites'
-  ]);
+test('no résumé-derived fallback catalogue is bundled', () => {
+  assert.deepEqual(VERIFIED_PROJECTS, []);
+  assert.deepEqual(VERIFIED_SKILLS, []);
+  assert.deepEqual(VERIFIED_EXPERIENCE, []);
 });
 
 test('GitHub repository transformation publishes metadata without invented architecture', () => {
@@ -111,18 +100,17 @@ test('reviewed repositories expose only documented architecture and test evidenc
   assert.doesNotMatch(JSON.stringify(towerdesk), /99\.9|SLA|production uptime/i);
 });
 
-test('CV project aliases merge with matching GitHub evidence without duplicates', () => {
-  const githubProjects = [transformGitHubRepoToProject({
+test('PillCheck repository evidence is mapped directly from the public repository identity', () => {
+  const pillcheck = transformGitHubRepoToProject({
     ...repo,
     id: 3,
     name: 'pillcheck-public',
     full_name: 'SalAkBuK/pillcheck-public',
     html_url: 'https://github.com/SalAkBuK/pillcheck-public',
     description: 'Medication reminder app'
-  }, 0, 1)];
+  }, 0, 1);
 
-  const merged = mergePortfolioProjects(VERIFIED_PROJECTS, githubProjects);
-
-  assert.equal(merged.filter(project => project.title === 'PillCheck').length, 1);
-  assert.ok(merged.find(project => project.title === 'PillCheck')!.subsystems.length > 0);
+  assert.equal(pillcheck.title, 'pillcheck-public');
+  assert.equal(pillcheck.subsystems.length, 4);
+  assert.match(pillcheck.architectureNotes, /custom backend/i);
 });
