@@ -94,6 +94,9 @@ export default function App() {
   });
 
   const [experience, setExperience] = useState<ExperienceNode[]>(() => {
+    if (PORTFOLIO_CONFIG.experience && PORTFOLIO_CONFIG.experience.length > 0) {
+      return PORTFOLIO_CONFIG.experience;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_EXPERIENCE);
       if (saved) {

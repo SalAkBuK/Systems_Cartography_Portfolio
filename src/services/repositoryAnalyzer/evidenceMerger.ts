@@ -7,6 +7,7 @@ import {
   SystemStatus 
 } from '../../types';
 import { getRepositoryEvidence } from '../../data/repositoryEvidence';
+import { PORTFOLIO_CONFIG } from '../../config/portfolioConfig';
 import { 
   AnalyzedArchitecture, 
   AnalyzedDependencies, 
@@ -232,7 +233,7 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     performanceEvidence,
     links: {
       github: repo.html_url,
-      demo: repo.homepage || undefined,
+      demo: PORTFOLIO_CONFIG.projectLinks?.[repo.name.toLowerCase()] || PORTFOLIO_CONFIG.projectLinks?.[repo.name] || repo.homepage || undefined,
       caseStudy: false
     }
   };
