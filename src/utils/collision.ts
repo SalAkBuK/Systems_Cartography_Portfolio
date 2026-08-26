@@ -1,5 +1,9 @@
 import { ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
-import { PROJECTS, INFRASTRUCTURE_SKILLS, EXPERIENCE_HISTORY } from '../data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_PROJECTS as PROJECTS,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from '../data/verifiedPortfolioData';
 
 export const GRID_SNAP_STEP = 25; // 25-unit architectural grid step
 

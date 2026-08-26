@@ -11,12 +11,12 @@ import {
   Upload
 } from 'lucide-react';
 import { OperatorMetadata, ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
-import { 
-  OPERATOR_METADATA, 
-  PROJECTS, 
-  INFRASTRUCTURE_SKILLS, 
-  EXPERIENCE_HISTORY 
-} from '../data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
+  VERIFIED_PROJECTS as PROJECTS,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from '../data/verifiedPortfolioData';
 
 interface ResumeModalProps {
   isOpen: boolean;
@@ -191,7 +191,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
               <span>·</span>
               <span>EMAIL: {activeOperator.contact.email}</span>
               <span>·</span>
-              <span>GITHUB: github.com/{activeOperator.contact.github || 'operator'}</span>
+              <span>GITHUB: {activeOperator.contact.github.replace(/^https?:\/\//, '') || 'Not provided'}</span>
             </div>
           </div>
 
@@ -231,7 +231,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
               03 // SYSTEM BUILD HISTORY
             </span>
             <div className="flex flex-col gap-3.5">
-              {EXPERIENCE_HISTORY.map(exp => (
+              {activeExperience.map(exp => (
                 <div key={exp.id} className="p-3.5 border border-precision bg-[#E2DCB9] flex flex-col gap-2">
                   <div className="flex flex-wrap items-center justify-between border-b border-precision pb-1.5 gap-1">
                     <div>
