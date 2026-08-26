@@ -31,7 +31,7 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
   onResetToDefault,
   currentSync
 }) => {
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState('https://github.com/SalAkBuK');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusLog, setStatusLog] = useState<string | null>(null);
@@ -39,12 +39,7 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
   if (!isOpen) return null;
 
   const presets = [
-    { label: 'Torvalds (Systems)', value: 'torvalds', desc: 'Linux & Systems projects' },
-    { label: 'React (UI Core)', value: 'facebook/react', desc: 'Single Flagship Engine' },
-    { label: 'Shadcn (Design Sys)', value: 'shadcn-ui/ui', desc: 'Modern component kit' },
-    { label: 'Go Runtime', value: 'golang/go', desc: 'Compiler & Standard Lib' },
-    { label: 'Antfu (Tooling)', value: 'antfu', desc: 'Full-stack & open source' },
-    { label: 'Vercel (Platforms)', value: 'vercel', desc: 'Next.js & Edge tooling' }
+    { label: 'SalAkBuK', value: 'https://github.com/SalAkBuK', desc: 'Portfolio repository profile' }
   ];
 
   const handleConnect = async (targetToConnect?: string) => {
@@ -60,11 +55,11 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
 
     try {
       setTimeout(() => setStatusLog(`Fetching repository manifests & languages...`), 400);
-      setTimeout(() => setStatusLog(`Synthesizing 3D isometric topologies & subsystems...`), 800);
+      setTimeout(() => setStatusLog(`Mapping verified metadata and reviewed repository evidence...`), 800);
 
       const result = await connectGitHubTarget(target);
       
-      setStatusLog(`Mapped ${result.projects.length} repository structures successfully!`);
+      setStatusLog(`Mapped ${result.projects.length} public repositories successfully!`);
       setTimeout(() => {
         onApplySync(result);
         setIsLoading(false);

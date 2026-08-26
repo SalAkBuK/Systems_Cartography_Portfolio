@@ -88,13 +88,13 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-[#C3E54E] border border-[#15150F] inline-block"></span>
               <span className="text-[10px] font-bold text-[#15150F] tracking-widest uppercase">
-                SUBSYSTEM TOPOLOGY // {project.code} · {project.subsystems.length} ISOLATED PROCESSES
+                SUBSYSTEM TOPOLOGY // {project.code} · {project.subsystems.length} DOCUMENTED BOUNDARIES
               </span>
             </div>
             <div className="text-[9px] font-mono text-[#5C5946] flex items-center gap-3">
-              <span>ACTIVE TELEMETRY BUS</span>
+              <span>EVIDENCE VIEW</span>
               <span className="text-[#15150F] font-bold bg-[#D4CDA4] px-1.5 py-0.5 border border-[#15150F]">
-                BANDWIDTH: NORMAL
+                SOURCE: CV / REPO
               </span>
             </div>
           </div>
@@ -181,6 +181,11 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
                 </div>
               );
             })}
+            {project.subsystems.length === 0 && (
+              <div className="sm:col-span-2 lg:col-span-4 p-6 border-2 border-dashed border-[#15150F] bg-[#E2DCB9] text-[11px] text-[#5C5946] leading-relaxed">
+                No subsystem diagram is shown because the current CV and linked public repositories do not document one for this project. Add an owner-confirmed architecture note or link a supporting repository to populate this view.
+              </div>
+            )}
           </div>
 
           {/* Inter-subsystem Bus Conduit Animation Bar */}
