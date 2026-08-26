@@ -264,7 +264,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     ))}
                     {selectedProject.subsystems.length === 0 && (
                       <div className="p-3 text-[9.5px] text-[#5C5946] leading-relaxed">
-                        No subsystem boundary is documented by the current CV or linked repository evidence.
+                        No subsystem boundary is documented by the linked repository evidence.
                       </div>
                     )}
                   </div>
@@ -403,7 +403,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 </span>
               </div>
               <div className="text-[9px] text-[#5C5946] mt-1">
-                PROFICIENCY INDEX: {selectedSkill.proficiencyScore}/100 · {selectedSkill.systemCount} SYSTEMS MAPPED
+                PROFICIENCY: {selectedSkill.proficiencyScore > 0 ? `${selectedSkill.proficiencyScore}/100` : 'NOT CLAIMED'} · {selectedSkill.systemCount} SYSTEMS MAPPED
               </div>
             </div>
 

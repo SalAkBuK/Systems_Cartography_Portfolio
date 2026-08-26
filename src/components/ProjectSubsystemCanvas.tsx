@@ -94,7 +94,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
             <div className="text-[9px] font-mono text-[#5C5946] flex items-center gap-3">
               <span>EVIDENCE VIEW</span>
               <span className="text-[#15150F] font-bold bg-[#D4CDA4] px-1.5 py-0.5 border border-[#15150F]">
-                SOURCE: CV / REPO
+                SOURCE: PUBLIC REPOSITORY
               </span>
             </div>
           </div>
@@ -183,7 +183,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
             })}
             {project.subsystems.length === 0 && (
               <div className="sm:col-span-2 lg:col-span-4 p-6 border-2 border-dashed border-[#15150F] bg-[#E2DCB9] text-[11px] text-[#5C5946] leading-relaxed">
-                No subsystem diagram is shown because the current CV and linked public repositories do not document one for this project. Add an owner-confirmed architecture note or link a supporting repository to populate this view.
+                No subsystem diagram is shown because the linked public repository does not document one for this project. Add an owner-confirmed repository note to populate this view.
               </div>
             )}
           </div>
@@ -192,8 +192,8 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
           <div className="mt-4 pt-3 border-t border-[#15150F] flex items-center justify-between text-[8px] font-mono text-[#5C5946]">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-[#C3E54E] rounded-full animate-pulse"></span>
-              <span className="font-bold text-[#15150F]">INTERNAL RPC PIPELINE:</span>
-              <span>SYNCHRONIZED BUS STREAM ACTIVE</span>
+              <span className="font-bold text-[#15150F]">DOCUMENTED CONNECTIONS:</span>
+              <span>REPOSITORY EVIDENCE VIEW</span>
             </div>
             <div className="hidden sm:flex items-center gap-1 font-bold text-[#15150F]">
               <span>[CLICK NODE FOR DRILL-DOWN SPEC]</span>
