@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    border-color: #15150F;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'JetBrains Mono', 'Space Mono', monospace;
+    background-color: #D4CDA4;
+    color: #15150F;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #D4CDA4;
+  border-left: 1px solid #15150F;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #15150F;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #38372A;
+}
+
+/* Technical & Drafting Grid Backgrounds */
+.technical-grid {
+  background-image: 
+    linear-gradient(rgba(21, 21, 15, 0.06) 1px, transparent 1px), 
+    linear-gradient(90deg, rgba(21, 21, 15, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.technical-subgrid {
+  background-image: 
+    linear-gradient(rgba(21, 21, 15, 0.12) 1px, transparent 1px), 
+    linear-gradient(90deg, rgba(21, 21, 15, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(21, 21, 15, 0.04) 1px, transparent 1px), 
+    linear-gradient(90deg, rgba(21, 21, 15, 0.04) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+}
+
+.drafting-grid {
+  background-image: 
+    linear-gradient(to right, rgba(21, 21, 15, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(21, 21, 15, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.drafting-subgrid {
+  background-image: 
+    linear-gradient(to right, rgba(21, 21, 15, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(21, 21, 15, 0.14) 1px, transparent 1px),
+    linear-gradient(to right, rgba(21, 21, 15, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(21, 21, 15, 0.04) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
+}
+
+/* 3D Isometric drafting blocks */
+.iso-box {
+  position: relative;
+  background: #D4CDA4;
+  border: 1.5px solid #15150F;
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.iso-box::after {
+  content: '';
+  position: absolute;
+  top: -10px; 
+  left: 5px;
+  width: 100%; 
+  height: 10px;
+  background: #B4AC84;
+  border: 1.5px solid #15150F;
+  border-bottom: none;
+  transform: skewX(-45deg);
+  pointer-events: none;
+}
+
+.iso-box::before {
+  content: '';
+  position: absolute;
+  top: -5px; 
+  right: -10px;
+  width: 10px; 
+  height: 100%;
+  background: #A49C74;
+  border: 1.5px solid #15150F;
+  border-left: none;
+  transform: skewY(-45deg);
+  pointer-events: none;
+}
+
+.accent-green { background-color: #C3E54E !important; }
+.accent-blue { background-color: #8EA9DA !important; }
+.accent-orange { background-color: #CA885C !important; }
+.invert-block { background-color: #15150F !important; color: #D4CDA4 !important; }
+
+/* Diagonal architectural hatch pattern */
+.hatch-pattern {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(21, 21, 15, 0.15) 4px,
+    rgba(21, 21, 15, 0.15) 5px
+  );
+}
+
+.hatch-pattern-dense {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 2px,
+    rgba(21, 21, 15, 0.25) 2px,
+    rgba(21, 21, 15, 0.25) 3px
+  );
+}
+
+/* Pulse animation for data signals */
+@keyframes pulse-signal {
+  0% { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.signal-conduit {
+  stroke-dasharray: 6 6;
+  animation: pulse-signal 1.8s linear infinite;
+}
+
+.signal-conduit-fast {
+  stroke-dasharray: 4 4;
+  animation: pulse-signal 0.9s linear infinite;
+}
+
+/* Crisp 1px Precision Borders */
+.border-precision {
+  border-width: 1px;
+  border-color: #15150F;
+}
+
+.divide-precision > * + * {
+  border-color: #15150F;
+  border-style: solid;
+}
