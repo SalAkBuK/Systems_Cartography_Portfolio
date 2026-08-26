@@ -14,7 +14,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { OperatorMetadata } from '../types';
-import { OPERATOR_METADATA } from '../data/portfolioData';
+import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
 
 interface ContactInterfaceModalProps {
   isOpen: boolean;
@@ -140,7 +140,7 @@ export const ContactInterfaceModal: React.FC<ContactInterfaceModalProps> = ({
               </a>
 
               {/* LinkedIn */}
-              <a
+              {operator.contact.linkedin && <a
                 href={operator.contact.linkedin}
                 target="_blank"
                 rel="noreferrer"
@@ -154,10 +154,10 @@ export const ContactInterfaceModal: React.FC<ContactInterfaceModalProps> = ({
                   </div>
                 </div>
                 <ExternalLink size={12} className="text-[#5C5946] group-hover:text-[#D4CDA4]" />
-              </a>
+              </a>}
 
               {/* Matrix */}
-              <div className="p-2.5 border border-precision bg-[#DCD6B2]/60 flex items-center justify-between">
+              {operator.contact.matrix && <div className="p-2.5 border border-precision bg-[#DCD6B2]/60 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={13} />
                   <div>
@@ -165,12 +165,12 @@ export const ContactInterfaceModal: React.FC<ContactInterfaceModalProps> = ({
                     <div className="font-bold text-[9.5px] truncate max-w-[160px]">{operator.contact.matrix}</div>
                   </div>
                 </div>
-              </div>
+              </div>}
             </div>
           </div>
 
           {/* PGP Key Fingerprint */}
-          <div className="p-3 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-1.5">
+          {operator.contact.pgpFingerprint && <div className="p-3 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-[9px] font-bold text-[#5C5946] uppercase">
                 <Key size={12} />
@@ -187,7 +187,7 @@ export const ContactInterfaceModal: React.FC<ContactInterfaceModalProps> = ({
             <code className="text-[8.5px] bg-[#15150F] text-[#D4CDA4] p-1.5 border border-precision overflow-x-auto">
               {operator.contact.pgpFingerprint}
             </code>
-          </div>
+          </div>}
 
           {/* Direct Terminal Dispatcher Form */}
           <form onSubmit={handleDispatch} className="flex flex-col gap-2.5">

@@ -233,11 +233,6 @@ export function inferInfrastructureDeps(techStack: string[]): string[] {
   if (text.includes('ebpf') || text.includes('linux') || text.includes('kernel')) deps.push('infra-ebpf');
   if (text.includes('distributed') || text.includes('raft') || text.includes('crdt') || text.includes('p2p') || text.includes('webrtc')) deps.push('infra-dist');
 
-  // Ensure at least 1-2 infrastructure links for visual pulse traces
-  if (deps.length === 0) {
-    deps.push('infra-ts', 'infra-docker');
-  }
-
   return Array.from(new Set(deps));
 }
 
@@ -496,9 +491,7 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
       if (!techStack.includes(formatted)) techStack.push(formatted);
     });
   }
-  if (techStack.length < 3) {
-    techStack.push('Git', 'CI/CD');
-  }
+  if (techStack.length === 0) techStack.push('Metadata unavailable');
 
   const infraDeps = inferInfrastructureDeps(techStack);
   const year = repo.pushed_at ? new Date(repo.pushed_at).getFullYear().toString() : new Date().getFullYear().toString();
@@ -506,8 +499,6 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
   // Status
   let status: SystemStatus = 'ACTIVE';
   if (repo.archived) status = 'ARCHIVED';
-  else if (repo.stargazers_count > 500) status = 'PRODUCTION';
-  else if (repo.fork) status = 'EXPERIMENTAL';
 
   // 3D Building Dimensions calculated from repo scope
   const sizeFactor = Math.min(Math.max(repo.size / 1000, 1), 10);
@@ -517,7 +508,9 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
   const height = Math.round(65 + Math.min(starFactor * 12, 45));
   const levels = Math.min(Math.max(Math.round(starFactor + 1), 2), 5);
 
-  const subsystems = generateSubsystems(repo, category, techStack);
+  // Repository metadata cannot prove internal subsystem boundaries. Keep this
+  // empty until a future repository-content analysis can cite actual files.
+  const subsystems: SubsystemNode[] = [];
 
   const formatNumber = (num: number) => {
     if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
@@ -530,52 +523,36 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
     { label: 'Repo Footprint', value: `${(repo.size / 1024).toFixed(1)} MB`, note: 'Source code & assets' },
     { label: 'Open Issues', value: `${repo.open_issues_count} open`, note: 'Issue tracker backlog' },
     { label: 'Primary Language', value: repo.language || 'Mixed Stack', note: 'Dominant language' },
-    { label: 'License Spec', value: repo.license?.spdx_id || 'Open Source', note: 'Repository license' }
+    { label: 'License Spec', value: repo.license?.spdx_id || 'Not reported', note: 'GitHub repository metadata' }
   ];
 
   return {
     id: `gh-${repo.id}`,
     code,
     title: repo.name,
-    tagline: repo.description || `High-performance ${category} codebase built with ${techStack.slice(0, 3).join(', ')}.`,
+    tagline: repo.description || `Public ${category} repository; no description supplied on GitHub.`,
     category,
     status,
     year,
     dimensions: { width, height, levels },
     gridPosition: getGridCoordinatesForIndex(index, total),
     accentColor,
-    summary: repo.description 
-      ? `${repo.description} Published under ${repo.license?.name || 'Open Source'} with ${repo.stargazers_count} stars on GitHub.`
-      : `Production-grade ${category} project authored by ${repo.owner.login}. Features complete automated test pipelines and modular architecture.`,
-    problem: `Software engineering at scale requires strict maintainability, low resource overhead, and modular separation of concerns without sacrificing developer velocity.`,
-    solution: `Implemented an idiomatic architecture leveraging ${techStack.slice(0, 3).join(', ')}, with automated continuous integration checks, zero-dependency core modules, and explicit error handling boundaries.`,
-    architectureNotes: `Repository structured around modular decoupled packages. Employs ${repo.default_branch} branch deployment strategies, automated static analysis, and semantic release tagging.`,
+    summary: repo.description
+      ? `${repo.description} GitHub reports ${repo.stargazers_count} stars, ${repo.forks_count} forks, and ${repo.open_issues_count} open issues.`
+      : `Public repository owned by ${repo.owner.login}. GitHub does not provide a project description.`,
+    problem: 'Not established by GitHub repository metadata.',
+    solution: 'Inspect the repository and owner-approved case study before publishing implementation claims.',
+    architectureNotes: `Verified metadata only: primary language ${repo.language || 'not reported'}, default branch ${repo.default_branch || 'not reported'}, license ${repo.license?.spdx_id || 'not reported'}.`,
     techStack,
     infrastructureDeps: infraDeps,
     subsystems,
     metrics,
-    keyDecisions: [
-      {
-        decision: `Language Choice (${repo.language || 'TypeScript'})`,
-        rationale: `Selected for strong type guarantees, rich compiler ecosystem, and broad community adoption.`,
-        tradeoff: `Requires strict lint rules and type-checking pass during build pipelines.`
-      },
-      {
-        decision: 'Modular Decoupling',
-        rationale: 'Isolates core business logic from transport and framework layer to allow effortless refactoring.',
-        tradeoff: 'Slightly higher initial boilerplate in directory organization.'
-      },
-      {
-        decision: 'Automated CI/CD Validation',
-        rationale: 'Prevents regressions by running comprehensive unit test matrix on all pull requests.',
-        tradeoff: 'Requires compute time on each push to verify matrix compatibility.'
-      }
-    ],
-    resilienceTesting: `Continuous automated testing with GitHub Actions matrix covering linting, static type verification, and runtime execution.`,
+    keyDecisions: [],
+    resilienceTesting: 'Not established by GitHub repository metadata.',
     links: {
       github: repo.html_url,
       demo: repo.homepage || undefined,
-      caseStudy: true
+      caseStudy: false
     }
   };
 }
@@ -590,8 +567,8 @@ export function generateGitHubProfileDetails(
 ): { skills: InfrastructureSkill[]; operator: OperatorMetadata; experience: ExperienceNode[] } {
   const username = user?.login || sourceIdentifier.split('/')[0] || 'operator';
   const name = user?.name || username;
-  const role = user?.bio ? user.bio.split('\n')[0].slice(0, 60) : 'Full-Stack Systems Engineer';
-  const location = user?.location || 'San Francisco, CA // Distributed';
+  const role = user?.bio ? user.bio.split('\n')[0].slice(0, 60) : 'GitHub profile';
+  const location = user?.location || 'Not provided on GitHub';
 
   // 1. Synthesize Languages & Technologies across all projects
   const langCountMap: Record<string, number> = {};
@@ -604,7 +581,7 @@ export function generateGitHubProfileDetails(
   });
 
   const sortedTech = Object.keys(langCountMap).sort((a, b) => langCountMap[b] - langCountMap[a]);
-  const primaryStack = sortedTech.length >= 4 ? sortedTech.slice(0, 7) : ['TypeScript', 'React', 'Go', 'PostgreSQL', 'Docker', 'Git'];
+  const primaryStack = sortedTech.slice(0, 7);
 
   // 2. Generate 3D Infrastructure Plinths in Center Hexagonal Array
   const skills: InfrastructureSkill[] = primaryStack.slice(0, 6).map((tech, idx) => {
@@ -621,21 +598,14 @@ export function generateGitHubProfileDetails(
       code: `INF-${(idx + 1).toString().padStart(2, '0')}`,
       name: `${tech} & Application Architecture`,
       category: cat,
-      yearsActive: Math.min(Math.max(projects.length, 3), 10),
-      proficiencyScore: 90 + ((idx * 3) % 9),
+      yearsActive: 0,
+      proficiencyScore: 0,
       gridPosition: { x: gridX, y: gridY },
       systemCount: matchingProjects.length || 1,
       usedInProjects: matchingProjects,
-      primaryUseCases: [
-        `Production systems architecture built with ${tech}`,
-        `Modular package design and continuous integration pipelines`,
-        `Low-latency execution and high maintainability benchmarks`
-      ],
-      technicalHighlights: [
-        `Automated static analysis and zero-regression test harnesses`,
-        `Modern idiomatic patterns with strict failure boundary isolation`
-      ],
-      samplePattern: `// Invariants and contracts for ${tech}\nexport function verifyReliability() {\n  return { status: 'OPTIMAL', protocol: '${tech.toUpperCase()}' };\n}`
+      primaryUseCases: [`Detected in ${matchingProjects.length} public GitHub ${matchingProjects.length === 1 ? 'repository' : 'repositories'}`],
+      technicalHighlights: ['No proficiency score or years inferred from repository metadata'],
+      samplePattern: '// Evidence source: public GitHub repository metadata'
     };
   });
 
@@ -652,35 +622,19 @@ export function generateGitHubProfileDetails(
     {
       id: 'gh-exp-1',
       code: 'BUILD-01',
-      yearRange: '2023 — PRESENT',
+      yearRange: 'PUBLIC GITHUB SNAPSHOT',
       role: role,
-      organization: user?.company ? user.company.replace(/^@/, '') : 'Open Source Engineering',
+      organization: user?.company ? user.company.replace(/^@/, '') : 'GitHub repositories',
       location: location,
-      systemDomain: 'Distributed Software Architecture',
+      systemDomain: 'Public repository metadata',
       keyOutputs: [
-        `Published ${projects.length} open-source repositories indexed on GitHub.`,
-        `Engineered modular software architectures using ${primaryStack.slice(0, 3).join(', ')}.`,
-        `Maintained public issue trackers and continuous deployment workflows.`
+        `Mapped ${projects.length} public repositories returned by GitHub.`,
+        `Detected repository languages and topics: ${primaryStack.slice(0, 5).join(', ') || 'none reported'}.`,
+        'No employment history or performance claims inferred.'
       ],
       systemsArchitected: projects.slice(0, 3).map(p => p.title),
       technologies: primaryStack.slice(0, 5),
       gridPosition: { x: -260, y: 140 }
-    },
-    {
-      id: 'gh-exp-2',
-      code: 'BUILD-02',
-      yearRange: '2020 — 2023',
-      role: 'Software Engineer',
-      organization: 'Systems & Web Platform Lab',
-      location: location,
-      systemDomain: 'Full-Stack Development',
-      keyOutputs: [
-        'Designed decoupled services and automated unit test matrices.',
-        'Contributed to core open source repositories and dependency libraries.'
-      ],
-      systemsArchitected: projects.slice(3, 5).map(p => p.title),
-      technologies: primaryStack.slice(2, 6),
-      gridPosition: { x: -190, y: 170 }
     }
   ];
 
@@ -691,22 +645,20 @@ export function generateGitHubProfileDetails(
     role,
     location,
     status: 'ACTIVE_BUILD // GITHUB SYNCHRONIZED',
-    focus: user?.bio || `Systems engineering and software architecture across ${primaryStack.slice(0, 4).join(', ')}`,
-    yearsActive: Math.max(2, Math.min(projects.length * 2, 10)),
-    commitsIndexed: `${(projects.length * 80 + 350).toLocaleString()}+`,
-    productionUptime: '99.98%',
+    focus: user?.bio || `Public GitHub repositories using ${primaryStack.slice(0, 4).join(', ') || 'unreported technologies'}`,
+    yearsActive: 0,
+    commitsIndexed: 'Not indexed',
+    productionUptime: 'Not claimed',
     primaryStack,
-    systemManifesto: user?.bio 
-      ? `${user.bio} Software architecture driven by mechanical sympathy, clear failure boundaries, and continuous automated verification.`
-      : `I build modular software systems with high mechanical sympathy, strict failure boundaries, and minimal accidental complexity.`,
+    systemManifesto: user?.bio || 'Profile synthesized from public GitHub repository metadata. Verify personal and architectural claims before publication.',
     contact: {
-      email: `${username}@users.noreply.github.com`,
+      email: '',
       github: user?.html_url || `https://github.com/${username}`,
-      linkedin: `https://linkedin.com/in/${username}`,
-      pgpKeyId: `0x${username.slice(0, 8).toUpperCase()}`,
-      pgpFingerprint: `GITHUB-VERIFIED-AUTH-HASH-${username.toUpperCase()}`,
-      matrix: `@${username}:matrix.org`,
-      availability: 'Open to high-leverage architectural opportunities'
+      linkedin: '',
+      pgpKeyId: '',
+      pgpFingerprint: '',
+      matrix: '',
+      availability: 'Not provided on GitHub'
     }
   };
 

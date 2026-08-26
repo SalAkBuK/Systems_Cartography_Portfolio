@@ -15,7 +15,7 @@ import {
   Database
 } from 'lucide-react';
 import { ProjectData, OperatorMetadata } from '../types';
-import { OPERATOR_METADATA } from '../data/portfolioData';
+import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
 
 interface CaseStudyModalProps {
   project: ProjectData | null;

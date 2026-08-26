@@ -31,12 +31,12 @@ import {
   SystemCategory, 
   ViewportState 
 } from '../types';
-import { 
-  PROJECTS, 
-  INFRASTRUCTURE_SKILLS, 
-  EXPERIENCE_HISTORY, 
-  TOPOLOGY_ZONES 
-} from '../data/portfolioData';
+import { TOPOLOGY_ZONES } from '../data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_PROJECTS as PROJECTS,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from '../data/verifiedPortfolioData';
 import {
   findNearestValidGridPosition,
   checkCollisions,

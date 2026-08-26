@@ -6,7 +6,6 @@ import {
   Radio
 } from 'lucide-react';
 import { ViewportState } from '../types';
-import { OPERATOR_METADATA } from '../data/portfolioData';
 
 interface BottomCommandStripProps {
   viewport: ViewportState;
@@ -16,6 +15,8 @@ interface BottomCommandStripProps {
   onResetView: () => void;
   onOpenResume: () => void;
   onOpenContact: () => void;
+  operatorName: string;
+  operatorLocation: string;
 }
 
 export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
@@ -25,7 +26,9 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
   selectedProjectId,
   onResetView,
   onOpenResume,
-  onOpenContact
+  onOpenContact,
+  operatorName,
+  operatorLocation
 }) => {
   const [localTime, setLocalTime] = useState<string>('');
 
@@ -78,9 +81,9 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
 
       {/* 2. Immersive Terminal Status Footer */}
       <footer className="h-6 bg-[#15150F] text-[#D4CDA4] text-[8px] flex items-center px-4 justify-between tracking-widest font-mono shrink-0 select-none">
-        <div className="truncate">SYSTEM OPERATOR: {OPERATOR_METADATA.name.toUpperCase()}</div>
+        <div className="truncate">SYSTEM OPERATOR: {operatorName.toUpperCase()}</div>
         <div className="hidden md:block truncate">
-          COORD: 37.7749° N, 122.4194° W // LOCAL TIME: {localTime}
+          LOCATION: {operatorLocation.toUpperCase()} // LOCAL TIME: {localTime}
         </div>
         <div className="flex items-center gap-1.5 text-[#C3E54E]">
           <span className="w-1.5 h-1.5 bg-[#C3E54E] rounded-full animate-ping"></span>

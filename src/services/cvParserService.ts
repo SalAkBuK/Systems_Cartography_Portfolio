@@ -7,6 +7,12 @@ import {
   SystemStatus 
 } from '../types';
 import { getGridCoordinatesForIndex, inferAccentColor } from './githubService';
+import {
+  VERIFIED_EXPERIENCE,
+  VERIFIED_OPERATOR_METADATA,
+  VERIFIED_PROJECTS,
+  VERIFIED_SKILLS
+} from '../data/verifiedPortfolioData';
 
 export interface ParsedCVResult {
   operator: OperatorMetadata;
@@ -67,24 +73,38 @@ Embedded SIMD-accelerated vector database for nearest-neighbor embeddings querie
  * Procedurally parse raw resume/CV text (or Markdown/PDF text) into structured System Cartography nodes
  */
 export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
+  // Known portfolio-owner CV: use the reviewed canonical mapping instead of
+  // guessing structure from a multi-column PDF text stream.
+  if (/Salih\s+Mohammad\s+Bukhari/i.test(text) && /TowerDesk/i.test(text) && /PillCheck/i.test(text)) {
+    return {
+      operator: structuredClone(VERIFIED_OPERATOR_METADATA),
+      projects: structuredClone(VERIFIED_PROJECTS),
+      skills: structuredClone(VERIFIED_SKILLS),
+      experience: structuredClone(VERIFIED_EXPERIENCE),
+      rawText: text,
+      sourceDocument: sourceName || 'Salih Bukhari CV'
+    };
+  }
+
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   
   // 1. Extract Name & Role
   let name = 'Technical Candidate';
-  let role = 'Staff Systems Engineer / Full-Stack Architect';
-  let email = 'operator@systems.dev';
-  let location = 'San Francisco, CA // UTC-7';
+  let role = 'Role not provided';
+  let email = '';
+  let location = 'Location not provided';
   let github = 'https://github.com';
   let linkedin = 'https://linkedin.com';
   let summary = '';
 
   // Scan top lines for Name and Role
-  if (lines.length > 0) {
-    const firstLine = lines[0].replace(/^#+\s*/, '').replace(/[-–|].*$/, '').trim();
-    if (firstLine && firstLine.length < 50) {
-      name = firstLine;
-    }
-  }
+  const nameCandidate = lines.slice(0, 12).find(line => {
+    const cleaned = line.replace(/^#+\s*/, '').trim();
+    if (/^(resume|curriculum|profile|summary|full.?stack|developer|engineer|location|phone|email|github)$/i.test(cleaned)) return false;
+    if (/^(?:[A-Z]\s+){3,}[A-Z]$/i.test(cleaned)) return false;
+    return /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){1,4}$/.test(cleaned);
+  });
+  if (nameCandidate) name = nameCandidate.replace(/^#+\s*/, '').trim();
 
   // Scan for emails and links
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
@@ -96,7 +116,7 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
   const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i);
   if (linkedinMatch) linkedin = `https://linkedin.com/in/${linkedinMatch[1]}`;
 
-  const locMatch = text.match(/(?:Location|Address|Based in):\s*([^\n]+)/i);
+  const locMatch = text.match(/(?:Location|Address|Based in)\s*:?\s*([^\n]+)/i);
   if (locMatch) location = locMatch[1].trim();
 
   // Scan for role title
@@ -156,22 +176,14 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
       code: `INF-${(idx + 1).toString().padStart(2, '0')}`,
       name: `${tech.name} & Systems Engineering`,
       category: tech.cat,
-      yearsActive: 5 + (idx % 4),
-      proficiencyScore: 88 + (idx * 2) % 12,
+      yearsActive: 0,
+      proficiencyScore: 0,
       gridPosition: { x: gridX, y: gridY },
       systemCount: 3 + (idx % 3),
       usedInProjects: [],
-      primaryUseCases: [
-        `Production implementation of ${tech.name} at scale`,
-        `Resilient architecture design and performance optimization`,
-        `Integration with continuous delivery and observability telemetry`
-      ],
-      technicalHighlights: [
-        tech.highlight,
-        `Zero-defect runtime reliability and defensive boundaries`,
-        `Automated test harnesses with high regression coverage`
-      ],
-      samplePattern: `// Architectural specification for ${tech.name}\nexport interface SystemInvariants {\n  readonly state: 'STABLE';\n  verifyIntegrity(): Promise<boolean>;\n}`
+      primaryUseCases: [`Detected in the supplied CV text`],
+      technicalHighlights: [tech.highlight, 'No proficiency percentage or years inferred'],
+      samplePattern: `// Evidence source: supplied CV (${tech.name})`
     };
   });
 
@@ -233,6 +245,22 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
   }
 
   // Fallback experience if none parsed
+  if (experience.length === 0) {
+    experience.push({
+      id: 'cv-exp-snapshot',
+      code: 'CV-01',
+      yearRange: 'CV SNAPSHOT',
+      role,
+      organization: 'Not provided in a parseable experience section',
+      location,
+      systemDomain: 'CV-supplied information only',
+      keyOutputs: ['No employment timeline inferred. Review the source CV before publication.'],
+      systemsArchitected: [],
+      technologies: skillsToUse.map(skill => skill.name),
+      gridPosition: { x: -260, y: 140 }
+    });
+  }
+
   if (experience.length === 0) {
     experience.push(
       {
@@ -303,9 +331,9 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
         gridPosition: getGridCoordinatesForIndex(idx, 6),
         accentColor: pAccent,
         summary: block.replace(/\n+/g, ' ').slice(0, 300),
-        problem: `Traditional solutions lacked mechanical sympathy and exhibited high latency under partition failure.`,
-        solution: `Implemented an idiomatic, modular decoupled architecture with zero-allocation memory pooling and strict failure domains.`,
-        architectureNotes: `Multi-tier topology: Transport layer -> In-memory B-Tree store -> Write-Ahead Log.`,
+        problem: 'Not explicitly identified in the parsed CV block.',
+        solution: 'See the CV-derived summary; implementation claims require owner review.',
+        architectureNotes: 'No architecture inferred from résumé prose.',
         techStack: pTech,
         infrastructureDeps: pDeps,
         subsystems: [
@@ -318,7 +346,7 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
             tech: pTech,
             coordinates: { x: 0, y: 0, z: 40 },
             dimensions: { width: 60, height: 35, depth: 45 },
-            metrics: [{ label: 'Throughput', value: '140k ops/s' }]
+            metrics: []
           },
           {
             id: `cv-p${idx + 1}-sub-2`,
@@ -329,22 +357,12 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
             tech: ['WAL', 'Protobuf'],
             coordinates: { x: 35, y: 30, z: 20 },
             dimensions: { width: 50, height: 25, depth: 35 },
-            metrics: [{ label: 'Latency', value: '<4.2ms' }]
+            metrics: []
           }
         ],
-        metrics: [
-          { label: 'Uptime Tier', value: '99.98%', note: 'SLA guarantee' },
-          { label: 'P99 Latency', value: '<8.5ms', note: 'Global edge cluster' },
-          { label: 'Codebase Rating', value: 'Zero-defect', note: 'Strict CI matrix' }
-        ],
-        keyDecisions: [
-          {
-            decision: 'Zero-Allocation Core Loop',
-            rationale: 'Eliminates GC pressure in critical path',
-            tradeoff: 'Requires explicit memory recycling'
-          }
-        ],
-        resilienceTesting: 'Chaos engineering suite simulating network partitions and packet loss.',
+        metrics: [{ label: 'Evidence', value: 'CV', note: 'Parsed résumé text' }],
+        keyDecisions: [],
+        resilienceTesting: 'Not specified in the supplied CV.',
         links: {
           github: github,
           caseStudy: true
@@ -353,7 +371,34 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
     });
   }
 
-  // Fallback projects if none parsed
+  // Safe fallback: preserve the source without inventing named systems.
+  if (projects.length === 0) {
+    projects.push({
+      id: 'cv-document-summary',
+      code: 'CV-01',
+      title: 'CV Project Summary',
+      tagline: 'No project section could be parsed reliably',
+      category: 'fullstack',
+      status: 'ACTIVE',
+      year: 'Not provided',
+      dimensions: { width: 95, height: 65, levels: 2 },
+      gridPosition: { x: 0, y: 0 },
+      accentColor: '#8EA9DA',
+      summary: summary || 'Review the uploaded CV text and confirm project boundaries manually.',
+      problem: 'Not identified in a parseable project section.',
+      solution: 'No solution inferred.',
+      architectureNotes: 'No architecture inferred.',
+      techStack: skillsToUse.map(skill => skill.name),
+      infrastructureDeps: [],
+      subsystems: [],
+      metrics: [{ label: 'Evidence', value: 'CV', note: 'Manual review required' }],
+      keyDecisions: [],
+      resilienceTesting: 'Not specified in the supplied CV.',
+      links: { github, caseStudy: false }
+    });
+  }
+
+  // Legacy sample fallback (unreachable for real CVs after the safe fallback).
   if (projects.length === 0) {
     projects.push(
       {
@@ -480,6 +525,12 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
     skill.systemCount = skill.usedInProjects.length || 2;
   });
 
+  // A résumé does not prove subsystem decomposition. Keep parsed project
+  // structure at the project-summary level until the owner verifies it.
+  projects.forEach(project => {
+    project.subsystems = [];
+  });
+
   // 5. Operator Metadata
   const operator: OperatorMetadata = {
     name,
@@ -488,19 +539,19 @@ export function parseCVText(text: string, sourceName?: string): ParsedCVResult {
     location,
     status: 'ACTIVE_BUILD // CV SYNCHRONIZED',
     focus: summary.slice(0, 140),
-    yearsActive: 8,
-    commitsIndexed: '6,200+',
-    productionUptime: '99.98%',
+    yearsActive: 0,
+    commitsIndexed: 'Not indexed',
+    productionUptime: 'Not claimed',
     primaryStack: skillsToUse.slice(0, 6).map(s => s.name),
     systemManifesto: summary,
     contact: {
       email,
       github,
       linkedin,
-      pgpKeyId: '0x8F92E31C',
-      pgpFingerprint: '94A1 8E34 B109 C321 78F0 9D3A 8F92 E31C',
-      matrix: `@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}:matrix.org`,
-      availability: 'Available for high-leverage technical challenges'
+      pgpKeyId: '',
+      pgpFingerprint: '',
+      matrix: '',
+      availability: 'Not provided in the supplied CV'
     }
   };
 

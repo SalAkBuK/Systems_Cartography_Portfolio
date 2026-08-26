@@ -14,7 +14,11 @@ import {
   FileText
 } from 'lucide-react';
 import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
-import { INFRASTRUCTURE_SKILLS, EXPERIENCE_HISTORY, ARCHITECTURE_PRINCIPLES } from '../data/portfolioData';
+import { ARCHITECTURE_PRINCIPLES } from '../data/portfolioData';
+import {
+  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
+  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+} from '../data/verifiedPortfolioData';
 
 interface LeftNavigationRailProps {
   activeView: ActiveView;
