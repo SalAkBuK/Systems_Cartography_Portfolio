@@ -8,6 +8,7 @@ import {
   OperatorMetadata 
 } from '../types';
 import { getRepositoryEvidence } from '../data/repositoryEvidence';
+import { analyzeRepository, RawRepositoryInspection } from './repositoryAnalyzer';
 
 export interface GitHubUser {
   login: string;
@@ -475,98 +476,78 @@ export function getGridCoordinatesForIndex(index: number, total: number): { x: n
 }
 
 /**
- * Transform a raw GitHub repository into our architectural ProjectData specification
+ * Attempt to fetch repository inspection artifacts (README, git tree, package.json)
  */
-export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number, total: number): ProjectData {
-  const code = `GH-${(index + 1).toString().padStart(2, '0')}`;
-  const category = inferCategory(repo.language, repo.topics, repo.description || '');
-  const accentColor = inferAccentColor(repo.language, index);
+export async function fetchRepoInspection(
+  owner: string, 
+  repo: string, 
+  defaultBranch = 'main'
+): Promise<RawRepositoryInspection> {
+  const inspection: RawRepositoryInspection = {
+    repoName: repo,
+    owner,
+    defaultBranch
+  };
 
-  // Tech stack aggregation
-  const techStack: string[] = [];
-  if (repo.language) techStack.push(repo.language);
-  if (repo.topics && repo.topics.length > 0) {
-    repo.topics.slice(0, 5).forEach(t => {
-      // Capitalize nicely
-      const formatted = t.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-      if (!techStack.includes(formatted)) techStack.push(formatted);
+  // 1. Fetch README
+  try {
+    const readmeRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, {
+      headers: { 'Accept': 'application/vnd.github.v3.raw' }
     });
-  }
-  if (techStack.length === 0) techStack.push('Metadata unavailable');
-
-  const infraDeps = inferInfrastructureDeps(techStack);
-  const year = repo.pushed_at ? new Date(repo.pushed_at).getFullYear().toString() : new Date().getFullYear().toString();
-  
-  // Status
-  let status: SystemStatus = 'ACTIVE';
-  if (repo.archived) status = 'ARCHIVED';
-
-  // 3D Building Dimensions calculated from repo scope
-  const sizeFactor = Math.min(Math.max(repo.size / 1000, 1), 10);
-  const starFactor = Math.min(Math.max(Math.log10(repo.stargazers_count + 1) * 1.5, 1), 4);
-  
-  const width = Math.round(85 + Math.min(sizeFactor * 4, 35));
-  const height = Math.round(65 + Math.min(starFactor * 12, 45));
-  const levels = Math.min(Math.max(Math.round(starFactor + 1), 2), 5);
-
-  // Repository metadata cannot prove internal subsystem boundaries. Keep this
-  // empty until a future repository-content analysis can cite actual files.
-  const subsystems: SubsystemNode[] = [];
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
-    return num.toString();
-  };
-
-  const metrics = [
-    { label: 'Stargazers', value: `${formatNumber(repo.stargazers_count)} ★`, note: 'GitHub community stars' },
-    { label: 'Forks', value: `${formatNumber(repo.forks_count)} ⑂`, note: 'Public downstream forks' },
-    { label: 'Repo Footprint', value: `${(repo.size / 1024).toFixed(1)} MB`, note: 'Source code & assets' },
-    { label: 'Open Issues', value: `${repo.open_issues_count} open`, note: 'Issue tracker backlog' },
-    { label: 'Primary Language', value: repo.language || 'Mixed Stack', note: 'Dominant language' },
-    { label: 'License Spec', value: repo.license?.spdx_id || 'Not reported', note: 'GitHub repository metadata' }
-  ];
-
-  const project: ProjectData = {
-    id: `gh-${repo.id}`,
-    code,
-    title: repo.name,
-    tagline: repo.description || `Public ${category} repository; no description supplied on GitHub.`,
-    category,
-    status,
-    year,
-    dimensions: { width, height, levels },
-    gridPosition: getGridCoordinatesForIndex(index, total),
-    accentColor,
-    summary: repo.description
-      ? `${repo.description} GitHub reports ${repo.stargazers_count} stars, ${repo.forks_count} forks, and ${repo.open_issues_count} open issues.`
-      : `Public repository owned by ${repo.owner.login}. GitHub does not provide a project description.`,
-    problem: 'Not established by GitHub repository metadata.',
-    solution: 'Inspect the repository and owner-approved case study before publishing implementation claims.',
-    architectureNotes: `Verified metadata only: primary language ${repo.language || 'not reported'}, default branch ${repo.default_branch || 'not reported'}, license ${repo.license?.spdx_id || 'not reported'}.`,
-    techStack,
-    infrastructureDeps: infraDeps,
-    subsystems,
-    metrics,
-    keyDecisions: [],
-    resilienceTesting: 'Not established by GitHub repository metadata.',
-    links: {
-      github: repo.html_url,
-      demo: repo.homepage || undefined,
-      caseStudy: false
+    if (readmeRes.ok) {
+      inspection.readmeContent = await readmeRes.text();
     }
-  };
+  } catch {
+    // Non-fatal
+  }
 
-  const repositoryEvidence = getRepositoryEvidence(repo.name);
-  if (!repositoryEvidence) return project;
+  // 2. Fetch Git Tree
+  try {
+    const treeRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (treeRes.ok) {
+      const treeData = await treeRes.json();
+      if (Array.isArray(treeData.tree)) {
+        inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
 
-  return {
-    ...project,
-    ...repositoryEvidence,
-    architectureNotes: `${repositoryEvidence.architectureNotes} GitHub metadata: primary language ${repo.language || 'not reported'}, default branch ${repo.default_branch || 'not reported'}, license ${repo.license?.spdx_id || 'not reported'}.`,
-    metrics,
-    links: project.links
-  };
+  // 3. Fetch package.json if present
+  if (inspection.treeFiles?.includes('package.json') || !inspection.treeFiles) {
+    try {
+      const pkgRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/package.json`, {
+        headers: { 'Accept': 'application/vnd.github.v3.raw' }
+      });
+      if (pkgRes.ok) {
+        inspection.packageJsonContent = await pkgRes.text();
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return inspection;
+}
+
+/**
+ * Transform a raw GitHub repository into our architectural ProjectData specification via repository analyzer
+ */
+export function transformGitHubRepoToProject(
+  repo: GitHubRepoRaw, 
+  index = 0, 
+  total = 1,
+  inspection?: RawRepositoryInspection
+): ProjectData {
+  return analyzeRepository({
+    repo,
+    inspection,
+    index,
+    total
+  });
 }
 
 /**
@@ -584,7 +565,6 @@ export function generateGitHubProfileDetails(
 
   // 1. Synthesize Languages & Technologies across all projects
   const langCountMap: Record<string, number> = {};
-  const topicCountMap: Record<string, number> = {};
 
   projects.forEach(p => {
     p.techStack.forEach(t => {
@@ -724,7 +704,19 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
   const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : rawRepos.filter(r => r.size > 0);
   const finalRepos = candidateRepos.slice(0, 10);
 
-  const projects = finalRepos.map((repo, idx) => transformGitHubRepoToProject(repo, idx, finalRepos.length));
+  // Inspect top candidate repository for richer evidence if available
+  const inspectionPromises = finalRepos.map(async (repo, idx) => {
+    if (idx < 3) {
+      return fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch).catch(() => undefined);
+    }
+    return undefined;
+  });
+
+  const inspections = await Promise.all(inspectionPromises);
+
+  const projects = finalRepos.map((repo, idx) => 
+    transformGitHubRepoToProject(repo, idx, finalRepos.length, inspections[idx])
+  );
   const { skills, operator, experience } = generateGitHubProfileDetails(projects, user, cleanUser);
 
   return {
@@ -740,7 +732,7 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
 }
 
 /**
- * Fetch a single GitHub repository
+ * Fetch a single GitHub repository with inspection data
  */
 export async function fetchGitHubRepoData(owner: string, repoName: string): Promise<GitHubSyncResult> {
   const cleanOwner = owner.trim();
@@ -771,11 +763,14 @@ export async function fetchGitHubRepoData(owner: string, repoName: string): Prom
     if (userRes.ok) {
       user = await userRes.json();
     }
-  } catch (e) {
+  } catch {
     // Non-fatal
   }
 
-  const project = transformGitHubRepoToProject(rawRepo, 0, 1);
+  // Fetch repository inspection artifacts
+  const inspection = await fetchRepoInspection(cleanOwner, cleanRepo, rawRepo.default_branch).catch(() => undefined);
+
+  const project = transformGitHubRepoToProject(rawRepo, 0, 1, inspection);
   const { skills, operator, experience } = generateGitHubProfileDetails([project], user, `${cleanOwner}/${cleanRepo}`);
 
   return {
