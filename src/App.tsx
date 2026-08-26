@@ -9,13 +9,14 @@ import {
   ExperienceNode,
   OperatorMetadata
 } from './types';
-import { ARCHITECTURE_PRINCIPLES } from './data/portfolioData';
 import {
+  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from './data/verifiedPortfolioData';
+import { mergePortfolioProjects } from './services/portfolioMergeService';
 import { TopTelemetryBar } from './components/TopTelemetryBar';
 import { LeftNavigationRail } from './components/LeftNavigationRail';
 import { TopologyCanvas } from './components/TopologyCanvas';
@@ -38,7 +39,7 @@ const STORAGE_KEY_EXPERIENCE = 'sys_cartography_experience';
 const STORAGE_KEY_OPERATOR = 'sys_cartography_operator';
 const STORAGE_KEY_CV_SOURCE = 'sys_cartography_cv_source';
 const STORAGE_KEY_SCHEMA_VERSION = 'sys_cartography_schema_version';
-const CURRENT_STORAGE_SCHEMA_VERSION = '2';
+const CURRENT_STORAGE_SCHEMA_VERSION = '3';
 
 function migrateStoredPortfolio(): void {
   try {
@@ -184,34 +185,28 @@ export default function App() {
         github: result.operator.contact.github || operator.contact.github
       }
     };
-    setProjects(result.projects);
+    const mergedProjects = cvSource ? mergePortfolioProjects(projects, result.projects) : result.projects;
+    setProjects(mergedProjects);
     setGitHubSource(result.sourceIdentifier);
     setOperator(mergedOperator);
     try {
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(mergedProjects));
       localStorage.setItem(STORAGE_KEY_GITHUB_SOURCE, result.sourceIdentifier);
       localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(mergedOperator));
     } catch {
       // Storage quota or private mode
     }
-    if (result.projects.length > 0) {
-      setSelectedProjectId(result.projects[0].id);
+    if (mergedProjects.length > 0) {
+      setSelectedProjectId(mergedProjects[0].id);
       setActiveView('projects');
     }
     setDrilledProjectId(null);
-  }, [operator]);
+  }, [cvSource, operator, projects]);
 
   // CV / Resume Sync Handlers
   const handleApplyCVSync = useCallback((result: ParsedCVSyncResult) => {
-    const normalizeTitle = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
     const mergedProjects = gitHubSource
-      ? [...projects, ...result.projects.filter(candidate =>
-          !projects.some(existing => {
-            const existingTitle = normalizeTitle(existing.title);
-            const candidateTitle = normalizeTitle(candidate.title);
-            return existingTitle === candidateTitle || existingTitle.includes(candidateTitle) || candidateTitle.includes(existingTitle);
-          })
-        )]
+      ? mergePortfolioProjects(result.projects, projects)
       : result.projects;
 
     setProjects(mergedProjects);

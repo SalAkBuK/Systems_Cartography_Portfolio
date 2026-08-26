@@ -24,8 +24,8 @@ import {
   ArchitecturePrinciple,
   OperatorMetadata
 } from '../types';
-import { ARCHITECTURE_PRINCIPLES } from '../data/portfolioData';
 import {
+  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
   VERIFIED_PROJECTS as PROJECTS,
@@ -262,6 +262,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                         )}
                       </div>
                     ))}
+                    {selectedProject.subsystems.length === 0 && (
+                      <div className="p-3 text-[9.5px] text-[#5C5946] leading-relaxed">
+                        No subsystem boundary is documented by the current CV or linked repository evidence.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -286,6 +291,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                         </div>
                       </div>
                     ))}
+                    {selectedProject.keyDecisions.length === 0 && (
+                      <div className="p-3 border border-[#15150F] bg-[#E2DCB9]/50 text-[9.5px] text-[#5C5946] leading-relaxed">
+                        No owner-confirmed architectural decision is available for this project yet.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -297,7 +307,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 {/* Telemetry Benchmarks */}
                 <div>
                   <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                    PRODUCTION BENCHMARKS
+                    EVIDENCE &amp; REPOSITORY METRICS
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {selectedProject.metrics.map((m, i) => (
@@ -313,7 +323,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 {/* Resilience Testing */}
                 <div>
                   <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                    RESILIENCE &amp; CHAOS TESTING
+                    VALIDATION &amp; TEST EVIDENCE
                   </div>
                   <div className="p-2.5 border border-[#15150F] bg-[#CBC59B]/40 text-[9.5px] leading-relaxed text-[#22211A]">
                     {selectedProject.resilienceTesting}
