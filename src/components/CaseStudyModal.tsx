@@ -14,8 +14,9 @@ import {
   Terminal,
   Database
 } from 'lucide-react';
-import { ProjectData, OperatorMetadata } from '../types';
+import { ProjectData, OperatorMetadata, EvidenceProvenance } from '../types';
 import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
+import { ProvenanceBadge } from './RightInspectorPanel';
 
 interface CaseStudyModalProps {
   project: ProjectData | null;
@@ -51,7 +52,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] flex items-center justify-center transition-colors border border-precision"
+            className="w-7 h-7 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] flex items-center justify-center transition-colors border border-precision cursor-pointer"
             title="Close Spec (Esc)"
           >
             <X size={14} />
@@ -62,8 +63,11 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6 leading-relaxed">
           {/* Executive Overview Box */}
           <div className="p-4 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-2">
-            <div className="text-[13px] font-bold text-[#15150F]">
-              {project.title} — {project.tagline}
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-[13px] font-bold text-[#15150F]">
+                {project.title} — {project.tagline}
+              </div>
+              <ProvenanceBadge provenance={project.provenance?.problem || 'VERIFIED'} />
             </div>
             <p className="text-[11px] text-[#22211A]">
               {project.summary}
@@ -80,20 +84,26 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           {/* Problem Statement vs Architectural Solution */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-3.5 border border-precision bg-[#DCD6B2]/40 flex flex-col gap-1.5">
-              <span className="text-[9px] font-bold text-[#7A3E2E] tracking-wider uppercase flex items-center gap-1.5">
-                <ShieldAlert size={12} />
-                <span>01 // THE SYSTEM PROBLEM</span>
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-[#7A3E2E] tracking-wider uppercase flex items-center gap-1.5">
+                  <ShieldAlert size={12} />
+                  <span>01 // THE SYSTEM PROBLEM</span>
+                </span>
+                <ProvenanceBadge provenance={project.provenance?.problem} />
+              </div>
               <p className="text-[10.5px] text-[#15150F]">
                 {project.problem}
               </p>
             </div>
 
             <div className="p-3.5 border border-precision bg-[#DCD6B2]/40 flex flex-col gap-1.5">
-              <span className="text-[9px] font-bold text-[#2E6B3A] tracking-wider uppercase flex items-center gap-1.5">
-                <CheckCircle2 size={12} />
-                <span>02 // ARCHITECTURAL SOLUTION</span>
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-[#2E6B3A] tracking-wider uppercase flex items-center gap-1.5">
+                  <CheckCircle2 size={12} />
+                  <span>02 // ARCHITECTURAL SOLUTION</span>
+                </span>
+                <ProvenanceBadge provenance={project.provenance?.solution} />
+              </div>
               <p className="text-[10.5px] text-[#15150F]">
                 {project.solution}
               </p>
@@ -102,9 +112,12 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
 
           {/* Subsystems Decomposition Matrix */}
           <div>
-            <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Layers size={13} />
-              <span>03 // SUB-SERVICE ARCHITECTURE &amp; DATA PIPELINES</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                <Layers size={13} />
+                <span>03 // SUB-SERVICE ARCHITECTURE &amp; DATA PIPELINES</span>
+              </div>
+              <ProvenanceBadge provenance={project.provenance?.subsystems} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {project.subsystems.map((sub, idx) => (
@@ -113,9 +126,12 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
                     <span className="font-bold text-[10.5px] text-[#15150F]">
                       MOD {idx + 1} // {sub.name}
                     </span>
-                    <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">
-                      {sub.category}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">
+                        {sub.category}
+                      </span>
+                      {sub.provenance && <ProvenanceBadge provenance={sub.provenance} />}
+                    </div>
                   </div>
                   <div className="text-[9.5px] font-medium text-[#4A4736]">
                     ROLE: {sub.role}
@@ -147,15 +163,21 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
 
           {/* Key Architectural Trade-Offs & Decisions */}
           <div>
-            <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <FileCode size={13} />
-              <span>04 // ARCHITECTURAL DECISIONS &amp; TRADEOFF MATRIX</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                <FileCode size={13} />
+                <span>04 // ARCHITECTURAL DECISIONS &amp; TRADEOFF MATRIX</span>
+              </div>
+              <ProvenanceBadge provenance={project.provenance?.keyDecisions} />
             </div>
             <div className="flex flex-col gap-2">
               {project.keyDecisions.map((dec, i) => (
                 <div key={i} className="p-3 border border-precision bg-[#DCD6B2]/70 flex flex-col gap-1">
-                  <div className="font-bold text-[10.5px] text-[#15150F]">
-                    DECISION {i + 1}: {dec.decision}
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-[10.5px] text-[#15150F]">
+                      DECISION {i + 1}: {dec.decision}
+                    </div>
+                    {dec.provenance && <ProvenanceBadge provenance={dec.provenance} />}
                   </div>
                   <div className="text-[9.5px] text-[#3D3A2C]">
                     <span className="font-bold text-[#5C5946]">RATIONALE: </span>
@@ -178,9 +200,12 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           {/* Telemetry Benchmarks & Resilience Testing */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Activity size={13} />
-                <span>05 // EVIDENCE &amp; REPOSITORY METRICS</span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity size={13} />
+                  <span>05 // EVIDENCE &amp; REPOSITORY METRICS</span>
+                </div>
+                <ProvenanceBadge provenance="VERIFIED" />
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {project.metrics.map((m, i) => (
@@ -194,12 +219,39 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             </div>
 
             <div>
-              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <ShieldAlert size={13} />
-                <span>06 // VALIDATION &amp; TEST EVIDENCE</span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert size={13} />
+                  <span>06 // VALIDATION &amp; TEST EVIDENCE</span>
+                </div>
+                <ProvenanceBadge provenance={project.provenance?.resilienceTesting} />
               </div>
-              <div className="p-3 border border-precision bg-[#DCD6B2]/50 text-[10px] leading-relaxed text-[#22211A] h-[calc(100%-24px)]">
-                {project.resilienceTesting}
+              <div className="p-3 border border-precision bg-[#DCD6B2]/50 text-[10px] leading-relaxed text-[#22211A] flex flex-col gap-2">
+                <div>{project.resilienceTesting}</div>
+                {project.validationEvidence && (
+                  <div className="flex flex-wrap gap-1 pt-1 border-t border-[#15150F]/20">
+                    {project.validationEvidence.testFrameworks.map(tf => (
+                      <span key={tf} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+                        TEST: {tf}
+                      </span>
+                    ))}
+                    {project.validationEvidence.e2eHarnesses.map(e2e => (
+                      <span key={e2e} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#8EA9DA] font-bold">
+                        E2E: {e2e}
+                      </span>
+                    ))}
+                    {project.validationEvidence.ciWorkflows.map(ci => (
+                      <span key={ci} className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                        CI: {ci}
+                      </span>
+                    ))}
+                    {project.validationEvidence.hasDocker && (
+                      <span key="docker" className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                        CONTAINER: Docker
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -235,7 +287,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="px-3 py-1.5 bg-[#D4CDA4] text-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors border border-precision text-[10px] font-bold"
+              className="px-3 py-1.5 bg-[#D4CDA4] text-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors border border-precision text-[10px] font-bold cursor-pointer"
             >
               CLOSE SPEC [ESC]
             </button>

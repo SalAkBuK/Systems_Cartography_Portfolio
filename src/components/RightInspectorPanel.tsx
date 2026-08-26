@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Info,
-  Flame
+  Flame,
+  Check,
+  Search
 } from 'lucide-react';
 import { 
   ProjectData, 
@@ -22,7 +24,8 @@ import {
   ExperienceNode, 
   SubsystemNode,
   ArchitecturePrinciple,
-  OperatorMetadata
+  OperatorMetadata,
+  EvidenceProvenance
 } from '../types';
 import {
   VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
@@ -31,6 +34,35 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+
+export const ProvenanceBadge: React.FC<{ provenance?: EvidenceProvenance }> = ({ provenance = 'VERIFIED' }) => {
+  if (provenance === 'CURATED') {
+    return (
+      <span className="text-[7px] font-bold px-1.5 py-0.5 bg-[#E2A96B] text-[#15150F] border border-[#15150F] tracking-wider uppercase inline-block">
+        CURATED
+      </span>
+    );
+  }
+  if (provenance === 'DERIVED') {
+    return (
+      <span className="text-[7px] font-bold px-1.5 py-0.5 bg-[#8EA9DA] text-[#15150F] border border-[#15150F] tracking-wider uppercase inline-block">
+        DERIVED
+      </span>
+    );
+  }
+  if (provenance === 'UNAVAILABLE') {
+    return (
+      <span className="text-[7px] font-bold px-1.5 py-0.5 bg-[#7A3E2E] text-[#D4CDA4] border border-[#15150F] tracking-wider uppercase inline-block">
+        UNAVAILABLE
+      </span>
+    );
+  }
+  return (
+    <span className="text-[7px] font-bold px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] border border-[#15150F] tracking-wider uppercase inline-block">
+      VERIFIED
+    </span>
+  );
+};
 
 interface RightInspectorPanelProps {
   selectedProject: ProjectData | null;
@@ -161,8 +193,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <div className="flex flex-col gap-3.5">
                 {/* Summary */}
                 <div>
-                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                    SYSTEM SUMMARY
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      SYSTEM SUMMARY
+                    </span>
+                    <ProvenanceBadge provenance={selectedProject.provenance?.problem || 'VERIFIED'} />
                   </div>
                   <p className="text-[10.5px] text-[#15150F] bg-[#E2DCB9]/70 p-2.5 border border-[#15150F]">
                     {selectedProject.summary}
@@ -172,18 +207,24 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 {/* Problem vs Solution */}
                 <div className="flex flex-col gap-2">
                   <div className="p-2.5 border border-[#15150F] bg-[#CBC59B]/30">
-                    <span className="text-[8.5px] font-bold text-[#7A3E2E] uppercase block mb-1">
-                      [ENGINEERING CHALLENGE]
-                    </span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8.5px] font-bold text-[#7A3E2E] uppercase block">
+                        [ENGINEERING CHALLENGE]
+                      </span>
+                      <ProvenanceBadge provenance={selectedProject.provenance?.problem} />
+                    </div>
                     <p className="text-[10px] text-[#22211A] leading-snug">
                       {selectedProject.problem}
                     </p>
                   </div>
 
                   <div className="p-2.5 border border-[#15150F] bg-[#CBC59B]/30">
-                    <span className="text-[8.5px] font-bold text-[#2E6B3A] uppercase block mb-1">
-                      [ARCHITECTURAL SOLUTION]
-                    </span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8.5px] font-bold text-[#2E6B3A] uppercase block">
+                        [ARCHITECTURAL SOLUTION]
+                      </span>
+                      <ProvenanceBadge provenance={selectedProject.provenance?.solution} />
+                    </div>
                     <p className="text-[10px] text-[#22211A] leading-snug">
                       {selectedProject.solution}
                     </p>
@@ -244,15 +285,21 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <div className="flex flex-col gap-3.5">
                 {/* Layer Decomposition */}
                 <div>
-                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                    SUB-SERVICE DECOMPOSITION ({selectedProject.subsystems.length})
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      SUB-SERVICE DECOMPOSITION ({selectedProject.subsystems.length})
+                    </span>
+                    <ProvenanceBadge provenance={selectedProject.provenance?.subsystems} />
                   </div>
                   <div className="divide-y divide-[#15150F] border border-[#15150F] bg-[#E2DCB9]/40">
                     {selectedProject.subsystems.map((sub, i) => (
                       <div key={sub.id} className="p-2.5 flex flex-col gap-1">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-[10px] text-[#15150F]">0{i+1} // {sub.name}</span>
-                          <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">{sub.category}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">{sub.category}</span>
+                            {sub.provenance && <ProvenanceBadge provenance={sub.provenance} />}
+                          </div>
                         </div>
                         <p className="text-[9.5px] text-[#5C5946] leading-snug">{sub.description}</p>
                         {sub.protocol && (
@@ -260,6 +307,13 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                             PROTOCOL: {sub.protocol}
                           </div>
                         )}
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {sub.tech.map(t => (
+                            <span key={t} className="text-[7.5px] px-1 bg-[#DCD6B2] border border-[#15150F]/30 text-[#3D3A2C]">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     ))}
                     {selectedProject.subsystems.length === 0 && (
@@ -272,14 +326,20 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
                 {/* Key Decisions & Trade-offs */}
                 <div>
-                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                    KEY ARCHITECTURAL DECISIONS &amp; TRADEOFFS
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      KEY ARCHITECTURAL DECISIONS &amp; TRADEOFFS
+                    </span>
+                    <ProvenanceBadge provenance={selectedProject.provenance?.keyDecisions} />
                   </div>
                   <div className="flex flex-col gap-2">
                     {selectedProject.keyDecisions.map((dec, i) => (
                       <div key={i} className="p-2.5 border border-[#15150F] bg-[#CBC59B]/40 flex flex-col gap-1">
-                        <div className="font-bold text-[10px] text-[#15150F]">
-                          DECISION: {dec.decision}
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold text-[10px] text-[#15150F]">
+                            DECISION: {dec.decision}
+                          </div>
+                          {dec.provenance && <ProvenanceBadge provenance={dec.provenance} />}
                         </div>
                         <div className="text-[9.5px] text-[#3D3A2C]">
                           <span className="font-semibold text-[#5C5946]">RATIONALE: </span>
@@ -304,10 +364,13 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             {/* TAB 03: METRICS & RESILIENCE */}
             {activeTab === 'metrics' && (
               <div className="flex flex-col gap-3.5">
-                {/* Telemetry Benchmarks */}
+                {/* Group 1: Repository Signals (GitHub Metadata) */}
                 <div>
-                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                    EVIDENCE &amp; REPOSITORY METRICS
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      01 // REPOSITORY SIGNALS (GITHUB METADATA)
+                    </span>
+                    <ProvenanceBadge provenance="VERIFIED" />
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {selectedProject.metrics.map((m, i) => (
@@ -320,13 +383,62 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Resilience Testing */}
+                {/* Group 2: Engineering Validation & Test Harness */}
                 <div>
-                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                    VALIDATION &amp; TEST EVIDENCE
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      02 // ENGINEERING VALIDATION &amp; TEST HARNESS
+                    </span>
+                    <ProvenanceBadge provenance={selectedProject.provenance?.resilienceTesting} />
                   </div>
-                  <div className="p-2.5 border border-[#15150F] bg-[#CBC59B]/40 text-[9.5px] leading-relaxed text-[#22211A]">
-                    {selectedProject.resilienceTesting}
+                  <div className="p-2.5 border border-[#15150F] bg-[#CBC59B]/40 flex flex-col gap-2">
+                    <div className="text-[9.5px] leading-relaxed text-[#22211A]">
+                      {selectedProject.resilienceTesting}
+                    </div>
+
+                    {/* Detected Validation Pills */}
+                    {selectedProject.validationEvidence && (
+                      <div className="flex flex-wrap gap-1 pt-1 border-t border-[#15150F]/20">
+                        {selectedProject.validationEvidence.testFrameworks.map(tf => (
+                          <span key={tf} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+                            TEST: {tf}
+                          </span>
+                        ))}
+                        {selectedProject.validationEvidence.e2eHarnesses.map(e2e => (
+                          <span key={e2e} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#8EA9DA] font-bold">
+                            E2E: {e2e}
+                          </span>
+                        ))}
+                        {selectedProject.validationEvidence.ciWorkflows.map(ci => (
+                          <span key={ci} className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                            CI: {ci}
+                          </span>
+                        ))}
+                        {selectedProject.validationEvidence.hasDocker && (
+                          <span key="docker" className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                            CONTAINER: Docker
+                          </span>
+                        )}
+                        {selectedProject.validationEvidence.testFilesDetected && selectedProject.validationEvidence.testFilesDetected > 0 ? (
+                          <span className="text-[7.5px] px-1.5 py-0.5 bg-[#E2DCB9] text-[#15150F] border border-[#15150F]">
+                            {selectedProject.validationEvidence.testFilesDetected} TEST FILES DETECTED
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Group 3: Runtime Telemetry & Performance */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                      03 // RUNTIME TELEMETRY &amp; PERFORMANCE
+                    </span>
+                    <ProvenanceBadge provenance={selectedProject.performanceEvidence?.claimed ? 'VERIFIED' : 'UNAVAILABLE'} />
+                  </div>
+                  <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9]/60 text-[9px] text-[#5C5946] leading-relaxed">
+                    {selectedProject.performanceEvidence?.notes || 'No runtime benchmarks or production telemetry claimed in repository.'}
                   </div>
                 </div>
               </div>
@@ -349,7 +461,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 <div className="flex flex-col gap-2 mt-2">
                   <button
                     onClick={() => onDrillIntoProject(selectedProject.id)}
-                    className="w-full py-2.5 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] flex items-center justify-center gap-1.5 transition-colors"
+                    className="w-full py-2.5 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <span>ENTER SYSTEM DECOMPOSITION</span>
                     <ArrowUpRight size={13} />
@@ -357,7 +469,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
                   <button
                     onClick={onOpenCaseStudy}
-                    className="w-full py-2 bg-[#E2DCB9] text-[#15150F] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors"
+                    className="w-full py-2 bg-[#E2DCB9] text-[#15150F] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <FileText size={12} />
                     <span>OPEN FULL ARCHITECTURE SPEC</span>
@@ -414,7 +526,6 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               </div>
               <div className="flex flex-col gap-1.5">
                 {(() => {
-                  // Check explicit usedInProjects or projects that declare this skill in infrastructureDeps
                   const matchedProjects = projects.filter(p => 
                     selectedSkill.usedInProjects.includes(p.id) || 
                     p.infrastructureDeps.includes(selectedSkill.id) ||
@@ -449,59 +560,71 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
             {/* Primary Use Cases */}
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                PRIMARY ARCHITECTURAL USE CASES
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                PRIMARY USE CASES
               </div>
-              <ul className="flex flex-col gap-1 text-[9.5px] text-[#22211A] bg-[#CBC59B]/30 p-2.5 border border-[#15150F]">
+              <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-1">
                 {selectedSkill.primaryUseCases.map((uc, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className="opacity-60 font-bold">▪</span>
-                    <span>{uc}</span>
-                  </li>
+                  <div key={i} className="flex items-start gap-1.5 text-[9.5px]">
+                    <span className="text-[#8EA9DA] font-bold">›</span>
+                    <span className="text-[#22211A]">{uc}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {/* Sample Architectural Pattern */}
+            {/* Technical Highlights */}
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                PRODUCTION CODE / ARCHITECTURE PATTERN
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                TECHNICAL HIGHLIGHTS
               </div>
-              <pre className="p-2.5 bg-[#15150F] text-[#D4CDA4] text-[8.5px] leading-tight font-mono overflow-x-auto border border-[#15150F]">
-                <code>{selectedSkill.samplePattern}</code>
+              <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-1">
+                {selectedSkill.technicalHighlights.map((th, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-[9.5px]">
+                    <span className="text-[#C3E54E] font-bold">›</span>
+                    <span className="text-[#22211A]">{th}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Architectural Blueprint / Sample Pattern */}
+            <div>
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                ARCHITECTURAL BLUEPRINT / PATTERN
+              </div>
+              <pre className="p-2.5 border border-[#15150F] bg-[#15150F] text-[#D4CDA4] text-[8.5px] overflow-x-auto leading-tight font-mono whitespace-pre-wrap">
+                {selectedSkill.samplePattern}
               </pre>
             </div>
           </div>
         )}
 
-        {/* CASE 3: SELECTED EXPERIENCE LOG */}
+        {/* CASE 3: SELECTED EXPERIENCE NODE */}
         {selectedExperience && !selectedProject && !selectedSkill && (
           <div className="flex flex-col gap-4">
             <div className="border-b border-[#15150F] pb-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-bold text-[#15150F]">{selectedExperience.code} // {selectedExperience.role}</span>
-                <span className="text-[8.5px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
-                  {selectedExperience.yearRange}
-                </span>
               </div>
-              <div className="text-[10px] font-semibold text-[#3D3A2C] mt-0.5">
+              <div className="text-[10px] text-[#3D3A2C] font-semibold mt-0.5">
                 {selectedExperience.organization} · {selectedExperience.location}
               </div>
-              <div className="text-[8.5px] opacity-60 mt-1">
-                DOMAIN: {selectedExperience.systemDomain}
+              <div className="text-[9px] text-[#5C5946] mt-0.5">
+                TIMEFRAME: {selectedExperience.yearRange}
               </div>
             </div>
 
-            {/* Key Outputs */}
+            {/* Key Deliverables */}
             <div>
               <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                KEY TECHNICAL OUTPUTS &amp; IMPACT
+                SYSTEM OUTPUTS &amp; DELIVERABLES
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-1.5">
                 {selectedExperience.keyOutputs.map((out, i) => (
-                  <div key={i} className="p-2 bg-[#E2DCB9]/70 border border-[#15150F] text-[9.5px] leading-snug text-[#22211A] flex items-start gap-1.5">
-                    <span className="opacity-60 font-bold shrink-0">0{i+1}.</span>
-                    <span>{out}</span>
+                  <div key={i} className="flex items-start gap-1.5 text-[9.5px]">
+                    <span className="text-[#2E6B3A] font-bold">✓</span>
+                    <span className="text-[#22211A]">{out}</span>
                   </div>
                 ))}
               </div>
@@ -509,12 +632,12 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
             {/* Systems Architected */}
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
                 SYSTEMS ARCHITECTED
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {selectedExperience.systemsArchitected.map(sys => (
-                  <span key={sys} className="px-2 py-0.5 bg-[#CBC59B] border border-[#15150F] text-[9px] font-bold">
+                  <span key={sys} className="px-2 py-1 bg-[#E2DCB9] border border-[#15150F] text-[9.5px] font-semibold">
                     {sys}
                   </span>
                 ))}
@@ -523,12 +646,12 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
             {/* Technologies */}
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                CORE STACK DEPLOYED
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                TECHNOLOGY SURFACE
               </div>
               <div className="flex flex-wrap gap-1">
                 {selectedExperience.technologies.map(t => (
-                  <span key={t} className="px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] text-[8.5px]">
+                  <span key={t} className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
                     {t}
                   </span>
                 ))}
@@ -541,152 +664,93 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
         {selectedPrinciple && !selectedProject && !selectedSkill && !selectedExperience && (
           <div className="flex flex-col gap-4">
             <div className="border-b border-[#15150F] pb-2.5">
-              <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-widest block">
-                SYSTEM PROCESS // AXIOM {selectedPrinciple.number}
+              <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold uppercase tracking-widest inline-block mb-1">
+                OPERATING PRINCIPLE // {selectedPrinciple.number}
               </span>
-              <span className="text-[13px] font-bold text-[#15150F]">{selectedPrinciple.title}</span>
-            </div>
-
-            <div className="p-2.5 bg-[#E2DCB9] border border-[#15150F] text-[10px] font-medium leading-snug text-[#15150F]">
-              "{selectedPrinciple.summary}"
+              <div className="text-[13px] font-bold text-[#15150F] leading-tight">
+                {selectedPrinciple.title}
+              </div>
             </div>
 
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                ARCHITECTURAL ELABORATION
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                RULE SPECIFICATION
               </div>
-              <p className="text-[9.5px] leading-relaxed text-[#22211A] bg-[#CBC59B]/30 p-2.5 border border-[#15150F]">
-                {selectedPrinciple.elaboration}
+              <p className="text-[10.5px] text-[#15150F] bg-[#E2DCB9] p-3 border border-[#15150F] leading-relaxed">
+                {selectedPrinciple.rule}
               </p>
             </div>
 
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                APPLIED IN SYSTEMS
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                CONCRETE DEMONSTRATION
               </div>
-              <div className="flex flex-col gap-1">
-                {(() => {
-                  let matched = projects.filter(p => selectedPrinciple.appliedIn.includes(p.id));
-                  if (matched.length === 0 && projects.length > 0) {
-                    matched = projects.slice(0, 2);
-                  }
-                  return matched.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => onSelectProject(p.id)}
-                      className="p-1.5 bg-[#E2DCB9] border border-[#15150F] text-left text-[9px] font-bold flex justify-between hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5" style={{ backgroundColor: p.accentColor }}></span>
-                        <span>{p.code} // {p.title}</span>
-                      </div>
-                      <span>INSPECT →</span>
-                    </button>
-                  ));
-                })()}
+              <div className="p-3 border border-[#15150F] bg-[#CBC59B]/40 text-[10px] text-[#22211A] leading-relaxed">
+                {selectedPrinciple.demonstration}
               </div>
             </div>
           </div>
         )}
 
-        {/* CASE 5: ROOT SYSTEM OVERVIEW (Default) */}
+        {/* CASE 5: ROOT OPERATOR CONSOLE */}
         {!selectedProject && !selectedSkill && !selectedExperience && !selectedPrinciple && (
           <div className="flex flex-col gap-4">
             {/* Operator Identity Block */}
-            <div className="border-b border-[#15150F] pb-3 flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-bold text-[#15150F]">{activeOperator.name}</span>
-                <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
-                  {activeOperator.status.split('//')[0]}
-                </span>
+            <div className="border-b border-[#15150F] pb-3">
+              <div className="text-[14px] font-bold text-[#15150F]">{activeOperator.name}</div>
+              <div className="text-[10px] text-[#5C5946] font-semibold">{activeOperator.handle} · {activeOperator.role}</div>
+              <div className="text-[9px] text-[#5C5946] mt-0.5">LOCATION: {activeOperator.location}</div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                <span className="text-[7.5px] opacity-60 uppercase font-bold">SYSTEMS VISUALIZED</span>
+                <span className="text-[15px] font-bold text-[#15150F]">{projects.length} REPOSITORIES</span>
               </div>
-              <div className="text-[10px] font-semibold text-[#3D3A2C]">
-                {activeOperator.role}
-              </div>
-              <div className="text-[8.5px] opacity-60">
-                {activeOperator.location}
+              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                <span className="text-[7.5px] opacity-60 uppercase font-bold">CAPABILITY PLINTHS</span>
+                <span className="text-[15px] font-bold text-[#15150F]">{skills.length} MODULES</span>
               </div>
             </div>
 
-            {/* Manifesto */}
+            {/* Manifesto / Summary */}
             <div>
               <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                SYSTEM MANIFESTO &amp; PHILOSOPHY
+                SYSTEM MANIFESTO
               </div>
-              <p className="text-[10px] text-[#15150F] bg-[#E2DCB9]/70 p-2.5 border border-[#15150F] leading-relaxed">
+              <p className="text-[10px] text-[#22211A] bg-[#E2DCB9]/80 p-2.5 border border-[#15150F] leading-relaxed">
                 {activeOperator.systemManifesto}
               </p>
             </div>
 
-            {/* Quick System Telemetry Grid */}
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
-                <span className="text-[7.5px] uppercase font-bold opacity-60">MAPPED SYSTEMS</span>
-                <span className="text-[14px] font-bold text-[#15150F] block">{projects.length} PRODUCTION</span>
-              </div>
-              <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
-                <span className="text-[7.5px] uppercase font-bold opacity-60">CAREER ACTIVE</span>
-                <span className="text-[14px] font-bold text-[#15150F] block">{activeOperator.yearsActive > 0 ? `${activeOperator.yearsActive} YEARS` : 'NOT CLAIMED'}</span>
-              </div>
-              <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
-                <span className="text-[7.5px] uppercase font-bold opacity-60">COMMITS INDEXED</span>
-                <span className="text-[14px] font-bold text-[#15150F] block">{activeOperator.commitsIndexed}</span>
-              </div>
-              <div className="p-2 border border-[#15150F] bg-[#CBC59B]/40">
-                <span className="text-[7.5px] uppercase font-bold opacity-60">SLA RELIABILITY</span>
-                <span className="text-[14px] font-bold text-[#15150F] block">{activeOperator.productionUptime}</span>
-              </div>
-            </div>
-
-            {/* Flagship Projects Quick Jump */}
+            {/* Primary Stack */}
             <div>
               <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                FLAGSHIP ARCHITECTURAL SYSTEMS
+                PRIMARY STACK MATRIX
               </div>
-              <div className="flex flex-col gap-1">
-                {projects.slice(0, 3).map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectProject(p.id)}
-                    className="p-2 bg-[#E2DCB9] border border-[#15150F] text-left text-[9.5px] font-mono flex items-center justify-between hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5" style={{ backgroundColor: p.accentColor }}></span>
-                      <span className="font-bold">{p.code}</span>
-                      <span>{p.title}</span>
-                    </div>
-                    <span className="text-[8px] opacity-60">INSPECT →</span>
-                  </button>
+              <div className="flex flex-wrap gap-1">
+                {activeOperator.primaryStack.map(st => (
+                  <span key={st} className="text-[8.5px] px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
+                    {st}
+                  </span>
                 ))}
               </div>
             </div>
 
-            {/* Connect Action */}
-            <button
-              onClick={onOpenContact}
-              className="w-full py-2 bg-[#C3E54E] text-[#15150F] font-bold text-[10px] uppercase tracking-widest border border-[#15150F] hover:bg-[#B2D63B] transition-colors mt-auto shadow-none"
-            >
-              INITIALIZE CONNECTION // CONTACT
-            </button>
+            {/* Actions */}
+            <div className="flex flex-col gap-1.5 mt-2">
+              <button
+                onClick={onOpenContact}
+                className="w-full py-2 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] transition-colors cursor-pointer"
+              >
+                DISPATCH ENCRYPTED COMMS
+              </button>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Persistent Bottom Action Strip in Inspector */}
-      {selectedProject && (
-        <div className="p-2.5 bg-[#CBC59B] border-t border-[#15150F] flex items-center justify-between shrink-0">
-          <span className="text-[8.5px] text-[#4A4736] font-mono">
-            {selectedProject.subsystems.length} SUB-SERVICES ONLINE
-          </span>
-          <button
-            onClick={() => onDrillIntoProject(selectedProject.id)}
-            className="px-2.5 py-1 bg-[#15150F] text-[#C3E54E] text-[9.5px] font-bold tracking-wider hover:bg-[#2A2920] transition-colors flex items-center gap-1"
-          >
-            <span>DECOMPOSE</span>
-            <span>→</span>
-          </button>
-        </div>
-      )}
     </aside>
   );
 };
+

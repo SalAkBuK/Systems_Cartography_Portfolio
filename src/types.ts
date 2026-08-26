@@ -2,6 +2,16 @@ export type SystemCategory = 'frontend' | 'backend' | 'fullstack' | 'infrastruct
 
 export type SystemStatus = 'PRODUCTION' | 'ACTIVE' | 'EXPERIMENTAL' | 'ARCHIVED';
 
+export type EvidenceProvenance = 'VERIFIED' | 'DERIVED' | 'CURATED' | 'UNAVAILABLE';
+
+export interface EvidenceSource {
+  sourceType: 'repository_file' | 'repository_structure' | 'github_metadata' | 'curated_override' | 'inferred';
+  path?: string;
+  section?: string;
+  field?: string;
+  details?: string;
+}
+
 export interface SubsystemNode {
   id: string;
   name: string;
@@ -13,6 +23,46 @@ export interface SubsystemNode {
   metrics?: { label: string; value: string }[];
   coordinates: { x: number; y: number; z: number };
   dimensions: { width: number; height: number; depth: number };
+  provenance?: EvidenceProvenance;
+  evidenceSource?: EvidenceSource;
+}
+
+export interface KeyDecision {
+  decision: string;
+  rationale: string;
+  tradeoff: string;
+  provenance?: EvidenceProvenance;
+  evidenceSource?: EvidenceSource;
+}
+
+export interface ValidationEvidence {
+  testFrameworks: string[];
+  ciWorkflows: string[];
+  e2eHarnesses: string[];
+  lintersAndFormatters: string[];
+  buildTools: string[];
+  hasDocker: boolean;
+  hasMigrations: boolean;
+  testFilesDetected?: number;
+  summary: string;
+  provenance?: EvidenceProvenance;
+}
+
+export interface PerformanceEvidence {
+  claimed: boolean;
+  metrics?: { label: string; value: string; note?: string }[];
+  notes?: string;
+  provenance?: EvidenceProvenance;
+}
+
+export interface ProjectProvenanceMap {
+  problem?: EvidenceProvenance;
+  solution?: EvidenceProvenance;
+  architectureNotes?: EvidenceProvenance;
+  subsystems?: EvidenceProvenance;
+  keyDecisions?: EvidenceProvenance;
+  resilienceTesting?: EvidenceProvenance;
+  metrics?: EvidenceProvenance;
 }
 
 export interface ProjectData {
@@ -37,13 +87,12 @@ export interface ProjectData {
   techStack: string[];
   infrastructureDeps: string[]; // IDs of connected skills/infra
   subsystems: SubsystemNode[];
-  metrics: { label: string; value: string; note?: string }[];
-  keyDecisions: {
-    decision: string;
-    rationale: string;
-    tradeoff: string;
-  }[];
+  metrics: { label: string; value: string; note?: string; provenance?: EvidenceProvenance }[];
+  keyDecisions: KeyDecision[];
   resilienceTesting: string;
+  provenance?: ProjectProvenanceMap;
+  validationEvidence?: ValidationEvidence;
+  performanceEvidence?: PerformanceEvidence;
   links: {
     demo?: string;
     github?: string;
