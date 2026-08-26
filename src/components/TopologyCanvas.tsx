@@ -163,6 +163,51 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return customExpPositions[exp.id] || exp.gridPosition;
   }, [draggingNode, customExpPositions]);
 
+  // Check if a skill and project are connected through dependencies or tech stack matches
+  const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    const skill = activeSkills.find(s => s.id === skillId);
+    if (!project || !skill) return false;
+
+    const isDep = project.infrastructureDeps.includes(skill.id);
+    const isUsed = skill.usedInProjects.includes(project.id);
+    const techMatch = project.techStack.some(t => {
+      const firstWord = skill.name.toLowerCase().split(' ')[0];
+      return t.toLowerCase().includes(firstWord) || firstWord.includes(t.toLowerCase());
+    });
+    return isDep || isUsed || techMatch;
+  }, [projects, activeSkills]);
+
+  // Active focus target (hovered node has top priority, followed by selected node)
+  const activeFocusProjectId = hoveredProjectId || (hoveredSkillId ? null : selectedProjectId);
+  const activeFocusSkillId = hoveredSkillId || (hoveredProjectId ? null : selectedSkillId);
+  const isNodeFocused = Boolean(hoveredProjectId || hoveredSkillId || selectedProjectId || selectedSkillId);
+  const isHoverFocus = Boolean(hoveredProjectId || hoveredSkillId);
+
+  // Set of connected skills for the currently focused project
+  const focusedConnectedSkillIds = useMemo(() => {
+    if (!activeFocusProjectId) return new Set<string>();
+    const set = new Set<string>();
+    activeSkills.forEach(s => {
+      if (isSkillConnectedToProject(s.id, activeFocusProjectId)) {
+        set.add(s.id);
+      }
+    });
+    return set;
+  }, [activeFocusProjectId, activeSkills, isSkillConnectedToProject]);
+
+  // Set of connected projects for the currently focused skill
+  const focusedConnectedProjectIds = useMemo(() => {
+    if (!activeFocusSkillId) return new Set<string>();
+    const set = new Set<string>();
+    projects.forEach(p => {
+      if (isSkillConnectedToProject(activeFocusSkillId, p.id)) {
+        set.add(p.id);
+      }
+    });
+    return set;
+  }, [activeFocusSkillId, projects, isSkillConnectedToProject]);
+
   const resetAllPositions = useCallback(() => {
     setCustomProjectPositions({});
     setCustomSkillPositions({});
@@ -616,7 +661,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const isProjectSelected = selectedProjectId === project.id;
       const isProjectHovered = hoveredProjectId === project.id;
       const isDraggingThisProj = draggingNode?.type === 'project' && draggingNode.id === project.id;
-      const shouldHighlight = isProjectSelected || isProjectHovered || traceModeActive;
       const projectPos = getProjectPos(project);
       
       const pWidth = (project.dimensions?.width || 100) * 0.75;
@@ -640,7 +684,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         const isSkillSelected = selectedSkillId === skill.id;
         const isSkillHovered = hoveredSkillId === skill.id;
         const isDraggingThisSkill = draggingNode?.type === 'skill' && draggingNode.id === skill.id;
-        const lineActive = shouldHighlight || isSkillSelected || isSkillHovered || isDraggingThisProj || isDraggingThisSkill;
+
+        // Determine if this specific conduit is actively hovered / selected
+        const isDirectHoverConduit = isProjectHovered || isSkillHovered;
+        const isDirectSelectionConduit = (isProjectSelected && !hoveredProjectId && !hoveredSkillId) || 
+                                         (isSkillSelected && !hoveredProjectId && !hoveredSkillId);
+        
+        const isConduitActive = isDirectHoverConduit || isDirectSelectionConduit || isDraggingThisProj || isDraggingThisSkill || (traceModeActive && !isHoverFocus);
+        const isConduitDimmed = isHoverFocus && !isDirectHoverConduit;
+
         const skillPos = getSkillPos(skill);
 
         const conduitGeom = calculateConduitGeometry(
@@ -656,14 +708,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         const { startIso, midIso, endIso, pathData, tension } = conduitGeom;
 
         connections.push(
-          <g key={pairKey} className="transition-opacity duration-150">
+          <g 
+            key={pairKey} 
+            className={`transition-opacity duration-200 ${
+              isConduitDimmed ? 'opacity-10' : isConduitActive ? 'opacity-100' : 'opacity-70'
+            }`}
+          >
+            {/* Outer Glow Halo for Active Signal Conduits */}
+            {isConduitActive && (
+              <path
+                d={pathData}
+                fill="none"
+                stroke="#C3E54E"
+                strokeWidth={isDirectHoverConduit ? 5 : 3.5}
+                strokeOpacity={isDirectHoverConduit ? 0.75 : 0.4}
+                strokeLinecap="round"
+                className="transition-all duration-150"
+              />
+            )}
+
             {/* Background trace line */}
             <path
               d={pathData}
               fill="none"
-              stroke={lineActive ? '#15150F' : 'rgba(21, 21, 15, 0.18)'}
-              strokeWidth={lineActive ? (isProjectSelected || isSkillSelected ? 2.5 : 1.6) : 1}
-              strokeDasharray={lineActive ? 'none' : '4 4'}
+              stroke={isConduitActive ? '#15150F' : 'rgba(21, 21, 15, 0.22)'}
+              strokeWidth={isConduitActive ? (isDirectHoverConduit ? 3 : 2.2) : 1}
+              strokeDasharray={isConduitActive ? 'none' : '4 4'}
+              className="transition-colors duration-150"
             />
 
             {/* Elastic spring tension halo if being actively dragged */}
@@ -672,20 +743,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 d={pathData}
                 fill="none"
                 stroke={tension > 0.45 ? '#FF7B72' : '#C3E54E'}
-                strokeWidth={3.5}
-                strokeOpacity={0.6}
+                strokeWidth={4}
+                strokeOpacity={0.7}
                 strokeLinecap="round"
               />
             )}
 
-            {/* Animated signal pulse if active or in trace mode */}
-            {lineActive && (
+            {/* High-speed animated signal pulse if active */}
+            {isConduitActive && (
               <path
                 d={pathData}
                 fill="none"
-                stroke={isProjectSelected || isSkillSelected ? '#C3E54E' : '#15150F'}
-                strokeWidth={isProjectSelected || isSkillSelected ? 2.5 : 1.5}
-                className="signal-conduit"
+                stroke={isDirectHoverConduit ? '#15150F' : '#C3E54E'}
+                strokeWidth={isDirectHoverConduit ? 2.5 : 1.8}
+                className={isDirectHoverConduit ? 'signal-conduit-fast' : 'signal-conduit'}
               />
             )}
 
@@ -693,30 +764,67 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             <circle
               cx={startIso.x}
               cy={startIso.y}
-              r={lineActive ? 2.8 : 1.8}
-              fill="#15150F"
-              stroke={lineActive ? '#C3E54E' : '#15150F'}
-              strokeWidth="0.8"
+              r={isConduitActive ? 3.5 : 1.8}
+              fill={isConduitActive ? '#C3E54E' : '#15150F'}
+              stroke="#15150F"
+              strokeWidth={isConduitActive ? 1.2 : 0.8}
             />
 
-            {/* Junction dot at midpoint */}
-            <circle
-              cx={midIso.x}
-              cy={midIso.y}
-              r={lineActive ? 3.2 : 2}
-              fill={lineActive ? (tension > 0.5 ? '#FF7B72' : '#C3E54E') : '#15150F'}
-              stroke="#15150F"
-              strokeWidth="0.9"
-            />
+            {/* Junction dot at midpoint with optional hover tag */}
+            <g>
+              {isDirectHoverConduit && (
+                <circle
+                  cx={midIso.x}
+                  cy={midIso.y}
+                  r="7"
+                  fill="none"
+                  stroke="#C3E54E"
+                  strokeWidth="1"
+                  className="animate-ping"
+                  opacity="0.8"
+                />
+              )}
+              <circle
+                cx={midIso.x}
+                cy={midIso.y}
+                r={isConduitActive ? 4 : 2}
+                fill={isConduitActive ? (tension > 0.5 ? '#FF7B72' : '#C3E54E') : '#15150F'}
+                stroke="#15150F"
+                strokeWidth={isConduitActive ? 1.2 : 0.9}
+              />
+              {isDirectHoverConduit && (
+                <g transform={`translate(${midIso.x + 8}, ${midIso.y - 6})`}>
+                  <rect
+                    x="-2"
+                    y="-8"
+                    width={skill.name.split(' ')[0].length * 6 + 14}
+                    height="13"
+                    fill="#15150F"
+                    stroke="#C3E54E"
+                    strokeWidth="0.8"
+                  />
+                  <text
+                    x="5"
+                    y="1.5"
+                    fontSize="6.5"
+                    fontWeight="bold"
+                    fill="#C3E54E"
+                    fontFamily="monospace"
+                  >
+                    {skill.name.split(' ')[0].toUpperCase()}
+                  </text>
+                </g>
+              )}
+            </g>
 
             {/* Anchor Port at Skill Plinth */}
             <circle
               cx={endIso.x}
               cy={endIso.y}
-              r={lineActive ? 2.8 : 1.8}
-              fill="#15150F"
-              stroke={lineActive ? '#C3E54E' : '#15150F'}
-              strokeWidth="0.8"
+              r={isConduitActive ? 3.5 : 1.8}
+              fill={isConduitActive ? '#C3E54E' : '#15150F'}
+              stroke="#15150F"
+              strokeWidth={isConduitActive ? 1.2 : 0.8}
             />
           </g>
         );
@@ -730,6 +838,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     selectedSkillId, 
     hoveredSkillId, 
     traceModeActive,
+    isHoverFocus,
     projects,
     activeSkills,
     getProjectPos,
@@ -970,7 +1079,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </g>
 
         {/* Regional Zone Boundaries */}
-        <g id="zones">
+        <g id="zones" className={`transition-opacity duration-200 ${isHoverFocus ? 'opacity-25' : 'opacity-100'}`}>
           {TOPOLOGY_ZONES.map(zone => {
             const topLeftIso = project3DToIso(zone.bounds.x, zone.bounds.y, 0);
             const topRightIso = project3DToIso(zone.bounds.x + zone.bounds.width, zone.bounds.y, 0);
@@ -1015,17 +1124,23 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           {renderedConnections}
         </g>
 
-        {/* Infrastructure Skills Nodes Layer - Draggable */}
+        {/* Infrastructure Skills Nodes Layer - Draggable & Dynamic Hover Connected */}
         <g id="infrastructure-nodes">
           {activeSkills.map(skill => {
             const isSelected = selectedSkillId === skill.id;
             const isHovered = hoveredSkillId === skill.id;
+            const isSkillConnected = focusedConnectedSkillIds.has(skill.id);
             const isThisDragging = draggingNode?.type === 'skill' && draggingNode.id === skill.id;
+            
+            // Dim if hover focus is active and this skill is NOT hovered and NOT connected to hovered project
+            const isDimmed = isHoverFocus && !isHovered && !isSkillConnected;
+            const isHighlighted = isHovered || isSelected || isSkillConnected || isThisDragging;
+
             const skillPos = getSkillPos(skill);
             const posIso = project3DToIso(skillPos.x, skillPos.y, 0);
 
             // Hexagonal / Diamond Plinth
-            const r = 24;
+            const r = isHighlighted ? 26 : 24;
             const p1 = { x: posIso.x, y: posIso.y - r * 0.7 };
             const p2 = { x: posIso.x + r * ISO_COS, y: posIso.y - r * 0.35 };
             const p3 = { x: posIso.x + r * ISO_COS, y: posIso.y + r * 0.35 };
@@ -1064,14 +1179,39 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onMouseEnter={() => setHoveredSkillId(skill.id)}
                 onMouseLeave={() => setHoveredSkillId(null)}
-                className="cursor-grab active:cursor-grabbing group"
+                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
+                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : 'opacity-100'
+                }`}
               >
+                {/* Active Connected Radar Halo when connected to hovered project */}
+                {isSkillConnected && hoveredProjectId && (
+                  <circle
+                    cx={posIso.x}
+                    cy={posIso.y}
+                    r="32"
+                    fill="none"
+                    stroke="#C3E54E"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    className="animate-spin"
+                    opacity="0.85"
+                  />
+                )}
+
                 {/* Plinth Base */}
                 <polygon
                   points={`${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y} ${p4.x},${p4.y} ${p5.x},${p5.y} ${p6.x},${p6.y}`}
-                  fill={isThisDragging ? '#C3E54E' : isSelected ? '#15150F' : isHovered ? '#CBC59B' : '#DCD6B2'}
+                  fill={
+                    isThisDragging || isSkillConnected 
+                      ? '#C3E54E' 
+                      : isSelected 
+                        ? '#15150F' 
+                        : isHovered 
+                          ? '#CBC59B' 
+                          : '#DCD6B2'
+                  }
                   stroke="#15150F"
-                  strokeWidth={isSelected || isThisDragging ? '2' : '1'}
+                  strokeWidth={isSelected || isThisDragging || isSkillConnected ? '2' : '1'}
                 />
 
                 {/* Inner architectural hatch ring */}
@@ -1079,13 +1219,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   cx={posIso.x}
                   cy={posIso.y}
                   r="9"
-                  fill={isSelected ? '#C3E54E' : '#15150F'}
+                  fill={isSelected ? '#C3E54E' : isSkillConnected ? '#15150F' : '#15150F'}
                 />
                 <circle
                   cx={posIso.x}
                   cy={posIso.y}
                   r="4"
-                  fill={isSelected ? '#15150F' : '#D4CDA4'}
+                  fill={isSelected ? '#15150F' : isSkillConnected ? '#C3E54E' : '#D4CDA4'}
                 />
 
                 {/* Skill Code & Usage Count Label */}
@@ -1093,9 +1233,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   x={posIso.x}
                   y={posIso.y + 24}
                   textAnchor="middle"
-                  fontSize="8"
+                  fontSize="8.5"
                   fontWeight="bold"
-                  fill={isSelected ? '#15150F' : '#3D3A2C'}
+                  fill={isSelected ? '#15150F' : isSkillConnected ? '#15150F' : '#3D3A2C'}
                   fontFamily="monospace"
                 >
                   {skill.name.split(' ')[0]}
@@ -1105,10 +1245,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   y={posIso.y + 33}
                   textAnchor="middle"
                   fontSize="7"
-                  fill="#6B664F"
+                  fontWeight={isSkillConnected ? 'bold' : 'normal'}
+                  fill={isSkillConnected ? '#15150F' : '#6B664F'}
                   fontFamily="monospace"
                 >
-                  {skill.systemCount} SYSTEMS
+                  {isSkillConnected && hoveredProjectId ? 'CONNECTED // ' : ''}{skill.systemCount} SYSTEMS
                 </text>
               </g>
             );
@@ -1120,6 +1261,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           {activeExperience.map((exp, idx) => {
             const isSelected = selectedExperienceId === exp.id;
             const isThisDragging = draggingNode?.type === 'experience' && draggingNode.id === exp.id;
+            const isDimmed = isHoverFocus;
             const expPos = getExpPos(exp);
             const posIso = project3DToIso(expPos.x, expPos.y, 0);
 
@@ -1156,7 +1298,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     });
                   }
                 }}
-                className="cursor-grab active:cursor-grabbing group"
+                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
+                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : 'opacity-100'
+                }`}
               >
                 {/* Timeline connector line to next node */}
                 {nextIso && (
@@ -1358,12 +1502,17 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           </g>
         )}
 
-        {/* Project Structures (Brutalist Axonometric 3D Black Boxes - Draggable!) */}
+        {/* Project Structures (Brutalist Axonometric 3D Black Boxes - Draggable & Dynamic Hover Responsive) */}
         <g id="project-structures">
           {filteredProjects.map((project) => {
             const isSelected = selectedProjectId === project.id;
             const isHovered = hoveredProjectId === project.id;
             const isThisDragging = draggingNode?.type === 'project' && draggingNode.id === project.id;
+            const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : false;
+
+            // Dim if hover focus is active and this project is NOT hovered and NOT connected to hovered skill
+            const isDimmed = isHoverFocus && !isHovered && !isProjectConnectedToHoveredSkill;
+            const isHighlighted = isHovered || isSelected || isProjectConnectedToHoveredSkill || isThisDragging;
             
             const projectPos = getProjectPos(project);
             const originX = projectPos.x;
@@ -1406,7 +1555,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y1={pLeft.y}
                     x2={pCorner.x}
                     y2={pCorner.y}
-                    stroke={isSelected || isThisDragging ? '#C3E54E' : 'rgba(195, 229, 78, 0.4)'}
+                    stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : 'rgba(195, 229, 78, 0.4)'}
                     strokeWidth="1"
                   />
                   {/* Side face floor line */}
@@ -1415,7 +1564,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y1={pCorner.y}
                     x2={pRight.x}
                     y2={pRight.y}
-                    stroke={isSelected || isThisDragging ? '#C3E54E' : 'rgba(195, 229, 78, 0.25)'}
+                    stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : 'rgba(195, 229, 78, 0.25)'}
                     strokeWidth="1"
                   />
                   {/* Floor Level Stamp */}
@@ -1423,7 +1572,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     x={pCorner.x + 3}
                     y={pCorner.y + 3}
                     fontSize="6"
-                    fill={isSelected || isThisDragging ? '#C3E54E' : '#8C8870'}
+                    fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
                     fontFamily="monospace"
                   >
                     L{l}
@@ -1467,8 +1616,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onMouseEnter={() => setHoveredProjectId(project.id)}
                 onMouseLeave={() => setHoveredProjectId(null)}
-                className={`cursor-grab active:cursor-grabbing group transition-opacity duration-150 ${
-                  isThisDragging ? 'opacity-90' : 'opacity-100'
+                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
+                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : isThisDragging ? 'opacity-90' : 'opacity-100'
                 }`}
               >
                 {/* Structure Shadow on the Drafting Plane */}
@@ -1484,24 +1633,24 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 <polygon
                   points={`${p3_ground.x},${p3_ground.y} ${p2_ground.x},${p2_ground.y} ${p2_top.x},${p2_top.y} ${p3_top.x},${p3_top.y}`}
                   fill={isThisDragging ? '#1A1914' : isSelected ? '#15150F' : isHovered ? '#23221B' : '#1A1914'}
-                  stroke={isThisDragging ? '#C3E54E' : '#15150F'}
-                  strokeWidth={isSelected || isThisDragging ? '2' : '1.5'}
+                  stroke={isThisDragging || isHovered ? '#C3E54E' : '#15150F'}
+                  strokeWidth={isSelected || isHovered || isThisDragging ? '2' : '1.5'}
                 />
 
                 {/* Right/Side Face (DEEP SHADED BLACK) */}
                 <polygon
                   points={`${p2_ground.x},${p2_ground.y} ${p1_ground.x},${p1_ground.y} ${p1_top.x},${p1_top.y} ${p2_top.x},${p2_top.y}`}
                   fill={isThisDragging ? '#0F0E0B' : isSelected ? '#0A0A08' : isHovered ? '#181712' : '#100F0C'}
-                  stroke={isThisDragging ? '#C3E54E' : '#15150F'}
-                  strokeWidth={isSelected || isThisDragging ? '2' : '1.5'}
+                  stroke={isThisDragging || isHovered ? '#C3E54E' : '#15150F'}
+                  strokeWidth={isSelected || isHovered || isThisDragging ? '2' : '1.5'}
                 />
 
                 {/* Top Face / Roof Slab */}
                 <polygon
                   points={`${p0_top.x},${p0_top.y} ${p1_top.x},${p1_top.y} ${p2_top.x},${p2_top.y} ${p3_top.x},${p3_top.y}`}
                   fill={isThisDragging ? '#26251E' : isSelected ? '#15150F' : isHovered ? '#2D2C23' : '#26251E'}
-                  stroke={isSelected || isThisDragging ? '#C3E54E' : '#15150F'}
-                  strokeWidth={isSelected || isThisDragging ? '2' : '1.5'}
+                  stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'}
+                  strokeWidth={isSelected || isHovered || isThisDragging ? '2.5' : '1.5'}
                 />
 
                 {/* Architectural Floor Lines & Vents */}
@@ -1509,7 +1658,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
                 {/* Active Radar Pulse Beacon on Roof Corner */}
                 <g transform={`translate(${p0_top.x}, ${p0_top.y})`}>
-                  <line x1="0" y1="0" x2="0" y2="-10" stroke={isSelected || isThisDragging ? '#C3E54E' : '#15150F'} strokeWidth="1.5" />
+                  <line x1="0" y1="0" x2="0" y2="-10" stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'} strokeWidth="1.5" />
                   <circle cx="0" cy="-10" r="3" fill="#C3E54E" />
                   <circle cx="0" cy="-10" r="7" stroke="#C3E54E" strokeWidth="1" fill="none" opacity="0.8" className="animate-ping" />
                 </g>
@@ -1521,8 +1670,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y="-7"
                     width="40"
                     height="14"
-                    fill={isSelected || isThisDragging ? '#C3E54E' : '#15150F'}
-                    stroke={isSelected || isThisDragging ? '#15150F' : '#3E3C2F'}
+                    fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'}
+                    stroke={isSelected || isHovered || isThisDragging ? '#15150F' : '#3E3C2F'}
                     strokeWidth="1"
                   />
                   <text
@@ -1531,7 +1680,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     textAnchor="middle"
                     fontSize="7"
                     fontWeight="bold"
-                    fill={isSelected || isThisDragging ? '#15150F' : '#D4CDA4'}
+                    fill={isSelected || isHovered || isThisDragging ? '#15150F' : '#D4CDA4'}
                     fontFamily="monospace"
                   >
                     {project.subsystems.length} SUBSYS
@@ -1546,10 +1695,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y1="30"
                     x2="8"
                     y2="16"
-                    stroke="#15150F"
+                    stroke={isHovered ? '#C3E54E' : '#15150F'}
                     strokeWidth="1.2"
                   />
-                  <circle cx="8" cy="30" r="2" fill={isSelected || isThisDragging ? '#C3E54E' : '#15150F'} />
+                  <circle cx="8" cy="30" r="2" fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'} />
 
                   {/* Callout Card Base (SOLID BLACK) */}
                   <rect
@@ -1558,8 +1707,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     width="122"
                     height="28"
                     fill="#15150F"
-                    stroke={isSelected || isThisDragging ? '#C3E54E' : '#15150F'}
-                    strokeWidth={isSelected || isThisDragging ? '1.5' : '1'}
+                    stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'}
+                    strokeWidth={isSelected || isHovered || isThisDragging ? '1.8' : '1'}
                   />
 
                   {/* Category Accent Stripe */}
@@ -1568,7 +1717,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y="-12"
                     width="3.5"
                     height="28"
-                    fill={project.accentColor}
+                    fill={isHovered ? '#C3E54E' : project.accentColor}
                   />
 
                   {/* Text inside Callout */}
@@ -1577,7 +1726,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     y="-1"
                     fontSize="8.5"
                     fontWeight="bold"
-                    fill={isHovered || isThisDragging ? '#FFFFFF' : '#D4CDA4'}
+                    fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
                     fontFamily="monospace"
                   >
                     {project.code} // {project.title}
@@ -1586,10 +1735,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     x="5"
                     y="10"
                     fontSize="7"
-                    fill={isSelected || isThisDragging ? '#C3E54E' : '#9E997F'}
+                    fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#9E997F'}
                     fontFamily="monospace"
                   >
-                    {project.status} · {project.year}
+                    {isHovered && focusedConnectedSkillIds.size > 0 
+                      ? `${focusedConnectedSkillIds.size} ACTIVE CONDUITS` 
+                      : `${project.status} · ${project.year}`}
                   </text>
 
                   {/* Drill-in icon button */}
@@ -1633,7 +1784,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       {/* Floating Hover Card Preview */}
       {hoveredProjectId && !selectedProjectId && !draggingNode && (
         <div 
-          className="absolute top-12 left-4 z-30 w-72 bg-[#D4CDA4] border-2 border-precision p-3 pointer-events-none select-none"
+          className="absolute top-12 left-4 z-30 w-76 bg-[#D4CDA4] border-2 border-[#15150F] p-3 pointer-events-none select-none shadow-[3px_3px_0px_#15150F] animate-in fade-in duration-150"
         >
           {(() => {
             const p = PROJECTS.find(item => item.id === hoveredProjectId);
@@ -1642,20 +1793,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               <div className="flex flex-col gap-1.5 font-mono text-[10px]">
                 <div className="flex items-center justify-between border-b border-precision pb-1">
                   <div className="flex items-center gap-1.5 font-bold">
-                    <span className="w-2 h-2" style={{ backgroundColor: p.accentColor }}></span>
+                    <span className="w-2.5 h-2.5 bg-[#C3E54E] border border-[#15150F]"></span>
                     <span>{p.code} // {p.title}</span>
                   </div>
-                  <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1 py-0.5">{p.status}</span>
+                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1 py-0.5 font-bold">{p.status}</span>
                 </div>
                 <p className="text-[9.5px] text-[#3D3A2C] leading-tight">{p.tagline}</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {p.techStack.slice(0, 4).map(t => (
-                    <span key={t} className="text-[8px] border border-[#15150F]/30 bg-[#E2DCB9] px-1">
+                
+                {/* Active Conduits Counter Badge */}
+                <div className="flex items-center justify-between bg-[#15150F] text-[#C3E54E] px-2 py-1 text-[8.5px] font-bold">
+                  <span>SIGNAL CONDUITS:</span>
+                  <span className="flex items-center gap-1">
+                    <Zap size={10} />
+                    {focusedConnectedSkillIds.size} ACTIVE CHANNELS
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {p.techStack.map(t => (
+                    <span 
+                      key={t} 
+                      className="text-[8px] border border-[#15150F] bg-[#E2DCB9] px-1 font-bold text-[#15150F]"
+                    >
                       {t}
                     </span>
                   ))}
                 </div>
-                <div className="text-[8px] text-[#5C5946] border-t border-precision pt-1 flex justify-between">
+                <div className="text-[8px] text-[#5C5946] border-t border-precision pt-1 flex justify-between font-bold">
                   <span>CLICK TO INSPECT · DRAG TO MOVE</span>
                   <span>DBL-CLICK DRILL IN →</span>
                 </div>
