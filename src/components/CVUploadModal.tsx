@@ -64,32 +64,53 @@ export const CVUploadModal: React.FC<CVUploadModalProps> = ({
     }
   };
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
     setFileName(file.name);
-    const reader = new FileReader();
+    setParseError(null);
 
     if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.json')) {
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
+      try {
+        const text = await file.text();
         setInputText(text);
         handleProcessText(text, file.name);
-      };
-      reader.readAsText(file);
-    } else {
-      // For binary or other file formats (PDF, DOCX) where raw browser extraction is attempted
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        // Clean non-printable characters for simple text fallback
-        const sanitized = content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ');
-        if (sanitized.trim().length > 50) {
-          setInputText(sanitized);
-          handleProcessText(sanitized, file.name);
-        } else {
-          setParseError('Could not extract plaintext from this file type. Please paste the CV text or upload a .txt/.md file.');
-        }
-      };
-      reader.readAsText(file);
+      } catch {
+        setParseError('Could not read this text file. Please paste the CV text instead.');
+      }
+      return;
     }
+
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      setIsParsing(true);
+      try {
+        const [{ getDocument, GlobalWorkerOptions }, { default: pdfWorkerUrl }] = await Promise.all([
+          import('pdfjs-dist'),
+          import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+        ]);
+        GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pdf = await getDocument({ data: bytes }).promise;
+        const pages: string[] = [];
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          const content = await page.getTextContent();
+          pages.push(content.items
+            .map(item => ('str' in item ? item.str : ''))
+            .join(' '));
+        }
+        const text = pages.join('\n').replace(/\s+/g, ' ').trim();
+        if (text.length < 50) throw new Error('No readable text layer was found.');
+        setInputText(text);
+        handleProcessText(text, file.name);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Unknown PDF parsing error.';
+        setParseError(`Could not extract this PDF: ${detail} Please paste the CV text instead.`);
+      } finally {
+        setIsParsing(false);
+      }
+      return;
+    }
+
+    setParseError('DOC and DOCX extraction is not supported yet. Upload PDF, TXT, MD, or JSON, or paste the CV text.');
   };
 
   const handleDrop = (e: React.DragEvent) => {
