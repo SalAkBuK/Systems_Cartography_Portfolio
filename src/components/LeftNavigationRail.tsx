@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   Compass, 
   User, 
@@ -9,9 +9,7 @@ import {
   Share2, 
   Filter,
   Search,
-  ChevronRight,
-  Github,
-  FileText
+  Github
 } from 'lucide-react';
 import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
 import {
@@ -34,10 +32,7 @@ interface LeftNavigationRailProps {
   projects?: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
-  onOpenGitHubSync?: () => void;
-  onOpenCVUpload?: () => void;
-  gitHubSource?: string | null;
-  cvSource?: string | null;
+  templateRepositoryUrl: string;
 }
 
 export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
@@ -54,35 +49,13 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   projects = [],
   skills = INFRASTRUCTURE_SKILLS,
   experience = EXPERIENCE_HISTORY,
-  onOpenGitHubSync,
-  onOpenCVUpload,
-  gitHubSource,
-  cvSource
+  templateRepositoryUrl
 }) => {
-  const [systemLogs, setSystemLogs] = useState<string[]>([
-    'Mapping topography...',
-    'Interface ready.'
-  ]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const d = new Date();
-      const timeStr = d.toTimeString().split(' ')[0];
-      const logEvents = [
-        'Cartography mesh aligned.',
-        'Trace conduits stabilized.',
-        'Telemetry stream synced.',
-        'Inspector cache updated.',
-        'Node latency: 12ms.'
-      ];
-      const randomEv = logEvents[Math.floor(Math.random() * logEvents.length)];
-      setSystemLogs(prev => [
-        `${timeStr} ${randomEv}`,
-        ...prev.slice(0, 3)
-      ]);
-    }, 12000);
-    return () => clearInterval(timer);
-  }, []);
+  const systemLogs = [
+    'Public viewer: read only.',
+    'Project source: GitHub.',
+    'Claims require repository evidence.'
+  ];
 
   const navItems: { id: ActiveView; num: string; label: string; count?: number; icon: React.ComponentType<{ size: number }> }[] = [
     { id: 'system_overview', num: '00', label: 'SYSTEM OVERVIEW', icon: Compass },
@@ -171,34 +144,10 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </nav>
 
-      {/* Ingestion Actions in Index */}
-      <div className="p-2 border-b border-[#15150F] bg-[#15150F] text-[#D4CDA4] flex flex-col gap-1">
-        {onOpenCVUpload && (
-          <button
-            onClick={onOpenCVUpload}
-            className="w-full py-1.5 px-2 bg-[#22211A] hover:bg-[#8EA9DA] hover:text-[#15150F] border border-[#3E3C2F] text-[9px] font-bold tracking-wider flex items-center justify-between transition-colors"
-          >
-            <div className="flex items-center gap-1.5">
-              <FileText size={11} className="text-[#8EA9DA]" />
-              <span>{cvSource ? `CV: ${cvSource.slice(0, 16).toUpperCase()}` : 'INGEST CV / RESUME'}</span>
-            </div>
-            <span className="text-[7.5px] opacity-70">PARSE →</span>
-          </button>
-        )}
-
-        {onOpenGitHubSync && (
-          <button
-            onClick={onOpenGitHubSync}
-            className="w-full py-1.5 px-2 bg-[#22211A] hover:bg-[#C3E54E] hover:text-[#15150F] border border-[#3E3C2F] text-[9px] font-bold tracking-wider flex items-center justify-between transition-colors"
-          >
-            <div className="flex items-center gap-1.5">
-              <Github size={11} className="text-[#C3E54E]" />
-              <span>{gitHubSource ? `GH: ${gitHubSource.toUpperCase()}` : 'INGEST GITHUB REPOS'}</span>
-            </div>
-            <span className="text-[7.5px] opacity-70">SYNC →</span>
-          </button>
-        )}
-      </div>
+      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[9px] font-bold tracking-wider">
+        <span className="flex items-center gap-1.5"><Github size={11} /> USE THIS TEMPLATE</span>
+        <span>FORK →</span>
+      </a>
 
       {/* Search & Filter Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">
@@ -284,9 +233,9 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </div>
 
-      {/* Bottom Live System Log */}
+      {/* Evidence state */}
       <div className="p-2.5 border-t border-[#15150F] text-[8.5px] uppercase leading-relaxed font-mono bg-[#CBC59B]/40 shrink-0">
-        <p className="font-bold opacity-60 mb-0.5">System Log:</p>
+        <p className="font-bold opacity-60 mb-0.5">Evidence state:</p>
         <div className="flex flex-col gap-0.5 opacity-85">
           {systemLogs.map((log, idx) => (
             <p key={idx} className="truncate">• {log}</p>
