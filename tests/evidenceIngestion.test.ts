@@ -6,6 +6,8 @@ import {
   GitHubRepoRaw,
   transformGitHubRepoToProject
 } from '../src/services/githubService.ts';
+import { mergePortfolioProjects } from '../src/services/portfolioMergeService.ts';
+import { VERIFIED_PROJECTS } from '../src/data/verifiedPortfolioData.ts';
 
 const repo: GitHubRepoRaw = {
   id: 1,
@@ -90,4 +92,37 @@ test('GitHub profile generation does not infer career history or private contact
   assert.equal(result.operator.contact.matrix, '');
   assert.equal(result.experience.length, 1);
   assert.match(result.experience[0].yearRange, /PUBLIC GITHUB SNAPSHOT/);
+});
+
+test('reviewed repositories expose only documented architecture and test evidence', () => {
+  const towerdesk = transformGitHubRepoToProject({
+    ...repo,
+    id: 2,
+    name: 'towerdesk-backend-clean',
+    full_name: 'SalAkBuK/towerdesk-backend-clean',
+    html_url: 'https://github.com/SalAkBuK/towerdesk-backend-clean',
+    description: 'Multi-tenant property management backend',
+    topics: ['nestjs', 'prisma', 'postgresql']
+  }, 0, 1);
+
+  assert.equal(towerdesk.subsystems.length, 5);
+  assert.match(towerdesk.architectureNotes, /Repository README/);
+  assert.match(towerdesk.resilienceTesting, /Jest integration\/e2e/);
+  assert.doesNotMatch(JSON.stringify(towerdesk), /99\.9|SLA|production uptime/i);
+});
+
+test('CV project aliases merge with matching GitHub evidence without duplicates', () => {
+  const githubProjects = [transformGitHubRepoToProject({
+    ...repo,
+    id: 3,
+    name: 'pillcheck-public',
+    full_name: 'SalAkBuK/pillcheck-public',
+    html_url: 'https://github.com/SalAkBuK/pillcheck-public',
+    description: 'Medication reminder app'
+  }, 0, 1)];
+
+  const merged = mergePortfolioProjects(VERIFIED_PROJECTS, githubProjects);
+
+  assert.equal(merged.filter(project => project.title === 'PillCheck').length, 1);
+  assert.ok(merged.find(project => project.title === 'PillCheck')!.subsystems.length > 0);
 });

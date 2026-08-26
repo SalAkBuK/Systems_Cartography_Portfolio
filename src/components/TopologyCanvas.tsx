@@ -31,7 +31,7 @@ import {
   SystemCategory, 
   ViewportState 
 } from '../types';
-import { TOPOLOGY_ZONES } from '../data/portfolioData';
+import { VERIFIED_TOPOLOGY_ZONES as TOPOLOGY_ZONES } from '../data/verifiedPortfolioData';
 import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_PROJECTS as PROJECTS,

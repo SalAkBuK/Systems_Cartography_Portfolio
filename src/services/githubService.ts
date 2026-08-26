@@ -7,6 +7,7 @@ import {
   ExperienceNode, 
   OperatorMetadata 
 } from '../types';
+import { getRepositoryEvidence } from '../data/repositoryEvidence';
 
 export interface GitHubUser {
   login: string;
@@ -526,7 +527,7 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
     { label: 'License Spec', value: repo.license?.spdx_id || 'Not reported', note: 'GitHub repository metadata' }
   ];
 
-  return {
+  const project: ProjectData = {
     id: `gh-${repo.id}`,
     code,
     title: repo.name,
@@ -554,6 +555,17 @@ export function transformGitHubRepoToProject(repo: GitHubRepoRaw, index: number,
       demo: repo.homepage || undefined,
       caseStudy: false
     }
+  };
+
+  const repositoryEvidence = getRepositoryEvidence(repo.name);
+  if (!repositoryEvidence) return project;
+
+  return {
+    ...project,
+    ...repositoryEvidence,
+    architectureNotes: `${repositoryEvidence.architectureNotes} GitHub metadata: primary language ${repo.language || 'not reported'}, default branch ${repo.default_branch || 'not reported'}, license ${repo.license?.spdx_id || 'not reported'}.`,
+    metrics,
+    links: project.links
   };
 }
 
