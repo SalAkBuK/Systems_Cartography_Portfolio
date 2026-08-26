@@ -7,16 +7,10 @@ import {
   Check, 
   FileText, 
   Terminal, 
-  ExternalLink,
-  Upload
+  ExternalLink
 } from 'lucide-react';
 import { OperatorMetadata, ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
-import {
-  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
-  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
-  VERIFIED_PROJECTS as PROJECTS,
-  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
-} from '../data/verifiedPortfolioData';
+import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
 
 interface ResumeModalProps {
   isOpen: boolean;
@@ -25,32 +19,30 @@ interface ResumeModalProps {
   projects?: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
-  onOpenCVUpload?: () => void;
 }
 
 export const ResumeModal: React.FC<ResumeModalProps> = ({
   isOpen,
   onClose,
   operator = OPERATOR_METADATA,
-  projects = PROJECTS,
-  skills = INFRASTRUCTURE_SKILLS,
-  experience = EXPERIENCE_HISTORY,
-  onOpenCVUpload
+  projects = [],
+  skills = [],
+  experience = []
 }) => {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
   const activeOperator = operator || OPERATOR_METADATA;
-  const activeProjects = projects.length > 0 ? projects : PROJECTS;
-  const activeSkills = skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS;
-  const activeExperience = experience.length > 0 ? experience : EXPERIENCE_HISTORY;
+  const activeProjects = projects;
+  const activeSkills = skills;
+  const activeExperience = experience;
 
   const generateMarkdownResume = () => {
     return `# ${activeOperator.name.toUpperCase()}
 ${activeOperator.role}
 Location: ${activeOperator.location} | Email: ${activeOperator.contact.email}
-GitHub: github.com/${activeOperator.contact.github || 'user'} | LinkedIn: linkedin.com/in/${activeOperator.contact.linkedin || 'user'}
+GitHub: ${activeOperator.contact.github || 'Not provided'} | LinkedIn: ${activeOperator.contact.linkedin || 'Not provided'}
 
 ---
 
@@ -88,7 +80,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
 `).join('\n')}
 
 ---
-*Generated via Systems Cartography Console // hafsah.sys*
+*Generated from public GitHub metadata via Systems Cartography.*
 `;
   };
 
@@ -123,23 +115,10 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
           <div className="flex items-center gap-2">
             <FileText size={13} className="text-[#15150F]" />
             <span className="font-bold text-[12px] tracking-wider uppercase">
-              TECHNICAL SPECIFICATION // CURRICULUM VITAE
+              TECHNICAL SPECIFICATION // PORTFOLIO BRIEF
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {onOpenCVUpload && (
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenCVUpload();
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 bg-[#8EA9DA] text-[#15150F] hover:bg-[#7896cb] transition-colors border border-precision text-[9.5px] font-bold"
-                title="Upload another CV or resume"
-              >
-                <Upload size={11} />
-                <span>UPLOAD CV</span>
-              </button>
-            )}
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[9.5px] font-bold"
@@ -272,7 +251,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
               04 // SELECTED FLAGSHIP SYSTEMS ARCHITECTED
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {PROJECTS.slice(0, 4).map(p => (
+              {activeProjects.slice(0, 4).map(p => (
                 <div key={p.id} className="p-3 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between border-b border-precision pb-1">
                     <span className="font-bold text-[11px]">{p.code} // {p.title}</span>

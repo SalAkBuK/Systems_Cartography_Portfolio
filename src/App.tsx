@@ -11,12 +11,9 @@ import {
 } from './types';
 import {
   VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
-  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
-  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
-  VERIFIED_PROJECTS as PROJECTS,
-  VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
+  VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA
 } from './data/verifiedPortfolioData';
-import { mergePortfolioProjects } from './services/portfolioMergeService';
+import { PORTFOLIO_CONFIG } from './config/portfolioConfig';
 import { TopTelemetryBar } from './components/TopTelemetryBar';
 import { LeftNavigationRail } from './components/LeftNavigationRail';
 import { TopologyCanvas } from './components/TopologyCanvas';
@@ -24,12 +21,9 @@ import { ProjectSubsystemCanvas } from './components/ProjectSubsystemCanvas';
 import { RightInspectorPanel } from './components/RightInspectorPanel';
 import { BottomCommandStrip } from './components/BottomCommandStrip';
 import { CaseStudyModal } from './components/CaseStudyModal';
-import { ContactInterfaceModal } from './components/ContactInterfaceModal';
+import { ContactPage } from './components/ContactPage';
 import { ResumeModal } from './components/ResumeModal';
-import { GitHubConnectModal } from './components/GitHubConnectModal';
-import { CVUploadModal } from './components/CVUploadModal';
-import { GitHubSyncResult } from './services/githubService';
-import { ParsedCVSyncResult } from './services/cvParserService';
+import { connectGitHubTarget, GitHubSyncResult } from './services/githubService';
 import { Menu, X } from 'lucide-react';
 
 const STORAGE_KEY_PROJECTS = 'sys_cartography_custom_projects';
@@ -37,9 +31,8 @@ const STORAGE_KEY_GITHUB_SOURCE = 'sys_cartography_github_source';
 const STORAGE_KEY_SKILLS = 'sys_cartography_skills';
 const STORAGE_KEY_EXPERIENCE = 'sys_cartography_experience';
 const STORAGE_KEY_OPERATOR = 'sys_cartography_operator';
-const STORAGE_KEY_CV_SOURCE = 'sys_cartography_cv_source';
 const STORAGE_KEY_SCHEMA_VERSION = 'sys_cartography_schema_version';
-const CURRENT_STORAGE_SCHEMA_VERSION = '3';
+const CURRENT_STORAGE_SCHEMA_VERSION = `4:${PORTFOLIO_CONFIG.githubTarget.toLowerCase()}:${PORTFOLIO_CONFIG.siteId.toLowerCase()}`;
 
 function migrateStoredPortfolio(): void {
   try {
@@ -50,7 +43,7 @@ function migrateStoredPortfolio(): void {
       STORAGE_KEY_SKILLS,
       STORAGE_KEY_EXPERIENCE,
       STORAGE_KEY_OPERATOR,
-      STORAGE_KEY_CV_SOURCE
+      'sys_cartography_cv_source'
     ].forEach(key => localStorage.removeItem(key));
     localStorage.setItem(STORAGE_KEY_SCHEMA_VERSION, CURRENT_STORAGE_SCHEMA_VERSION);
   } catch {
@@ -62,7 +55,14 @@ export default function App() {
   migrateStoredPortfolio();
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
 
-  // Dynamic projects state (loaded from local storage if previously synced, else default flagship projects)
+  useEffect(() => {
+    document.title = PORTFOLIO_CONFIG.pageTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', PORTFOLIO_CONFIG.metaDescription);
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', PORTFOLIO_CONFIG.pageTitle);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', PORTFOLIO_CONFIG.metaDescription);
+  }, []);
+
+  // Public GitHub snapshot, cached locally for graceful read-only fallback.
   const [projects, setProjects] = useState<ProjectData[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
@@ -75,7 +75,7 @@ export default function App() {
     } catch {
       // fallback
     }
-    return PROJECTS;
+    return [];
   });
 
   const [skills, setSkills] = useState<InfrastructureSkill[]>(() => {
@@ -90,7 +90,7 @@ export default function App() {
     } catch {
       // fallback
     }
-    return INFRASTRUCTURE_SKILLS;
+    return [];
   });
 
   const [experience, setExperience] = useState<ExperienceNode[]>(() => {
@@ -105,7 +105,7 @@ export default function App() {
     } catch {
       // fallback
     }
-    return EXPERIENCE_HISTORY;
+    return [];
   });
 
   const [operator, setOperator] = useState<OperatorMetadata>(() => {
@@ -131,13 +131,7 @@ export default function App() {
     }
   });
 
-  const [cvSource, setCvSource] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY_CV_SOURCE) || null;
-    } catch {
-      return null;
-    }
-  });
+  const [gitHubSyncState, setGitHubSyncState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [drilledProjectId, setDrilledProjectId] = useState<string | null>(null);
@@ -153,10 +147,7 @@ export default function App() {
 
   // Modal States
   const [isCaseStudyOpen, setIsCaseStudyOpen] = useState(false);
-  const [isContactOpen, setIsContactOpen] = useState(false);
   const [isResumeOpen, setIsResumeOpen] = useState(false);
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
-  const [isCVModalOpen, setIsCVModalOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Selected Objects
@@ -166,92 +157,53 @@ export default function App() {
   const selectedExperience = selectedExperienceId ? experience.find(e => e.id === selectedExperienceId) || null : null;
   const selectedPrinciple = selectedPrincipleId ? ARCHITECTURE_PRINCIPLES.find(pr => pr.id === selectedPrincipleId) || null : null;
 
-  // GitHub Sync Handlers
+  // Public data is synchronized automatically from the configured GitHub target.
   const handleApplyGitHubSync = useCallback((result: GitHubSyncResult) => {
+    const configuredOperator = PORTFOLIO_CONFIG.operator;
     const mergedOperator: OperatorMetadata = {
       ...result.operator,
-      name: operator.name,
-      handle: operator.handle,
-      role: operator.role,
-      location: operator.location,
-      focus: operator.focus,
-      yearsActive: operator.yearsActive,
+      ...configuredOperator,
+      primaryStack: result.operator.primaryStack.length > 0 ? result.operator.primaryStack : configuredOperator.primaryStack,
       commitsIndexed: 'Not indexed',
       productionUptime: 'Not claimed',
-      systemManifesto: operator.systemManifesto,
       contact: {
         ...result.operator.contact,
-        ...operator.contact,
-        github: result.operator.contact.github || operator.contact.github
+        ...configuredOperator.contact,
+        github: configuredOperator.contact.github || result.operator.contact.github
       }
     };
-    const mergedProjects = cvSource ? mergePortfolioProjects(projects, result.projects) : result.projects;
-    setProjects(mergedProjects);
+    setProjects(result.projects);
+    setSkills(result.skills);
+    setExperience(result.experience);
     setGitHubSource(result.sourceIdentifier);
     setOperator(mergedOperator);
     try {
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(mergedProjects));
+      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
+      localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
+      localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(result.experience));
       localStorage.setItem(STORAGE_KEY_GITHUB_SOURCE, result.sourceIdentifier);
       localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(mergedOperator));
     } catch {
       // Storage quota or private mode
     }
-    if (mergedProjects.length > 0) {
-      setSelectedProjectId(mergedProjects[0].id);
-      setActiveView('projects');
-    }
-    setDrilledProjectId(null);
-  }, [cvSource, operator, projects]);
-
-  // CV / Resume Sync Handlers
-  const handleApplyCVSync = useCallback((result: ParsedCVSyncResult) => {
-    const mergedProjects = gitHubSource
-      ? mergePortfolioProjects(result.projects, projects)
-      : result.projects;
-
-    setProjects(mergedProjects);
-    setSkills(result.skills);
-    setExperience(result.experience);
-    setOperator(result.operator);
-    setCvSource(result.sourceDocument);
-
-    try {
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(mergedProjects));
-      localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
-      localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(result.experience));
-      localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(result.operator));
-      localStorage.setItem(STORAGE_KEY_CV_SOURCE, result.sourceDocument);
-    } catch {
-      // Storage quota or private mode
-    }
-
-    if (result.projects.length > 0) {
-      setSelectedProjectId(result.projects[0].id);
-      setActiveView('projects');
-    }
-    setDrilledProjectId(null);
-  }, [gitHubSource, projects]);
-
-  const handleResetToDefaultProjects = useCallback(() => {
-    setProjects(PROJECTS);
-    setSkills(INFRASTRUCTURE_SKILLS);
-    setExperience(EXPERIENCE_HISTORY);
-    setOperator(OPERATOR_METADATA);
-    setGitHubSource(null);
-    setCvSource(null);
-    try {
-      localStorage.removeItem(STORAGE_KEY_PROJECTS);
-      localStorage.removeItem(STORAGE_KEY_GITHUB_SOURCE);
-      localStorage.removeItem(STORAGE_KEY_SKILLS);
-      localStorage.removeItem(STORAGE_KEY_EXPERIENCE);
-      localStorage.removeItem(STORAGE_KEY_OPERATOR);
-      localStorage.removeItem(STORAGE_KEY_CV_SOURCE);
-    } catch {
-      // storage
-    }
-    setSelectedProjectId(PROJECTS[0].id);
-    setDrilledProjectId(null);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setGitHubSyncState('loading');
+    connectGitHubTarget(PORTFOLIO_CONFIG.githubTarget)
+      .then(result => {
+        if (cancelled) return;
+        handleApplyGitHubSync(result);
+        setGitHubSyncState('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setGitHubSyncState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [handleApplyGitHubSync]);
 
   // Handle Project Selection
   const handleSelectProject = useCallback((id: string) => {
@@ -359,7 +311,10 @@ export default function App() {
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'contact') {
-      setIsContactOpen(true);
+      setSelectedProjectId(null);
+      setSelectedSkillId(null);
+      setSelectedExperienceId(null);
+      setSelectedPrincipleId(null);
     }
   };
 
@@ -372,14 +327,8 @@ export default function App() {
       }
 
       if (e.key === 'Escape') {
-        if (isCVModalOpen) {
-          setIsCVModalOpen(false);
-        } else if (isGitHubModalOpen) {
-          setIsGitHubModalOpen(false);
-        } else if (isCaseStudyOpen) {
+        if (isCaseStudyOpen) {
           setIsCaseStudyOpen(false);
-        } else if (isContactOpen) {
-          setIsContactOpen(false);
         } else if (isResumeOpen) {
           setIsResumeOpen(false);
         } else if (drilledProjectId) {
@@ -398,23 +347,14 @@ export default function App() {
       } else if (e.key === 'r' || e.key === 'R') {
         setIsResumeOpen(true);
       } else if (e.key === 'c' || e.key === 'C') {
-        setIsContactOpen(true);
-      } else if (e.key === 'u' || e.key === 'U') {
-        setIsCVModalOpen(true);
-      } else if (e.key === 'g' || e.key === 'G') {
-        if (e.altKey || e.metaKey) {
-          setIsGitHubModalOpen(true);
-        }
+        handleNavViewChange('contact');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    isCVModalOpen,
-    isGitHubModalOpen,
     isCaseStudyOpen, 
-    isContactOpen, 
     isResumeOpen, 
     drilledProjectId, 
     handleReturnToLandscape, 
@@ -425,19 +365,18 @@ export default function App() {
     <div className="w-screen h-screen flex flex-col bg-[#D4CDA4] text-[#15150F] font-mono overflow-hidden select-none border-[6px] md:border-[10px] border-[#15150F]">
       {/* 1. Top Telemetry Bar */}
       <TopTelemetryBar
-        activeView={activeView}
         setActiveView={handleNavViewChange}
-        selectedProjectId={selectedProjectId}
         onResetView={handleResetView}
         onToggleTraceMode={() => setTraceModeActive(prev => !prev)}
         traceModeActive={traceModeActive}
-        onOpenContact={() => setIsContactOpen(true)}
+        onOpenContact={() => handleNavViewChange('contact')}
         onOpenResume={() => setIsResumeOpen(true)}
-        onOpenGitHubSync={() => setIsGitHubModalOpen(true)}
-        onOpenCVUpload={() => setIsCVModalOpen(true)}
         activeProjectsCount={projects.length}
         gitHubSource={gitHubSource}
-        cvSource={cvSource}
+        gitHubUrl={operator.contact.github}
+        siteId={PORTFOLIO_CONFIG.siteId}
+        templateRepositoryUrl={PORTFOLIO_CONFIG.templateRepositoryUrl}
+        syncState={gitHubSyncState}
       />
 
       {/* Mobile Drawer Trigger Bar */}
@@ -469,15 +408,14 @@ export default function App() {
           projects={projects}
           skills={skills}
           experience={experience}
-          onOpenGitHubSync={() => setIsGitHubModalOpen(true)}
-          onOpenCVUpload={() => setIsCVModalOpen(true)}
-          gitHubSource={gitHubSource}
-          cvSource={cvSource}
+          templateRepositoryUrl={PORTFOLIO_CONFIG.templateRepositoryUrl}
         />
 
         {/* Central Spatial Landscape / Decomposed Subsystem View */}
         <main className="flex-1 flex flex-col relative overflow-hidden bg-[#D4CDA4]">
-          {drilledProject ? (
+          {activeView === 'contact' ? (
+            <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
+          ) : drilledProject ? (
             <ProjectSubsystemCanvas
               project={drilledProject}
               onReturnToLandscape={handleReturnToLandscape}
@@ -507,7 +445,7 @@ export default function App() {
         </main>
 
         {/* Right Contextual Inspector Panel */}
-        <RightInspectorPanel
+        {activeView !== 'contact' && <RightInspectorPanel
           selectedProject={selectedProject}
           selectedSkill={selectedSkill}
           selectedExperience={selectedExperience}
@@ -517,12 +455,12 @@ export default function App() {
           onSelectSkill={handleSelectSkill}
           onDrillIntoProject={handleDrillIntoProject}
           onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
-          onOpenContact={() => setIsContactOpen(true)}
+          onOpenContact={() => handleNavViewChange('contact')}
           projects={projects}
           skills={skills}
           experience={experience}
           operator={operator}
-        />
+        />}
       </div>
 
       {/* 3. Bottom Command & Operating Strip */}
@@ -533,36 +471,9 @@ export default function App() {
         selectedProjectId={selectedProjectId}
         onResetView={handleResetView}
         onOpenResume={() => setIsResumeOpen(true)}
-        onOpenContact={() => setIsContactOpen(true)}
+        onOpenContact={() => handleNavViewChange('contact')}
         operatorName={operator.name}
         operatorLocation={operator.location}
-      />
-
-      {/* CV / Resume Ingestion Modal */}
-      <CVUploadModal
-        isOpen={isCVModalOpen}
-        onClose={() => setIsCVModalOpen(false)}
-        onApplyCVSync={handleApplyCVSync}
-        onResetToDefault={handleResetToDefaultProjects}
-        currentOperator={operator}
-      />
-
-      {/* GitHub Sync Modal */}
-      <GitHubConnectModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        onApplySync={handleApplyGitHubSync}
-        onResetToDefault={handleResetToDefaultProjects}
-        currentSync={gitHubSource ? {
-          sourceType: 'user',
-          sourceIdentifier: gitHubSource,
-          user: null,
-          projects: projects,
-          skills: skills,
-          operator: operator,
-          experience: experience,
-          rawCount: projects.length
-        } : null}
       />
 
       {/* Deep Dive Case Study Spec Modal */}
@@ -570,13 +481,6 @@ export default function App() {
         project={selectedProject}
         isOpen={isCaseStudyOpen}
         onClose={() => setIsCaseStudyOpen(false)}
-        operator={operator}
-      />
-
-      {/* External Contact Interface Modal */}
-      <ContactInterfaceModal
-        isOpen={isContactOpen}
-        onClose={() => setIsContactOpen(false)}
         operator={operator}
       />
 
@@ -588,7 +492,6 @@ export default function App() {
         projects={projects}
         skills={skills}
         experience={experience}
-        onOpenCVUpload={() => setIsCVModalOpen(true)}
       />
     </div>
   );

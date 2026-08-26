@@ -139,7 +139,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
               ))}
               {project.subsystems.length === 0 && (
                 <div className="sm:col-span-2 p-3 bg-[#E2DCB9] border border-precision text-[9.5px] text-[#5C5946]">
-                  No subsystem boundary is documented by the current CV or linked repository evidence.
+                  No subsystem boundary is documented by the linked repository evidence.
                 </div>
               )}
             </div>
