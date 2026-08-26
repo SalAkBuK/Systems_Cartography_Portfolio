@@ -137,6 +137,11 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
                   </div>
                 </div>
               ))}
+              {project.subsystems.length === 0 && (
+                <div className="sm:col-span-2 p-3 bg-[#E2DCB9] border border-precision text-[9.5px] text-[#5C5946]">
+                  No subsystem boundary is documented by the current CV or linked repository evidence.
+                </div>
+              )}
             </div>
           </div>
 
@@ -162,6 +167,11 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
                   </div>
                 </div>
               ))}
+              {project.keyDecisions.length === 0 && (
+                <div className="p-3 border border-precision bg-[#DCD6B2]/70 text-[9.5px] text-[#5C5946]">
+                  No owner-confirmed architectural decision is available for this project yet.
+                </div>
+              )}
             </div>
           </div>
 
@@ -170,7 +180,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             <div>
               <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Activity size={13} />
-                <span>05 // VERIFIED PRODUCTION BENCHMARKS</span>
+                <span>05 // EVIDENCE &amp; REPOSITORY METRICS</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {project.metrics.map((m, i) => (
@@ -186,7 +196,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             <div>
               <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <ShieldAlert size={13} />
-                <span>06 // CHAOS &amp; RESILIENCE VERIFICATION</span>
+                <span>06 // VALIDATION &amp; TEST EVIDENCE</span>
               </div>
               <div className="p-3 border border-precision bg-[#DCD6B2]/50 text-[10px] leading-relaxed text-[#22211A] h-[calc(100%-24px)]">
                 {project.resilienceTesting}
