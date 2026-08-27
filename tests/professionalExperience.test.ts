@@ -612,5 +612,42 @@ test('27. Experience dock groups multiple roles within the same progression grou
   assert.equal(grouped[1].roleCount, 1);
 });
 
+test('28. RightInspectorPanel experience index renders grouped organization cards and routes through onSelectExperience', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
 
+  // Verify experience index header and cards
+  assert.ok(panelContent.includes("PROFESSIONAL EXPERIENCE INDEX"), 'Panel must render PROFESSIONAL EXPERIENCE INDEX');
+  assert.ok(panelContent.includes("groupedExperience.map"), 'Panel must map over groupedExperience to avoid duplicate organization cards');
+  assert.ok(panelContent.includes("onSelectExperience?.(org.id)"), 'Clicking an organization card must route through onSelectExperience');
+  assert.ok(panelContent.includes("SYSTEMS LINKED //"), 'Organization card must display linked systems count');
+});
 
+test('29. RightInspectorPanel capability index renders capability cards and routes through onSelectSkill', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
+
+  // Verify capability index header and cards
+  assert.ok(panelContent.includes("TECHNICAL CAPABILITIES INDEX"), 'Panel must render TECHNICAL CAPABILITIES INDEX');
+  assert.ok(panelContent.includes("skills.map"), 'Panel must map over skills array');
+  assert.ok(panelContent.includes("onSelectSkill(skill.id)"), 'Clicking a capability card must route through onSelectSkill');
+  assert.ok(panelContent.includes("REPOSITORY ASSOCIATIONS //"), 'Capability card must display repository associations count');
+});
+
+test('30. Back buttons clear selected ID and preserve respective activeView without parallel state', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+
+  // Verify back buttons exist in detail views
+  assert.ok(panelContent.includes("← PROFESSIONAL EXPERIENCE"), 'Experience detail must provide back button to index');
+  assert.ok(panelContent.includes("← TECHNICAL CAPABILITIES"), 'Capability detail must provide back button to index');
+  assert.ok(panelContent.includes("onSelectExperience?.(selectedExperience.id)"), 'Experience back button must call onSelectExperience with selected ID to toggle off');
+  assert.ok(panelContent.includes("onSelectSkill(selectedSkill.id)"), 'Capability back button must call onSelectSkill with selected ID to toggle off');
+
+  // Verify App.tsx passes shared onSelectExperience to RightInspectorPanel
+  assert.ok(appContent.includes("onSelectExperience={handleSelectExperience}"), 'App.tsx must pass onSelectExperience to RightInspectorPanel');
+});
