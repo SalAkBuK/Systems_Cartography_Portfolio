@@ -8,7 +8,8 @@ import {
   GitCommit, 
   Share2, 
   Filter,
-  Search
+  Search,
+  Github
 } from 'lucide-react';
 import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
 import {
@@ -47,7 +48,8 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   setIsMobileOpen,
   projects = [],
   skills = INFRASTRUCTURE_SKILLS,
-  experience = EXPERIENCE_HISTORY
+  experience = EXPERIENCE_HISTORY,
+  templateRepositoryUrl
 }) => {
   const systemLogs = [
     'Public instance: owner read only.',
@@ -142,6 +144,11 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
           );
         })}
       </nav>
+
+      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[9px] font-bold tracking-wider" title="Fork this portfolio repository">
+        <span className="flex items-center gap-1.5"><Github size={11} /> USE TEMPLATE</span>
+        <span>FORK →</span>
+      </a>
 
       {/* Search & Filter Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">
