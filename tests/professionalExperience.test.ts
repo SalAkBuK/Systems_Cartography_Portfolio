@@ -441,3 +441,57 @@ test('20. System overview includes 4 verified architecture principles and proces
   assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[3].title, 'Show Unknowns Honestly');
 });
 
+test('21. System Overview and Operator Profile have distinct structural content and view semantics', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
+
+  // Verify activeView is passed and inspected in RightInspectorPanel
+  assert.ok(panelContent.includes("activeView === 'identity'"), 'RightInspectorPanel must branch on identity view');
+  assert.ok(panelContent.includes("OPERATOR // PROFILE CONSOLE"), 'Title bar must show OPERATOR // PROFILE CONSOLE for identity view');
+  assert.ok(panelContent.includes("SYSTEM // SYSTEM OVERVIEW"), 'Title bar must show SYSTEM // SYSTEM OVERVIEW for system overview');
+  assert.ok(panelContent.includes("CAREER FOOTPRINT // SUMMARY"), 'Identity view must show concise career footprint snapshot');
+  assert.ok(panelContent.includes("EVIDENCE CLASSIFICATION TAXONOMY"), 'System overview must show evidence taxonomy');
+});
+
+test('22. Technical Capabilities and Experience views support neutral tab switching and toggle-off', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  const normalizedApp = appContent.replace(/\r\n/g, '\n');
+
+  // Verify skill toggle-off logic
+  assert.ok(normalizedApp.includes("if (selectedSkillId === id) {\n      setSelectedSkillId(null);"), 'handleSelectSkill must toggle off when clicked again');
+
+  // Verify experience toggle-off logic
+  assert.ok(normalizedApp.includes("if (selectedExperienceId === id) {\n      setSelectedExperienceId(null);"), 'handleSelectExperience must toggle off when clicked again');
+
+  // Verify no auto-selection on tab navigation
+  assert.ok(!appContent.includes("setSelectedSkillId(skills[0].id)"), 'Must not auto-select first capability on navigation switch');
+  assert.ok(!appContent.includes("setSelectedExperienceId(experience[0].id)"), 'Must not auto-select first employer on navigation switch');
+});
+
+test('23. Experience dock default position avoids collision with top-left application title badge', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  // Assert default position is y >= 48 so it does not overlap the top-left title badge (y: 12-28)
+  assert.ok(topologyContent.includes("DEFAULT_DOCK_POSITION = { x: 14, y: 52 }"), 'Dock default position must be y: 52 to avoid top-left label collision');
+});
+
+test('24. Experience dock drag handle is isolated and RESET button is independently clickable', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  // Assert dock container stops pointer/mouse/touch propagation
+  assert.ok(topologyContent.includes("onPointerDown={(e) => e.stopPropagation()}"), 'Dock container must stop pointer propagation');
+  assert.ok(topologyContent.includes("onMouseDown={(e) => e.stopPropagation()}"), 'Dock container must stop mouse propagation');
+
+  // Assert RESET button is not inside a button drag handle
+  assert.ok(topologyContent.includes("handleResetDockPosition()"), 'RESET button must trigger handleResetDockPosition independently');
+  assert.ok(topologyContent.includes("TECHNICAL CAPABILITIES // SYSTEM BACKBONE"), 'Bottom label must be renamed to TECHNICAL CAPABILITIES // SYSTEM BACKBONE');
+});
+
+

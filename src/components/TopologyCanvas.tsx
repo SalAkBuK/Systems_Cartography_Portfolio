@@ -123,7 +123,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   // Movable Professional Experience Dock Viewport Overlay State & Persistence
   const STORAGE_KEY_DOCK_POSITION = 'sys_cartography_experience_dock_position';
-  const DEFAULT_DOCK_POSITION = { x: 14, y: 14 };
+  const DEFAULT_DOCK_POSITION = { x: 14, y: 52 };
 
   const [dockPosition, setDockPosition] = useState<{ x: number; y: number }>(() => {
     try {
@@ -988,35 +988,45 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <div 
           ref={dockRef}
           style={{ left: `${dockPosition.x}px`, top: `${dockPosition.y}px` }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           className="absolute z-20 flex flex-col gap-1 select-none pointer-events-auto max-w-[calc(100vw-40px)] sm:max-w-md md:max-w-lg lg:max-w-xl transition-shadow"
         >
-          <div 
-            tabIndex={0}
-            role="button"
-            aria-label="Drag experience dock, or use arrow keys to reposition"
-            onKeyDown={handleDockKeyDown}
-            onPointerDown={handleDockPointerDown}
-            onPointerMove={handleDockPointerMove}
-            onPointerUp={handleDockPointerUp}
-            onPointerCancel={handleDockPointerCancel}
-            className="flex items-center justify-between px-2 py-1 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F] cursor-grab active:cursor-grabbing select-none outline-none focus:ring-1 focus:ring-[#C3E54E]"
-          >
-            <div className="flex items-center gap-1.5 pointer-events-none">
+          {/* Header Bar */}
+          <div className="flex items-center justify-between px-2 py-1 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F]">
+            {/* Dedicated Drag Handle */}
+            <div 
+              tabIndex={0}
+              role="button"
+              aria-label="Drag experience dock, or use arrow keys to reposition"
+              onKeyDown={handleDockKeyDown}
+              onPointerDown={handleDockPointerDown}
+              onPointerMove={handleDockPointerMove}
+              onPointerUp={handleDockPointerUp}
+              onPointerCancel={handleDockPointerCancel}
+              className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing select-none outline-none focus:ring-1 focus:ring-[#C3E54E] flex-1 py-0.5"
+            >
               <span className="text-[#C3E54E]">⠿</span>
               <span>PROFESSIONAL EXPERIENCE DOCK</span>
-              <span className="text-[7px] text-[#A8A48B] opacity-75 font-normal tracking-normal">[DRAG TO MOVE]</span>
+              <span className="text-[7px] text-[#A8A48B] opacity-75 font-normal tracking-normal">[DRAG]</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[7.5px] text-[#C3E54E] font-mono">CAREER // {activeExperience.length}</span>
+
+            {/* Controls: Career count + Independent Reset button */}
+            <div className="flex items-center gap-2 pl-2">
+              <span className="text-[7.5px] text-[#C3E54E] font-mono shrink-0">CAREER // {activeExperience.length}</span>
               {isDockMoved && (
                 <button
                   type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleResetDockPosition();
                   }}
-                  className="text-[7px] bg-[#2A2920] text-[#C3E54E] hover:bg-[#C3E54E] hover:text-[#15150F] px-1 py-0.2 border border-[#15150F] transition-colors cursor-pointer"
-                  title="Reset dock to default top-left position"
+                  className="text-[7px] bg-[#2A2920] text-[#C3E54E] hover:bg-[#C3E54E] hover:text-[#15150F] px-1.5 py-0.5 border border-[#15150F] transition-colors cursor-pointer shrink-0 font-bold"
+                  title="Reset dock to default position"
                 >
                   RESET
                 </button>
@@ -1061,7 +1071,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       <div className="absolute bottom-3 left-3 pointer-events-none flex items-center gap-2 text-[9px] font-mono text-[#15150F] z-10">
         <div className="bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-t-2">
-          <span className="font-bold">INFRASTRUCTURE SERVICES // DATA BACKBONE</span>
+          <span className="font-bold">TECHNICAL CAPABILITIES // SYSTEM BACKBONE</span>
         </div>
         <button
           onClick={() => setGridSnapEnabled(prev => !prev)}

@@ -21,6 +21,7 @@ import {
   Radio
 } from 'lucide-react';
 import { 
+  ActiveView,
   ProjectData, 
   InfrastructureSkill, 
   ExperienceNode, 
@@ -66,6 +67,7 @@ export const ProvenanceBadge: React.FC<{ provenance?: EvidenceProvenance }> = ({
 };
 
 interface RightInspectorPanelProps {
+  activeView?: ActiveView;
   selectedProject: ProjectData | null;
   selectedSkill: InfrastructureSkill | null;
   selectedExperience: ExperienceNode | null;
@@ -82,6 +84,7 @@ interface RightInspectorPanelProps {
 }
 
 export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
+  activeView = 'system_overview',
   selectedProject,
   selectedSkill,
   selectedExperience,
@@ -112,7 +115,15 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               ? `CAPABILITY // ${selectedSkill.code}`
               : selectedExperience
               ? `BUILD LOG // ${selectedExperience.code}`
-              : 'SYSTEM // ROOT CONSOLE'}
+              : activeView === 'identity'
+              ? 'OPERATOR // PROFILE CONSOLE'
+              : activeView === 'projects'
+              ? 'PROJECTS // TOPOLOGY OVERVIEW'
+              : activeView === 'experience'
+              ? 'CAREER // PROFESSIONAL EXPERIENCE'
+              : activeView === 'infrastructure'
+              ? 'CAPABILITIES // TECHNICAL OVERVIEW'
+              : 'SYSTEM // SYSTEM OVERVIEW'}
           </span>
         </div>
         <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
@@ -946,115 +957,301 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           </div>
         )}
 
-        {/* CASE 4: SYSTEM OVERVIEW / ROOT OPERATOR CONSOLE */}
+        {/* CASE 4: UNSELECTED ROOT CONSOLE / VIEW-SPECIFIC OVERVIEWS */}
         {!selectedProject && !selectedSkill && !selectedExperience && (
           <div className="flex flex-col gap-4">
-            {/* Operator Identity Block */}
-            <div className="border-b border-[#15150F] pb-3">
-              <div className="text-[14px] font-bold text-[#15150F]">{activeOperator.name}</div>
-              <div className="text-[10px] text-[#5C5946] font-semibold">{activeOperator.handle} · {activeOperator.role}</div>
-              <div className="text-[9px] text-[#5C5946] mt-0.5">LOCATION: {activeOperator.location}</div>
-            </div>
-
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-3 gap-1">
-              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                <span className="text-[7px] opacity-60 uppercase font-bold">REPOSITORIES</span>
-                <span className="text-[13px] font-bold text-[#15150F]">{projects.length}</span>
-              </div>
-              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                <span className="text-[7px] opacity-60 uppercase font-bold">CAPABILITIES</span>
-                <span className="text-[13px] font-bold text-[#15150F]">{skills.length}</span>
-              </div>
-              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                <span className="text-[7px] opacity-60 uppercase font-bold">CAREER ROLES</span>
-                <span className="text-[13px] font-bold text-[#15150F]">{experience.length}</span>
-              </div>
-            </div>
-
-            {/* Manifesto / Summary */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
-                SYSTEM MANIFESTO
-              </div>
-              <p className="text-[10px] text-[#22211A] bg-[#E2DCB9]/80 p-2.5 border border-[#15150F] leading-relaxed">
-                {activeOperator.systemManifesto}
-              </p>
-            </div>
-
-            {/* Evidence Classification Taxonomy */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                EVIDENCE CLASSIFICATION TAXONOMY
-              </div>
-              <div className="grid grid-cols-2 gap-1 text-[8px] font-mono">
-                <div className="p-1.5 bg-[#15150F] text-[#C3E54E] border border-[#15150F] flex flex-col">
-                  <span className="font-bold">● VERIFIED</span>
-                  <span className="text-[7px] text-[#A8A48B] leading-tight">Public GitHub files, manifests, and code</span>
-                </div>
-                <div className="p-1.5 bg-[#E2A96B]/30 text-[#15150F] border border-[#15150F] flex flex-col">
-                  <span className="font-bold text-[#7A3E2E]">▲ CURATED</span>
-                  <span className="text-[7px] text-[#5C5946] leading-tight">Reviewed LinkedIn import / owner evidence</span>
-                </div>
-                <div className="p-1.5 bg-[#CBC59B] text-[#15150F] border border-[#15150F] flex flex-col">
-                  <span className="font-bold text-[#15150F]">◆ DERIVED</span>
-                  <span className="text-[7px] text-[#5C5946] leading-tight">Multi-signal heuristic classifications</span>
-                </div>
-                <div className="p-1.5 bg-[#E2DCB9] text-[#7A3E2E] border border-[#15150F] flex flex-col">
-                  <span className="font-bold">○ UNAVAILABLE</span>
-                  <span className="text-[7px] text-[#5C5946] leading-tight">Unclaimed / unestablished evidence gap</span>
-                </div>
-              </div>
-            </div>
-
-            {/* EVIDENCE PRINCIPLES */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>EVIDENCE PRINCIPLES</span>
-                <span className="text-[7.5px] text-[#C3E54E] bg-[#15150F] px-1 py-0.2 font-mono font-bold">
-                  {VERIFIED_ARCHITECTURE_PRINCIPLES.length} INTEGRITY RULES
-                </span>
-              </div>
-              <div className="flex flex-col gap-1.5 border border-[#15150F] bg-[#E2DCB9]/40 p-2 divide-y divide-[#15150F]/20">
-                {VERIFIED_ARCHITECTURE_PRINCIPLES.map((pr) => (
-                  <div key={pr.id} className="pt-1.5 first:pt-0 flex flex-col gap-0.5">
-                    <span className="font-bold text-[9.5px] text-[#15150F]">
-                      {pr.number} // {pr.title}
+            {activeView === 'identity' ? (
+              /* --- OPERATOR PROFILE CONSOLE --- */
+              <>
+                {/* Operator Identity Block */}
+                <div className="border-b border-[#15150F] pb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[14px] font-bold text-[#15150F]">{activeOperator.name}</span>
+                    <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
+                      {activeOperator.status || 'ACTIVE'}
                     </span>
-                    <p className="text-[9px] text-[#22211A] font-medium leading-snug">
-                      {pr.summary}
-                    </p>
-                    <p className="text-[8.5px] text-[#5C5946] leading-tight">
-                      {pr.elaboration}
-                    </p>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <div className="text-[10px] text-[#5C5946] font-semibold mt-0.5">
+                    {activeOperator.handle} · {activeOperator.role}
+                  </div>
+                  <div className="text-[9px] text-[#5C5946] mt-0.5">
+                    LOCATION: {activeOperator.location}
+                  </div>
+                  <div className="text-[9px] text-[#3D3A2C] mt-1 font-medium bg-[#E2DCB9]/60 p-2 border border-[#15150F]/40">
+                    FOCUS: {activeOperator.focus}
+                  </div>
+                </div>
 
-            {/* Primary Stack */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                PRIMARY STACK MATRIX
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {activeOperator.primaryStack.map(st => (
-                  <span key={st} className="text-[8.5px] px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
-                    {st}
+                {/* Operator Production Telemetry */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                    <span className="text-[7.5px] opacity-60 uppercase font-bold">PRODUCTION SYSTEMS</span>
+                    <span className="text-[14px] font-bold text-[#15150F]">
+                      {projects.filter(p => p.status === 'PRODUCTION').length} DEPLOYED
+                    </span>
+                  </div>
+                  <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                    <span className="text-[7.5px] opacity-60 uppercase font-bold">CAREER ORGANIZATIONS</span>
+                    <span className="text-[14px] font-bold text-[#15150F]">
+                      {experience.length} EMPLOYERS
+                    </span>
+                  </div>
+                </div>
+
+                {/* Primary Stack Matrix */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                    PRIMARY STACK MATRIX
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {activeOperator.primaryStack.map(st => (
+                      <span key={st} className="text-[8.5px] px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
+                        {st}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Career Footprint Snapshot */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                    CAREER FOOTPRINT // SUMMARY
+                  </div>
+                  <div className="flex flex-col border border-[#15150F] bg-[#E2DCB9]/40 divide-y divide-[#15150F]/20">
+                    {experience.map((exp) => (
+                      <div key={exp.id} className="p-2 flex items-center justify-between text-[9px]">
+                        <div>
+                          <span className="font-bold text-[#15150F]">{exp.organization}</span>
+                          <span className="text-[#5C5946] block text-[8px]">{exp.role}</span>
+                        </div>
+                        <span className="text-[8px] font-mono text-[#15150F] opacity-75">{exp.yearRange}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Verification & Communication Channels */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                    COMMUNICATION &amp; VERIFICATION CHANNELS
+                  </div>
+                  <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] font-mono text-[9px] flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="opacity-60">GITHUB:</span>
+                      <a href={activeOperator.contact.github} target="_blank" rel="noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                        {activeOperator.contact.github.replace('https://github.com/', '')}
+                      </a>
+                    </div>
+                    {activeOperator.contact.linkedin && (
+                      <div className="flex items-center justify-between">
+                        <span className="opacity-60">LINKEDIN:</span>
+                        <a href={activeOperator.contact.linkedin} target="_blank" rel="noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                          PROFILE INTERFACE
+                        </a>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="opacity-60">AVAILABILITY:</span>
+                      <span className="font-bold text-[#2E6B3A]">{activeOperator.contact.availability || 'DIRECT COMMS'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <button
+                    onClick={onOpenContact}
+                    className="w-full py-2 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] transition-colors cursor-pointer"
+                  >
+                    DISPATCH ENCRYPTED COMMS
+                  </button>
+                </div>
+              </>
+            ) : activeView === 'projects' ? (
+              /* --- PROJECTS OVERVIEW PROMPT --- */
+              <>
+                <div className="border-b border-[#15150F] pb-2.5">
+                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                    SYSTEM TOPOLOGY // {projects.length} REPOSITORIES
                   </span>
-                ))}
-              </div>
-            </div>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
+                    PROJECT LANDSCAPE EXPLORER
+                  </div>
+                </div>
+                <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
+                  <p>
+                    Select any repository node on the canvas to inspect architectural blueprints, tech stacks, and live telemetry.
+                  </p>
+                  <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
+                    <div>› CLICK NODE: Inspect architectural evidence</div>
+                    <div>› DBL-CLICK NODE: Enter subsystem decomposition</div>
+                    <div>› DRAG NODE: Spatial repositioning</div>
+                    <div>› NAVIGATION FILTER: Filter by architectural layer</div>
+                  </div>
+                </div>
+              </>
+            ) : activeView === 'experience' ? (
+              /* --- EXPERIENCE OVERVIEW PROMPT --- */
+              <>
+                <div className="border-b border-[#15150F] pb-2.5">
+                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                    PROFESSIONAL DOCK // {experience.length} EMPLOYERS
+                  </span>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
+                    PROFESSIONAL EXPERIENCE OVERVIEW
+                  </div>
+                </div>
+                <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
+                  <p>
+                    Professional experience is decoupled from physical topology and rendered in the movable Experience Dock.
+                  </p>
+                  <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
+                    <div>› CLICK EMPLOYER: Focus verified project systems</div>
+                    <div>› CLICK AGAIN: Clear focus and return to neutral</div>
+                    <div>› DRAG DOCK HEADER: Reposition viewport overlay</div>
+                    <div>› CLICK RESET: Restore default top dock position</div>
+                  </div>
+                </div>
+              </>
+            ) : activeView === 'infrastructure' ? (
+              /* --- TECHNICAL CAPABILITIES OVERVIEW PROMPT --- */
+              <>
+                <div className="border-b border-[#15150F] pb-2.5">
+                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                    TECHNICAL CAPABILITIES // {skills.length} MODULES
+                  </span>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
+                    SYSTEM CAPABILITIES MATRIX
+                  </div>
+                </div>
+                <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
+                  <p>
+                    Technical capability nodes model core architectural proficiencies and verified signal conduits across repositories.
+                  </p>
+                  <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
+                    <div>› CLICK CAPABILITY: Focus connected repositories</div>
+                    <div>› CLICK AGAIN: Clear focus and return to neutral</div>
+                    <div>› HOVER CAPABILITY: Preview signal conduits</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* --- SYSTEM OVERVIEW (Default) --- */
+              <>
+                {/* System Cartography Intro */}
+                <div className="border-b border-[#15150F] pb-2.5">
+                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                    PORTFOLIO CARTOGRAPHY // PUBLIC INSPECTOR
+                  </span>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
+                    SYSTEMS CARTOGRAPHY ENGINE
+                  </div>
+                  <p className="text-[9.5px] text-[#5C5946] mt-1 leading-snug">
+                    Interactive visualization modeling architectural topology, capability conduits, and verified professional engineering systems across public repositories.
+                  </p>
+                </div>
 
-            {/* Actions */}
-            <div className="flex flex-col gap-1.5 mt-2">
-              <button
-                onClick={onOpenContact}
-                className="w-full py-2 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] transition-colors cursor-pointer"
-              >
-                DISPATCH ENCRYPTED COMMS
-              </button>
-            </div>
+                {/* Quick Metrics */}
+                <div className="grid grid-cols-3 gap-1">
+                  <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                    <span className="text-[7px] opacity-60 uppercase font-bold">REPOSITORIES</span>
+                    <span className="text-[13px] font-bold text-[#15150F]">{projects.length}</span>
+                  </div>
+                  <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                    <span className="text-[7px] opacity-60 uppercase font-bold">CAPABILITIES</span>
+                    <span className="text-[13px] font-bold text-[#15150F]">{skills.length}</span>
+                  </div>
+                  <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                    <span className="text-[7px] opacity-60 uppercase font-bold">CAREER ROLES</span>
+                    <span className="text-[13px] font-bold text-[#15150F]">{experience.length}</span>
+                  </div>
+                </div>
+
+                {/* Manifesto / Summary */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1">
+                    SYSTEM MANIFESTO
+                  </div>
+                  <p className="text-[10px] text-[#22211A] bg-[#E2DCB9]/80 p-2.5 border border-[#15150F] leading-relaxed">
+                    {activeOperator.systemManifesto}
+                  </p>
+                </div>
+
+                {/* Evidence Classification Taxonomy */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                    EVIDENCE CLASSIFICATION TAXONOMY
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[8px] font-mono">
+                    <div className="p-1.5 bg-[#15150F] text-[#C3E54E] border border-[#15150F] flex flex-col">
+                      <span className="font-bold">● VERIFIED</span>
+                      <span className="text-[7px] text-[#A8A48B] leading-tight">Public GitHub files, manifests, and code</span>
+                    </div>
+                    <div className="p-1.5 bg-[#E2A96B]/30 text-[#15150F] border border-[#15150F] flex flex-col">
+                      <span className="font-bold text-[#7A3E2E]">▲ CURATED</span>
+                      <span className="text-[7px] text-[#5C5946] leading-tight">Reviewed LinkedIn import / owner evidence</span>
+                    </div>
+                    <div className="p-1.5 bg-[#CBC59B] text-[#15150F] border border-[#15150F] flex flex-col">
+                      <span className="font-bold text-[#15150F]">◆ DERIVED</span>
+                      <span className="text-[7px] text-[#5C5946] leading-tight">Multi-signal heuristic classifications</span>
+                    </div>
+                    <div className="p-1.5 bg-[#E2DCB9] text-[#7A3E2E] border border-[#15150F] flex flex-col">
+                      <span className="font-bold">○ UNAVAILABLE</span>
+                      <span className="text-[7px] text-[#5C5946] leading-tight">Unclaimed / unestablished evidence gap</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* EVIDENCE PRINCIPLES */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>EVIDENCE PRINCIPLES</span>
+                    <span className="text-[7.5px] text-[#C3E54E] bg-[#15150F] px-1 py-0.2 font-mono font-bold">
+                      {VERIFIED_ARCHITECTURE_PRINCIPLES.length} INTEGRITY RULES
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 border border-[#15150F] bg-[#E2DCB9]/40 p-2 divide-y divide-[#15150F]/20">
+                    {VERIFIED_ARCHITECTURE_PRINCIPLES.map((pr) => (
+                      <div key={pr.id} className="pt-1.5 first:pt-0 flex flex-col gap-0.5">
+                        <span className="font-bold text-[9.5px] text-[#15150F]">
+                          {pr.number} // {pr.title}
+                        </span>
+                        <p className="text-[9px] text-[#22211A] font-medium leading-snug">
+                          {pr.summary}
+                        </p>
+                        <p className="text-[8.5px] text-[#5C5946] leading-tight">
+                          {pr.elaboration}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Primary Stack */}
+                <div>
+                  <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                    PRIMARY STACK MATRIX
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {activeOperator.primaryStack.map(st => (
+                      <span key={st} className="text-[8.5px] px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
+                        {st}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-1.5 mt-2">
+                  <button
+                    onClick={onOpenContact}
+                    className="w-full py-2 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] transition-colors cursor-pointer"
+                  >
+                    DISPATCH ENCRYPTED COMMS
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
