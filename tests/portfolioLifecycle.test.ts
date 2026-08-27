@@ -36,15 +36,13 @@ const sampleGitHubDerivedExperience: ExperienceNode[] = [
   }
 ];
 
-test('configured experience survives GitHub sync and receives CURATED provenance', () => {
+test('configured experience survives GitHub sync and receives CURATED provenance without appending snapshot', () => {
   const merged = resolveExperience(sampleConfiguredExperience, sampleGitHubDerivedExperience);
 
-  assert.equal(merged.length, 2);
+  assert.equal(merged.length, 1, 'Configured experience must not append synthetic GitHub snapshot');
   assert.equal(merged[0].id, 'exp-cfg-01');
   assert.equal(merged[0].role, 'Senior Systems Architect');
   assert.equal(merged[0].provenance, 'CURATED');
-  assert.equal(merged[1].id, 'exp-gh-01');
-  assert.equal(merged[1].provenance, 'DERIVED');
 });
 
 test('GitHub-derived experience does not overwrite configured professional employment', () => {
@@ -56,11 +54,11 @@ test('GitHub-derived experience does not overwrite configured professional emplo
   assert.equal(merged[0].provenance, 'CURATED');
 });
 
-test('no duplicated experience after merge when IDs or role/org match', () => {
+test('configured experience completely takes precedence over synthetic GitHub derived entries', () => {
   const duplicateDerived: ExperienceNode[] = [
     {
       ...sampleGitHubDerivedExperience[0],
-      id: 'EXP-CFG-01', // case-insensitive ID collision
+      id: 'EXP-CFG-01',
       role: 'Senior Systems Architect',
       organization: 'Acme Systems'
     }
@@ -72,11 +70,42 @@ test('no duplicated experience after merge when IDs or role/org match', () => {
   assert.equal(merged[0].provenance, 'CURATED');
 });
 
-test('GitHub-derived experience is used when configured experience is absent', () => {
+test('GitHub-derived experience is used as fallback when configured experience is absent', () => {
   const merged = resolveExperience([], sampleGitHubDerivedExperience);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].id, 'exp-gh-01');
   assert.equal(merged[0].provenance, 'DERIVED');
+});
+
+test('current configured career with synthetic GitHub snapshot resolves to 3 roles, 2 orgs, 2 dock cards', () => {
+  const configuredRoles = PORTFOLIO_CONFIG.experience || [];
+  assert.equal(configuredRoles.length, 3, 'Owner has 3 configured career roles');
+
+  const resolved = resolveExperience(configuredRoles, sampleGitHubDerivedExperience);
+  
+  // 1. Must resolve to exactly 3 professional role records (NOT 4)
+  assert.equal(resolved.length, 3, 'Must retain 3 roles and not append 4th snapshot record');
+  assert.ok(resolved.every(r => r.provenance === 'CURATED'), 'All resolved roles have CURATED provenance');
+  assert.ok(!resolved.some(r => r.organization === 'GitHub Snapshot' || r.yearRange === 'PUBLIC GITHUB SNAPSHOT'), 'No synthetic GitHub employer record is present');
+
+  // 2. Unique organizations must be 2 (CodeFier and Devinity Solutions)
+  const uniqueOrgs = Array.from(
+    new Set(resolved.map(e => (e.organization || '').trim().toLowerCase()))
+  ).filter(Boolean);
+  assert.equal(uniqueOrgs.length, 2, 'Unique organizations must be 2');
+
+  // 3. Grouped dock cards must be 2
+  const groups: Record<string, any[]> = {};
+  const order: string[] = [];
+  for (const exp of resolved) {
+    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+    if (!groups[groupKey]) {
+      groups[groupKey] = [];
+      order.push(groupKey);
+    }
+    groups[groupKey].push(exp);
+  }
+  assert.equal(order.length, 2, 'Grouped dock cards must be exactly 2');
 });
 
 test('manual projectLinks override wins over GitHub homepage', () => {

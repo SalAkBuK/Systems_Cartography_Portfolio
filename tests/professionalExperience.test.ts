@@ -497,33 +497,59 @@ test('24. Experience dock drag handle is isolated and RESET button is independen
 test('25. Synthetic capability connection fallback is removed and unmatched projects have empty infrastructureDeps', async () => {
   const { generateGitHubProfileDetails } = await import('../src/services/githubService');
 
-  // Project with tech stack matching none of the generated capability nodes
+  // Create projects with 6 high-frequency technologies occupying all 6 capability slots
   const mockProjects: any[] = [
     {
-      id: 'proj-1',
-      title: 'Rust CLI Tool',
-      techStack: ['Rust', 'Cargo'],
+      id: 'proj-fe-1',
+      title: 'Frontend Portal',
+      techStack: ['TypeScript', 'React', 'Tailwind CSS'],
       infrastructureDeps: []
     },
     {
-      id: 'proj-2',
-      title: 'React Dashboard',
+      id: 'proj-fe-2',
+      title: 'Mobile App',
       techStack: ['TypeScript', 'React', 'Tailwind CSS'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-be-1',
+      title: 'Core API Gateway',
+      techStack: ['Node.js', 'PostgreSQL', 'Docker'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-be-2',
+      title: 'Auth Service',
+      techStack: ['Node.js', 'PostgreSQL', 'Docker'],
+      infrastructureDeps: []
+    },
+    // Guaranteed unmatched rare project using technologies outside the top 6
+    {
+      id: 'proj-rare',
+      title: 'Haskell Parsing Utility',
+      techStack: ['Haskell', 'Cabal'],
       infrastructureDeps: []
     }
   ];
 
   const result = generateGitHubProfileDetails(mockProjects as any, null, 'testuser');
-  
-  // proj-1 (Rust/Cargo) has no matching skills generated if top languages are TypeScript/React
-  const rustProj = mockProjects.find(p => p.id === 'proj-1')!;
-  const matchingSkillsForRust = result.skills.filter(s => rustProj.techStack.some(t => s.name.includes(t)));
 
-  if (matchingSkillsForRust.length === 0) {
-    assert.deepEqual(rustProj.infrastructureDeps, [], 'Must NOT assign synthetic modulo capability fallback to unmatched project');
-  } else {
-    assert.deepEqual(rustProj.infrastructureDeps, matchingSkillsForRust.map(s => s.id));
-  }
+  // 1. Verify 6 capabilities are generated from the high-frequency stack
+  assert.equal(result.skills.length, 6, 'Must generate top 6 capability nodes');
+  assert.ok(
+    result.skills.every(s => !s.name.includes('Haskell') && !s.name.includes('Cabal')),
+    'Haskell and Cabal must not be among top 6 generated capability nodes'
+  );
+
+  // 2. Unconditionally assert rare project has empty infrastructureDeps (no synthetic modulo assignment)
+  const rareProj = mockProjects.find(p => p.id === 'proj-rare')!;
+  assert.deepEqual(rareProj.infrastructureDeps, [], 'Unmatched project must have empty infrastructureDeps');
+
+  // 3. Unconditionally assert none of the generated capability nodes list the rare project in usedInProjects
+  assert.ok(
+    result.skills.every(s => !s.usedInProjects.includes('proj-rare')),
+    'No generated capability must list the unmatched project in usedInProjects'
+  );
 });
 
 test('26. CAREER ORGANIZATIONS calculates unique organizations rather than role records count', async () => {
