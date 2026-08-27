@@ -114,3 +114,92 @@ export function isProjectLinkedToExperience(
   return false;
 }
 
+const MONTH_ABBRS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+export function formatIsoYearMonth(ym: string | null): string {
+  if (!ym) return 'PRESENT';
+  const parts = ym.split('-');
+  if (parts.length >= 2) {
+    const year = parts[0];
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    if (monthIdx >= 0 && monthIdx < 12) {
+      return `${MONTH_ABBRS[monthIdx]} ${year}`;
+    }
+  }
+  return ym.toUpperCase();
+}
+
+export function computeGroupedTenure(groupNodes: ExperienceNode[], fallbackYearRange: string): string {
+  const startDates = groupNodes.map(n => n.startDate).filter((d): d is string => Boolean(d));
+  const endDates = groupNodes.map(n => n.endDate);
+  
+  if (startDates.length === 0) {
+    return fallbackYearRange.toUpperCase().replace(' - ', ' → ');
+  }
+
+  const earliestStart = [...startDates].sort()[0];
+  const isCurrent = endDates.some(d => d === null || d === undefined);
+
+  if (isCurrent) {
+    return `${formatIsoYearMonth(earliestStart)} → PRESENT`;
+  }
+
+  const validEndDates = endDates.filter((d): d is string => Boolean(d));
+  if (validEndDates.length === 0) {
+    return `${formatIsoYearMonth(earliestStart)} → PRESENT`;
+  }
+
+  const latestEnd = [...validEndDates].sort().reverse()[0];
+  return `${formatIsoYearMonth(earliestStart)} → ${formatIsoYearMonth(latestEnd)}`;
+}
+
+export interface GroupedExperienceEntry extends ExperienceNode {
+  groupedRoleIds: string[];
+  roleCount: number;
+  isPromoted: boolean;
+  promotionNote?: string;
+  organizationTenure: string;
+  linkedSystemsCount: number;
+}
+
+/**
+ * Pure helper grouping experience nodes by progression group / organization.
+ * Used by both TopologyCanvas (Experience Dock) and RightInspectorPanel (Experience Index).
+ */
+export function groupExperienceByProgression(experience: ExperienceNode[]): GroupedExperienceEntry[] {
+  const groups: Record<string, ExperienceNode[]> = {};
+  const order: string[] = [];
+
+  for (const exp of experience) {
+    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+    if (!groups[groupKey]) {
+      groups[groupKey] = [];
+      order.push(groupKey);
+    }
+    groups[groupKey].push(exp);
+  }
+
+  return order.map(groupKey => {
+    const groupNodes = groups[groupKey];
+    // Find primary or latest role in progression group (with progressionRoles or highest progressionOrder)
+    const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
+      || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
+      || groupNodes[0];
+    const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
+    const promotionNote = groupNodes.find(n => n.promotionNote)?.promotionNote;
+    const organizationTenure = computeGroupedTenure(groupNodes, primaryNode.yearRange);
+    const linkedSystemsCount = primaryNode.systemsDelivered?.length || 0;
+
+    return {
+      ...primaryNode,
+      promotionNote: primaryNode.promotionNote || (hasPromotion ? (promotionNote || 'PROMOTED') : undefined),
+      isPromoted: hasPromotion || Boolean(primaryNode.promotionNote),
+      groupedRoleIds: groupNodes.map(n => n.id),
+      roleCount: groupNodes.length,
+      organizationTenure,
+      linkedSystemsCount
+    };
+  });
+}
+
+

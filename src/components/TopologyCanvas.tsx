@@ -44,7 +44,8 @@ import {
 } from '../utils/collision';
 import {
   matchesProjectClassification,
-  isProjectLinkedToExperience
+  isProjectLinkedToExperience,
+  groupExperienceByProgression
 } from '../utils/portfolioUtils';
 import {
   createTopologyGraph,
@@ -113,35 +114,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
-  // Group activeExperience by progressionGroup / organization so one card is shown per company/progression
-  const groupedExperience = useMemo(() => {
-    const groups: Record<string, ExperienceNode[]> = {};
-    const order: string[] = [];
-
-    for (const exp of activeExperience) {
-      const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-        order.push(groupKey);
-      }
-      groups[groupKey].push(exp);
-    }
-
-    return order.map(groupKey => {
-      const groupNodes = groups[groupKey];
-      // Find primary or latest role in progression group (with progressionRoles or highest progressionOrder)
-      const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
-        || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
-        || groupNodes[0];
-      const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
-      const promotionNote = groupNodes.find(n => n.promotionNote)?.promotionNote;
-      return {
-        ...primaryNode,
-        promotionNote: primaryNode.promotionNote || (hasPromotion ? (promotionNote || 'PROMOTED') : undefined),
-        groupedRoleIds: groupNodes.map(n => n.id)
-      };
-    });
-  }, [activeExperience]);
+  // Group activeExperience by progressionGroup / organization using shared helper
+  const groupedExperience = useMemo(() => groupExperienceByProgression(activeExperience), [activeExperience]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
