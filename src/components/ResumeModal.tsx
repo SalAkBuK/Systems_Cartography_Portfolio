@@ -61,8 +61,7 @@ ${activeSkills.map(s => `- **${s.name}** (${s.category}): ${s.primaryUseCases.jo
 ${activeExperience.map(exp => `### ${exp.role} — ${exp.organization}
 *${exp.yearRange} | ${exp.location}*
 **Domain:** ${exp.systemDomain}
-**Systems Architected:** ${exp.systemsArchitected.join(', ')}
-**Outputs & Impact:**
+${exp.progressionRoles && exp.progressionRoles.length > 1 ? `**Career Progression:**\n${exp.progressionRoles.map(r => `  - ${r.role} (${r.yearRange})${r.endDate === null ? ' [CURRENT]' : ''}${r.promotionNote ? ` [${r.promotionNote}]` : ''}`).join('\n')}\n` : ''}${exp.systemsDelivered && exp.systemsDelivered.length > 0 ? `**Delivered Systems:**\n${exp.systemsDelivered.map(d => `  - **${d.name}**: ${d.tagline}`).join('\n')}\n` : ''}${exp.systemsArchitected && exp.systemsArchitected.length > 0 ? `**Systems Architected:** ${exp.systemsArchitected.join(', ')}\n` : ''}**Key Outputs & Contributions:**
 ${exp.keyOutputs.map(out => `- ${out}`).join('\n')}
 **Stack:** ${exp.technologies.join(', ')}
 `).join('\n')}
@@ -225,6 +224,43 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
                   <div className="text-[9.5px] font-semibold text-[#4A4736]">
                     DOMAIN: {exp.systemDomain}
                   </div>
+
+                  {/* Multi-role progression */}
+                  {exp.progressionRoles && exp.progressionRoles.length > 1 && (
+                    <div className="p-2 bg-[#DCD6B2]/70 border border-precision/40 flex flex-col gap-1 text-[9px]">
+                      <span className="text-[8px] font-bold opacity-60 uppercase">CAREER PROGRESSION:</span>
+                      {exp.progressionRoles.map((r, ri) => (
+                        <div key={ri} className="flex items-center justify-between">
+                          <span className="font-bold text-[#15150F]">{r.role}</span>
+                          <div className="flex items-center gap-1">
+                            {r.promotionNote && (
+                              <span className="text-[7.5px] px-1 bg-[#2E6B3A] text-[#D4CDA4] font-bold">
+                                ↑ PROMOTED
+                              </span>
+                            )}
+                            <span className="text-[#5C5946]">{r.yearRange}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Delivered Systems */}
+                  {exp.systemsDelivered && exp.systemsDelivered.length > 0 && (
+                    <div className="flex flex-col gap-1 text-[9.5px]">
+                      <span className="text-[8px] font-bold opacity-60 uppercase">DELIVERED SYSTEMS:</span>
+                      {exp.systemsDelivered.map((d, di) => (
+                        <div key={di} className="flex flex-col gap-0.5 bg-[#D4CDA4]/50 p-1.5 border border-precision/20">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-[#15150F]">{d.name}</span>
+                            {d.status && <span className="text-[7.5px] font-bold opacity-75">{d.status}</span>}
+                          </div>
+                          <span className="text-[8.5px] text-[#5C5946]">{d.tagline}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <ul className="flex flex-col gap-1 text-[10px] text-[#22211A]">
                     {exp.keyOutputs.map((out, i) => (
                       <li key={i} className="flex items-start gap-1.5">
