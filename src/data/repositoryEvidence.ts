@@ -139,8 +139,8 @@ const evidenceByRepository: Record<string, Evidence> = {
   }
 };
 
-// Aliases mapping canonical original repositories to evidence records
-const repositoryAliases: Record<string, string> = {
+// Aliases mapping canonical original repositories to evidence records and presentation clusters
+export const REPOSITORY_CANONICAL_CLUSTERS: Record<string, string> = {
   'towerdesk-backend': 'towerdesk-backend-clean',
   'towerdesk-backend-clean': 'towerdesk-backend-clean',
   'tower-desk': 'tower-desk-clean',
@@ -151,9 +151,14 @@ const repositoryAliases: Record<string, string> = {
   'remapp-scraper': 'remapp-scraper'
 };
 
+export function getCanonicalRepositoryKey(repositoryName: string): string {
+  const normalized = (repositoryName || '').toLowerCase().trim();
+  return REPOSITORY_CANONICAL_CLUSTERS[normalized] || normalized;
+}
+
 export function getRepositoryEvidence(repositoryName: string): Evidence | null {
-  const normalized = repositoryName.toLowerCase().trim();
-  const canonicalKey = repositoryAliases[normalized] || normalized;
+  const canonicalKey = getCanonicalRepositoryKey(repositoryName);
   return evidenceByRepository[canonicalKey] || null;
 }
+
 

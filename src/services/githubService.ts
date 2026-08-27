@@ -7,7 +7,7 @@ import {
   ExperienceNode, 
   OperatorMetadata 
 } from '../types';
-import { getRepositoryEvidence } from '../data/repositoryEvidence';
+import { getCanonicalRepositoryKey, getRepositoryEvidence } from '../data/repositoryEvidence';
 import { analyzeRepository, RawRepositoryInspection } from './repositoryAnalyzer';
 
 export interface GitHubUser {
@@ -37,14 +37,18 @@ export interface GitHubRepoRaw {
   watchers_count: number;
   language: string | null;
   topics: string[];
-  size: number; // in KB
+  size: number;
   created_at: string;
   updated_at: string;
-  pushed_at: string;
+  pushed_at?: string;
   archived: boolean;
   fork: boolean;
   default_branch: string;
-  license: { key: string; name: string; spdx_id: string } | null;
+  license: {
+    key?: string;
+    name?: string;
+    spdx_id?: string;
+  } | null;
   owner: {
     login: string;
     avatar_url: string;
@@ -55,30 +59,47 @@ export interface GitHubRepoRaw {
 export interface GitHubSyncResult {
   sourceType: 'user' | 'repo';
   sourceIdentifier: string;
-  user: GitHubUser | null;
+  user: GitHubUser;
   projects: ProjectData[];
   skills: InfrastructureSkill[];
   operator: OperatorMetadata;
   experience: ExperienceNode[];
-  rawCount: number;
+  rawCount?: number;
 }
 
 /**
  * Determine category with deep multi-tier analysis of language, topics, and description
  */
 export function inferCategory(language: string | null, topics: string[] = [], description: string = ''): SystemCategory {
-  const text = `${language || ''} ${topics.join(' ')} ${description}`.toLowerCase();
+  const text = `${topics.join(' ')} ${description}`.toLowerCase();
   
-  // 1. Infrastructure / Cloud Orchestration / Network
-  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'network', 'daemon', 'proxy', 'ebpf', 'nginx', 'envoy', 'cluster', 'mesh', 'cloud-native', 'sysadmin'];
-  if (infraKeywords.some(kw => text.includes(kw))) {
-    return 'infrastructure';
+  // 1. Tooling / Compilers / CLIs / Linters / Testing Workbenches (Strong purpose signals)
+  const strongToolingTopics = [
+    'cli', 'devtools', 'developer-tools', 'linter', 'compiler', 'parser',
+    'generator', 'fuzzer', 'test-runner', 'resilience-testing', 'workbench',
+    'testing-tool', 'benchmarking'
+  ];
+  const strongToolingPhrases = [
+    'testing workbench', 'resilience-testing', 'resilience testing',
+    'chaos engineering', 'developer tool', 'developer tooling', 'devtools',
+    'dev tool', 'cli tool', 'cli utility', 'command line tool', 'command-line interface',
+    'code generator', 'code generation', 'scaffolding tool', 'compiler',
+    'transpiler', 'linter', 'parser', 'ast parser', 'fuzzer', 'profiler',
+    'test runner', 'benchmarking harness'
+  ];
+
+  const hasToolingTopic = topics.some(t => strongToolingTopics.includes(t.toLowerCase()));
+  const hasToolingPhrase = strongToolingPhrases.some(phrase => text.includes(phrase));
+  const isToolingLang = ['shell', 'bash', 'makefile', 'nix', 'lua', 'powershell', 'dockerfile'].includes((language || '').toLowerCase());
+
+  if (hasToolingTopic || hasToolingPhrase) {
+    return 'tooling';
   }
 
-  // 2. Tooling / Compilers / CLIs / Linters
-  const toolingKeywords = ['cli', 'linter', 'compiler', 'interpreter', 'tool', 'bundler', 'vite', 'webpack', 'babel', 'esbuild', 'plugin', 'generator', 'sdk', 'devtools', 'parser', 'transpiler', 'macro', 'boilerplate', 'starter'];
-  if (toolingKeywords.some(kw => text.includes(kw))) {
-    return 'tooling';
+  // 2. Infrastructure / Cloud Orchestration / Network
+  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'ebpf', 'cluster', 'mesh', 'cloud-native'];
+  if (infraKeywords.some(kw => text.includes(kw) || topics.some(t => t.toLowerCase().includes(kw)))) {
+    return 'infrastructure';
   }
 
   // 3. Frontend vs Backend vs Full-Stack Multi-factor Detection
@@ -102,6 +123,10 @@ export function inferCategory(language: string | null, topics: string[] = [], de
     return 'backend';
   }
 
+  if (isToolingLang) {
+    return 'tooling';
+  }
+
   // 4. Fallback on primary language heuristics
   const lang = (language || '').toLowerCase();
   if (['go', 'rust', 'c', 'c++', 'zig', 'java', 'kotlin', 'scala', 'c#', 'elixir', 'erlang', 'haskell', 'clojure'].includes(lang)) {
@@ -116,11 +141,48 @@ export function inferCategory(language: string | null, topics: string[] = [], de
   if (['html', 'css', 'vue', 'svelte', 'dart'].includes(lang)) {
     return 'frontend';
   }
-  if (['shell', 'bash', 'makefile', 'nix', 'lua', 'powershell', 'dockerfile'].includes(lang)) {
-    return 'tooling';
-  }
 
   return 'fullstack';
+}
+
+export function inferClassifications(language: string | null, topics: string[] = [], description: string = ''): SystemCategory[] {
+  const primary = inferCategory(language, topics, description);
+  const text = `${topics.join(' ')} ${description}`.toLowerCase();
+  const list: SystemCategory[] = [primary];
+
+  const strongToolingTopics = [
+    'cli', 'devtools', 'developer-tools', 'linter', 'compiler', 'parser',
+    'generator', 'fuzzer', 'test-runner', 'resilience-testing', 'workbench',
+    'testing-tool', 'benchmarking'
+  ];
+  const strongToolingPhrases = [
+    'testing workbench', 'resilience-testing', 'resilience testing',
+    'chaos engineering', 'developer tool', 'developer tooling', 'devtools',
+    'dev tool', 'cli tool', 'cli utility', 'command line tool', 'command-line interface',
+    'code generator', 'code generation', 'scaffolding tool', 'compiler',
+    'transpiler', 'linter', 'parser', 'ast parser', 'fuzzer', 'profiler',
+    'test runner', 'benchmarking harness'
+  ];
+  if (topics.some(t => strongToolingTopics.includes(t.toLowerCase())) || strongToolingPhrases.some(phrase => text.includes(phrase))) {
+    list.push('tooling');
+  }
+
+  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure'];
+  if (infraKeywords.some(kw => text.includes(kw))) list.push('infrastructure');
+
+  const frontendMarkers = ['react', 'vue', 'svelte', 'tailwind', 'ui', 'frontend', 'dashboard', 'client', 'nextjs', 'next.js'];
+  if (frontendMarkers.some(m => text.includes(m))) list.push('frontend');
+
+  const backendMarkers = ['api', 'backend', 'server', 'nestjs', 'fastify', 'express', 'database', 'postgres', 'sqlite', 'prisma'];
+  if (backendMarkers.some(m => text.includes(m))) list.push('backend');
+
+  const hasFe = frontendMarkers.some(m => text.includes(m));
+  const hasBe = backendMarkers.some(m => text.includes(m));
+  if ((hasFe && hasBe) || text.includes('fullstack') || text.includes('webapp') || text.includes('platform')) {
+    list.push('fullstack');
+  }
+
+  return Array.from(new Set(list));
 }
 
 /**
@@ -682,29 +744,69 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
 
   const user: GitHubUser = await userRes.json();
 
-  // 2. Fetch Repositories (sorted by recently updated, up to 15)
-  const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=15`, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json'
-    }
-  });
+  // 2. Fetch Repositories (sorted by recently updated, with pagination up to 100 per page)
+  const allRawRepos: GitHubRepoRaw[] = [];
+  let page = 1;
 
-  if (!reposRes.ok) {
-    throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+  while (true) {
+    const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+
+    if (!reposRes.ok) {
+      if (page === 1) {
+        if (reposRes.status === 403) {
+          throw new Error(`GitHub API rate limit reached. Please wait a moment.`);
+        }
+        throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+      } else {
+        if (reposRes.status === 403) {
+          throw new Error(`GitHub API rate limit reached while requesting page ${page} for "${cleanUser}".`);
+        }
+        throw new Error(`Failed to fetch all repositories for "${cleanUser}" while requesting page ${page}: ${reposRes.statusText || reposRes.status}`);
+      }
+    }
+
+    const pageRepos: GitHubRepoRaw[] = await reposRes.json();
+    if (!Array.isArray(pageRepos) || pageRepos.length === 0) {
+      break;
+    }
+
+    allRawRepos.push(...pageRepos);
+
+    if (pageRepos.length < 100) {
+      break;
+    }
+    page++;
   }
 
-  const rawRepos: GitHubRepoRaw[] = await reposRes.json();
-
-  if (rawRepos.length === 0) {
+  if (allRawRepos.length === 0) {
     throw new Error(`User "@${cleanUser}" has no public repositories to visualize.`);
   }
 
   // Filter out forks if there are enough original repos, or include non-empty repos
-  const nonForkRepos = rawRepos.filter(r => !r.fork && r.size > 0);
-  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : rawRepos.filter(r => r.size > 0);
-  const finalRepos = candidateRepos.slice(0, 10);
+  const nonForkRepos = allRawRepos.filter(r => !r.fork && r.size > 0);
+  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : allRawRepos.filter(r => r.size > 0);
+  const eligibleRepos = candidateRepos.length > 0 ? candidateRepos : allRawRepos;
 
-  // Inspect top candidate repository for richer evidence if available
+  // Deduplicate repositories belonging to the same explicit canonical cluster (e.g. TowerDesk canonical + clean showcase)
+  const seenClusters = new Map<string, GitHubRepoRaw>();
+  for (const repo of eligibleRepos) {
+    const clusterKey = getCanonicalRepositoryKey(repo.name);
+    if (!seenClusters.has(clusterKey)) {
+      seenClusters.set(clusterKey, repo);
+    } else {
+      const existing = seenClusters.get(clusterKey)!;
+      if (existing.name.toLowerCase() !== clusterKey && repo.name.toLowerCase() === clusterKey) {
+        seenClusters.set(clusterKey, repo);
+      }
+    }
+  }
+  const finalRepos = Array.from(seenClusters.values());
+
+  // Inspect top candidate repositories for richer evidence if available (top 3 to conserve rate limits)
   const inspectionPromises = finalRepos.map(async (repo, idx) => {
     if (idx < 3) {
       return fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch).catch(() => undefined);
@@ -727,7 +829,7 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
     skills,
     operator,
     experience,
-    rawCount: rawRepos.length
+    rawCount: allRawRepos.length
   };
 }
 

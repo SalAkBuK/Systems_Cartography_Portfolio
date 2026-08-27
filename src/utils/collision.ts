@@ -1,6 +1,5 @@
-import { ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
+import { ProjectData, InfrastructureSkill } from '../types';
 import {
-  VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
@@ -19,7 +18,7 @@ export interface BoundingBox {
  * Includes protective clearance margin to prevent visual/structural overlap.
  */
 export const getNodeBounds = (
-  type: 'project' | 'skill' | 'experience',
+  type: 'project' | 'skill',
   id: string,
   pos: { x: number; y: number },
   projectsList: ProjectData[] = PROJECTS
@@ -36,17 +35,9 @@ export const getNodeBounds = (
       minY: pos.y - PADDING,
       maxY: pos.y + depth + PADDING,
     };
-  } else if (type === 'skill') {
-    const radius = 24 + PADDING;
-    return {
-      minX: pos.x - radius,
-      maxX: pos.x + radius,
-      minY: pos.y - radius,
-      maxY: pos.y + radius,
-    };
   } else {
-    // Experience timeline node
-    const radius = 18 + PADDING;
+    // Skill node
+    const radius = 24 + PADDING;
     return {
       minX: pos.x - radius,
       maxX: pos.x + radius,
@@ -72,22 +63,20 @@ export interface CollisionCheckResult {
   hasCollision: boolean;
   collidingWith: string | null;
   collidingId: string | null;
-  collidingType: 'project' | 'skill' | 'experience' | null;
+  collidingType: 'project' | 'skill' | null;
 }
 
 /**
  * Checks whether placing an item at `targetPos` collides with any other entity on the topology map.
  */
 export const checkCollisions = (
-  dragType: 'project' | 'skill' | 'experience',
+  dragType: 'project' | 'skill',
   dragId: string,
   targetPos: { x: number; y: number },
-  customProjects: Record<string, { x: number; y: number }>,
-  customSkills: Record<string, { x: number; y: number }>,
-  customExps: Record<string, { x: number; y: number }>,
+  customProjects: Record<string, { x: number; y: number }> = {},
+  customSkills: Record<string, { x: number; y: number }> = {},
   projectsList: ProjectData[] = PROJECTS,
-  skillsList: InfrastructureSkill[] = INFRASTRUCTURE_SKILLS,
-  expsList: ExperienceNode[] = EXPERIENCE_HISTORY
+  skillsList: InfrastructureSkill[] = INFRASTRUCTURE_SKILLS
 ): CollisionCheckResult => {
   const targetBox = getNodeBounds(dragType, dragId, targetPos, projectsList);
 
@@ -121,21 +110,6 @@ export const checkCollisions = (
     }
   }
 
-  // 3. Check against all experience timeline nodes (except self)
-  for (const e of expsList) {
-    if (dragType === 'experience' && e.id === dragId) continue;
-    const ePos = customExps[e.id] || e.gridPosition;
-    const eBox = getNodeBounds('experience', e.id, ePos, projectsList);
-    if (checkAABBOverlap(targetBox, eBox)) {
-      return {
-        hasCollision: true,
-        collidingWith: e.code,
-        collidingId: e.id,
-        collidingType: 'experience'
-      };
-    }
-  }
-
   return {
     hasCollision: false,
     collidingWith: null,
@@ -157,15 +131,13 @@ export interface ResolvedPosition {
  * and uses an expanding spiral search to find the nearest non-overlapping grid slot.
  */
 export const findNearestValidGridPosition = (
-  dragType: 'project' | 'skill' | 'experience',
+  dragType: 'project' | 'skill',
   dragId: string,
   rawPos: { x: number; y: number },
-  customProjects: Record<string, { x: number; y: number }>,
-  customSkills: Record<string, { x: number; y: number }>,
-  customExps: Record<string, { x: number; y: number }>,
+  customProjects: Record<string, { x: number; y: number }> = {},
+  customSkills: Record<string, { x: number; y: number }> = {},
   projectsList: ProjectData[] = PROJECTS,
   skillsList: InfrastructureSkill[] = INFRASTRUCTURE_SKILLS,
-  expsList: ExperienceNode[] = EXPERIENCE_HISTORY,
   gridStep: number = GRID_SNAP_STEP,
   snapEnabled: boolean = true
 ): ResolvedPosition => {
@@ -180,10 +152,8 @@ export const findNearestValidGridPosition = (
     { x: baseSnapX, y: baseSnapY },
     customProjects,
     customSkills,
-    customExps,
     projectsList,
-    skillsList,
-    expsList
+    skillsList
   );
 
   if (!initialCheck.hasCollision) {
@@ -223,10 +193,8 @@ export const findNearestValidGridPosition = (
         { x: cand.x, y: cand.y },
         customProjects,
         customSkills,
-        customExps,
         projectsList,
-        skillsList,
-        expsList
+        skillsList
       );
       if (!check.hasCollision) {
         return {

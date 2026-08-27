@@ -1,4 +1,5 @@
-import { ExperienceNode, EvidenceProvenance } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory } from '../types';
+import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 
 /**
  * Resolves professional experience with deterministic merge and provenance tracking.
@@ -66,3 +67,68 @@ export function resolveDeploymentLink(
 
   return undefined;
 }
+
+/**
+ * Matches a project against an active filter category, checking both primary category and classifications.
+ */
+export function matchesProjectClassification(
+  project: { category: SystemCategory; classifications?: SystemCategory[] },
+  selectedCategory: SystemCategory | 'all'
+): boolean {
+  if (selectedCategory === 'all') return true;
+  if (project.category === selectedCategory) return true;
+  if (Array.isArray(project.classifications) && project.classifications.includes(selectedCategory)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extract all linked project IDs / repository names from an ExperienceNode.
+ */
+export function getLinkedProjectIdsForExperience(exp: ExperienceNode): Set<string> {
+  const ids = new Set<string>();
+
+  (exp.systemsDelivered || []).forEach(sys => {
+    (sys.linkedProjectIds || []).forEach(id => ids.add(id.toLowerCase().trim()));
+    (sys.surfaces || []).forEach(surface => {
+      if (surface.linkedProjectId) ids.add(surface.linkedProjectId.toLowerCase().trim());
+    });
+  });
+
+  (exp.architectedSystemsDetails || []).forEach(arch => {
+    if (arch.linkedProjectId) ids.add(arch.linkedProjectId.toLowerCase().trim());
+  });
+
+  (exp.evidenceLinks || []).forEach(link => {
+    if (link.projectId) ids.add(link.projectId.toLowerCase().trim());
+  });
+
+  return ids;
+}
+
+/**
+ * Determine if a ProjectData node is linked to an ExperienceNode using generic evidence links and alias resolution.
+ */
+export function isProjectLinkedToExperience(
+  project: { id: string; title: string },
+  exp: ExperienceNode
+): boolean {
+  const linkedIds = getLinkedProjectIdsForExperience(exp);
+  const projId = project.id.toLowerCase().trim();
+  const projTitle = project.title.toLowerCase().trim();
+  const canonicalTitle = getCanonicalRepositoryKey(projTitle);
+
+  if (linkedIds.has(projId) || linkedIds.has(projTitle) || linkedIds.has(canonicalTitle)) {
+    return true;
+  }
+
+  for (const linkedId of linkedIds) {
+    if (getCanonicalRepositoryKey(linkedId) === canonicalTitle) {
+      return true;
+    }
+  }
+
+  return false;
+}
+

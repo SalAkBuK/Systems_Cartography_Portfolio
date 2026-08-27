@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveExperience, resolveDeploymentLink } from '../src/utils/portfolioUtils.ts';
+import { resolveExperience, resolveDeploymentLink, isProjectLinkedToExperience } from '../src/utils/portfolioUtils.ts';
 import { ExperienceNode } from '../src/types.ts';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig.ts';
 
@@ -140,3 +140,35 @@ test('no deployment URL results in undefined demo link', () => {
 test('canonical LinkedIn field is accessible on PORTFOLIO_CONFIG.operator.contact.linkedin', () => {
   assert.equal(typeof PORTFOLIO_CONFIG.operator.contact.linkedin, 'string');
 });
+
+test('isProjectLinkedToExperience links projects generically via evidenceLinks and aliases without hardcoded names', () => {
+  const mockExperience: ExperienceNode = {
+    ...sampleConfiguredExperience[0],
+    id: 'exp-codefier',
+    systemsDelivered: [
+      {
+        name: 'TowerDesk Platform',
+        tagline: 'Property Management Platform',
+        description: 'End-to-end property operations',
+        technologies: ['NestJS', 'React', 'React Native'],
+        linkedProjectIds: ['towerdesk-backend-clean', 'tower-desk-clean', 'towerdesk-mobile-showcase']
+      }
+    ],
+    evidenceLinks: [
+      { label: 'Backend Architecture', type: 'repository', projectId: 'towerdesk-backend-clean' },
+      { label: 'Real Estate CRM', type: 'repository', projectId: 'worthy-crm' }
+    ]
+  };
+
+  // Direct ID / title match
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-1', title: 'towerdesk-backend-clean' }, mockExperience), true);
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-2', title: 'worthy-crm' }, mockExperience), true);
+
+  // Canonical cluster alias match (e.g. original repository resolves to clean showcase)
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-3', title: 'towerdesk-backend' }, mockExperience), true);
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-4', title: 'binghatti-concierge-app-rn-expo' }, mockExperience), true);
+
+  // Unlinked project
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-5', title: 'unrelated-project' }, mockExperience), false);
+});
+

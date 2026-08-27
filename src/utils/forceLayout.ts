@@ -1,9 +1,9 @@
-import { ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
+import { ProjectData, InfrastructureSkill } from '../types';
 import { project3DToIso } from '../components/TopologyCanvas';
 
 export interface LayoutNode {
   id: string;
-  type: 'project' | 'skill' | 'experience';
+  type: 'project' | 'skill';
   x: number;
   y: number;
   vx: number;
@@ -19,8 +19,8 @@ export interface LayoutEdge {
   id: string;
   sourceId: string;
   targetId: string;
-  sourceType: 'project' | 'skill' | 'experience';
-  targetType: 'project' | 'skill' | 'experience';
+  sourceType: 'project' | 'skill';
+  targetType: 'project' | 'skill';
   restLength: number;
   stiffness: number;
 }
@@ -34,8 +34,8 @@ export interface ConduitPathGeometry {
   id: string;
   sourceId: string;
   targetId: string;
-  sourceType: 'project' | 'skill' | 'experience';
-  targetType: 'project' | 'skill' | 'experience';
+  sourceType: 'project' | 'skill';
+  targetType: 'project' | 'skill';
   start3D: { x: number; y: number; z: number };
   end3D: { x: number; y: number; z: number };
   startIso: ConduitPoint;
@@ -52,10 +52,8 @@ export interface ConduitPathGeometry {
 export function createTopologyGraph(
   projects: ProjectData[],
   skills: InfrastructureSkill[],
-  experience: ExperienceNode[],
-  customProjects: Record<string, { x: number; y: number }>,
-  customSkills: Record<string, { x: number; y: number }>,
-  customExps: Record<string, { x: number; y: number }>,
+  customProjects: Record<string, { x: number; y: number }> = {},
+  customSkills: Record<string, { x: number; y: number }> = {},
   draggingNode: { type: string; id: string; currentPos: { x: number; y: number } } | null = null
 ): { nodes: Map<string, LayoutNode>; edges: LayoutEdge[] } {
   const nodes = new Map<string, LayoutNode>();
@@ -104,26 +102,6 @@ export function createTopologyGraph(
     });
   });
 
-  // 3. Experience nodes
-  experience.forEach(e => {
-    const isDragged = draggingNode?.type === 'experience' && draggingNode.id === e.id;
-    const pos = isDragged ? draggingNode.currentPos : (customExps[e.id] || e.gridPosition);
-
-    nodes.set(e.id, {
-      id: e.id,
-      type: 'experience',
-      x: pos.x,
-      y: pos.y,
-      vx: 0,
-      vy: 0,
-      width: 36,
-      height: 36,
-      mass: 1.0,
-      isPinned: isDragged,
-      targetZoneY: 360
-    });
-  });
-
   // Build edges
   projects.forEach(project => {
     skills.forEach(skill => {
@@ -164,8 +142,8 @@ export function calculateConduitGeometry(
   edgeId: string,
   sourceId: string,
   targetId: string,
-  sourceType: 'project' | 'skill' | 'experience' = 'project',
-  targetType: 'project' | 'skill' | 'experience' = 'skill'
+  sourceType: 'project' | 'skill' = 'project',
+  targetType: 'project' | 'skill' = 'skill'
 ): ConduitPathGeometry {
   const sWidth = sourceNode.width || 75;
   const sHeight = sourceNode.height || 55;
@@ -439,24 +417,19 @@ export function stepForceSimulation(
 export function computeEquilibriumLayout(
   projects: ProjectData[],
   skills: InfrastructureSkill[],
-  experience: ExperienceNode[],
-  customProjects: Record<string, { x: number; y: number }>,
-  customSkills: Record<string, { x: number; y: number }>,
-  customExps: Record<string, { x: number; y: number }>,
+  customProjects: Record<string, { x: number; y: number }> = {},
+  customSkills: Record<string, { x: number; y: number }> = {},
   pinnedId: string | null = null,
   iterations: number = 60
 ): {
   projectPositions: Record<string, { x: number; y: number }>;
   skillPositions: Record<string, { x: number; y: number }>;
-  expPositions: Record<string, { x: number; y: number }>;
 } {
   const { nodes, edges } = createTopologyGraph(
     projects,
     skills,
-    experience,
     customProjects,
-    customSkills,
-    customExps
+    customSkills
   );
 
   if (pinnedId && nodes.has(pinnedId)) {
@@ -476,7 +449,6 @@ export function computeEquilibriumLayout(
 
   const projectPositions: Record<string, { x: number; y: number }> = {};
   const skillPositions: Record<string, { x: number; y: number }> = {};
-  const expPositions: Record<string, { x: number; y: number }> = {};
 
   nodes.forEach(node => {
     const roundedPos = {
@@ -488,10 +460,8 @@ export function computeEquilibriumLayout(
       projectPositions[node.id] = roundedPos;
     } else if (node.type === 'skill') {
       skillPositions[node.id] = roundedPos;
-    } else if (node.type === 'experience') {
-      expPositions[node.id] = roundedPos;
     }
   });
 
-  return { projectPositions, skillPositions, expPositions };
+  return { projectPositions, skillPositions };
 }
