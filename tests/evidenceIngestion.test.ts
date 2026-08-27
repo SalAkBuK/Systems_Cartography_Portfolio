@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  fetchGitHubUserData,
   generateGitHubProfileDetails,
   GitHubRepoRaw,
   transformGitHubRepoToProject
@@ -114,3 +115,66 @@ test('PillCheck repository evidence is mapped directly from the public repositor
   assert.equal(pillcheck.subsystems.length, 4);
   assert.match(pillcheck.architectureNotes, /custom backend/i);
 });
+
+test('fetchGitHubUserData discovers all public repositories without artificial 10-cap truncation', async () => {
+  const originalFetch = globalThis.fetch;
+  const mockRepos: GitHubRepoRaw[] = Array.from({ length: 21 }, (_, i) => ({
+    ...repo,
+    id: i + 1,
+    name: `repo-${(i + 1).toString().padStart(2, '0')}`,
+    full_name: `SalAkBuK/repo-${(i + 1).toString().padStart(2, '0')}`,
+    html_url: `https://github.com/SalAkBuK/repo-${(i + 1).toString().padStart(2, '0')}`,
+    size: 100 + i * 10
+  }));
+
+  const requestedUrls: string[] = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    requestedUrls.push(url);
+
+    if (url.includes('/users/SalAkBuK/repos')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => mockRepos
+      } as Response;
+    }
+
+    if (url.includes('/users/SalAkBuK')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          login: 'SalAkBuK',
+          name: 'Salih Bukhari',
+          avatar_url: 'https://example.com/avatar.png',
+          bio: 'Full Stack Engineer',
+          html_url: 'https://github.com/SalAkBuK',
+          public_repos: 21,
+          followers: 0,
+          following: 0,
+          company: null,
+          location: 'Rawalpindi, Pakistan',
+          blog: null
+        })
+      } as Response;
+    }
+
+    return {
+      ok: false,
+      status: 404,
+      text: async () => 'Not found'
+    } as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchGitHubUserData('SalAkBuK');
+    assert.equal(result.rawCount, 21, 'Must report rawCount of all 21 repos');
+    assert.equal(result.projects.length, 21, 'Must transform all 21 repos without artificial 10-cap');
+    assert.ok(requestedUrls.some(u => u.includes('per_page=100')), 'Must request per_page=100');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
