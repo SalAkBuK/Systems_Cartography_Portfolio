@@ -10,7 +10,6 @@ import {
   OperatorMetadata
 } from './types';
 import {
-  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA
 } from './data/verifiedPortfolioData';
 import { PORTFOLIO_CONFIG } from './config/portfolioConfig';
@@ -232,15 +231,19 @@ export default function App() {
     setSelectedSubsystem(null);
   }, []);
 
-  // Handle Skill Selection
+  // Handle Skill Selection (with click-again toggle to clear)
   const handleSelectSkill = useCallback((id: string) => {
+    if (selectedSkillId === id) {
+      setSelectedSkillId(null);
+      return;
+    }
     setSelectedSkillId(id);
     setSelectedProjectId(null);
     setDrilledProjectId(null);
     setSelectedExperienceId(null);
     setSelectedSubsystem(null);
     setActiveView('infrastructure');
-  }, []);
+  }, [selectedSkillId]);
 
   // Handle Experience Selection (with click-again toggle to clear)
   const handleSelectExperience = useCallback((id: string) => {
@@ -266,7 +269,7 @@ export default function App() {
     setSelectedSubsystem(null);
   }, []);
 
-  // Handle View Changes from Navigation
+  // Handle View Changes from Navigation (Neutral Tab Switching)
   const handleNavViewChange = (view: ActiveView) => {
     setActiveView(view);
     setDrilledProjectId(null);
@@ -285,11 +288,11 @@ export default function App() {
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'experience') {
-      if (!selectedExperienceId && experience.length > 0) setSelectedExperienceId(experience[0].id);
+      // Neutral view: show Experience Dock without arbitrarily auto-selecting first employer
       setSelectedProjectId(null);
       setSelectedSkillId(null);
     } else if (view === 'infrastructure') {
-      if (!selectedSkillId && skills.length > 0) setSelectedSkillId(skills[0].id);
+      // Neutral view: show Technical Capabilities without arbitrarily auto-selecting first capability
       setSelectedProjectId(null);
       setSelectedExperienceId(null);
     } else if (view === 'contact') {
@@ -427,6 +430,7 @@ export default function App() {
 
         {/* Right Contextual Inspector Panel */}
         {activeView !== 'contact' && <RightInspectorPanel
+          activeView={activeView}
           selectedProject={selectedProject}
           selectedSkill={selectedSkill}
           selectedExperience={selectedExperience}

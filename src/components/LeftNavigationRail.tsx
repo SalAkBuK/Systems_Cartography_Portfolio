@@ -5,7 +5,6 @@ import {
   Cpu, 
   History, 
   Layers, 
-  GitCommit, 
   Share2, 
   Filter,
   Search,
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
 import {
-  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
@@ -64,7 +62,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
     { id: 'identity', num: '01', label: 'OPERATOR PROFILE', icon: User },
     { id: 'projects', num: '02', label: 'PROJECT TOPOLOGY', count: (projects || []).length, icon: Cpu },
     { id: 'experience', num: '03', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
-    { id: 'infrastructure', num: '04', label: 'INFRASTRUCTURE', count: (skills || []).length, icon: Layers },
+    { id: 'infrastructure', num: '04', label: 'TECHNICAL CAPABILITIES', count: (skills || []).length, icon: Layers },
     { id: 'contact', num: '05', label: 'EXTERNAL INTERFACE', icon: Share2 },
   ];
 
