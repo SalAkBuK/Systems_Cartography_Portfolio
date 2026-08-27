@@ -43,7 +43,7 @@ export const PORTFOLIO_CONFIG: {
     contact: {
       email: 'bukharian1776@gmail.com',
       github: 'https://github.com/SalAkBuK',
-      linkedin: '',
+      linkedin: 'https://www.linkedin.com/in/salih-bukhari-33439b194/',
       pgpKeyId: '',
       pgpFingerprint: '',
       matrix: '',

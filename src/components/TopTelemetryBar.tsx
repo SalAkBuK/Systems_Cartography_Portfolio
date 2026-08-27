@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, ExternalLink, FileText, Github, Mail, RotateCcw } from 'lucide-react';
+import { Activity, FileText, Mail, RotateCcw } from 'lucide-react';
 import { ActiveView } from '../types';
 
 interface TopTelemetryBarProps {
@@ -26,9 +26,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
   onOpenResume,
   activeProjectsCount = 0,
   gitHubSource,
-  gitHubUrl,
   siteId,
-  templateRepositoryUrl,
   syncState
 }) => (
   <header className="h-12 bg-[#D4CDA4] border-b border-[#15150F] flex items-center px-3 sm:px-4 justify-between text-[10px] uppercase tracking-widest font-bold select-none z-30 shrink-0">
@@ -63,12 +61,6 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
     </div>
 
     <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <a href={gitHubUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920]" title="View the portfolio owner's GitHub profile">
-        <Github size={11} /><span className="hidden lg:inline">GITHUB</span>
-      </a>
-      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="hidden sm:flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#E2DCB9] hover:bg-[#15150F] hover:text-[#D4CDA4]" title="Fork this repository and configure your own independent portfolio">
-        <ExternalLink size={11} /><span className="hidden lg:inline">FORK SYSTEM</span>
-      </a>
       <button onClick={onToggleTraceMode} className={`flex items-center gap-1 px-2 py-1 border border-[#15150F] ${traceModeActive ? 'bg-[#15150F] text-[#C3E54E]' : 'hover:bg-[#15150F] hover:text-[#D4CDA4]'}`} title="Toggle relationship traces">
         <Activity size={11} /><span className="hidden lg:inline">TRACE</span>
       </button>
