@@ -437,6 +437,7 @@ export default function App() {
           selectedSubsystem={selectedSubsystem}
           onSelectProject={handleSelectProject}
           onSelectSkill={handleSelectSkill}
+          onSelectExperience={handleSelectExperience}
           onDrillIntoProject={handleDrillIntoProject}
           onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
           onOpenContact={() => handleNavViewChange('contact')}
