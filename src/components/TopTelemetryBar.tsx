@@ -49,12 +49,12 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
       </button>
 
       <div className="flex flex-col">
-        <span className="text-[8px] opacity-50 tracking-tighter">PROJECT MAP</span>
+        <span className="text-[8px] opacity-50 tracking-tighter">OWNER PROJECTS</span>
         <span>{activeProjectsCount.toString().padStart(2, '0')} PUBLIC REPOS</span>
       </div>
 
       <div className="hidden md:flex flex-col">
-        <span className="text-[8px] opacity-50 tracking-tighter">SOURCE</span>
+        <span className="text-[8px] opacity-50 tracking-tighter">OWNER SOURCE</span>
         <span className="flex items-center gap-1">
           <span className={`w-1.5 h-1.5 ${syncState === 'ready' ? 'bg-[#C3E54E]' : syncState === 'error' ? 'bg-[#CA885C]' : 'bg-[#8EA9DA] animate-pulse'}`} />
           {syncState === 'ready' ? `GITHUB // ${gitHubSource || 'READY'}` : syncState === 'error' ? 'CACHED // GITHUB UNAVAILABLE' : 'GITHUB // LOADING'}
@@ -63,11 +63,11 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
     </div>
 
     <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <a href={gitHubUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920]" title="View configured GitHub profile">
+      <a href={gitHubUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920]" title="View the portfolio owner's GitHub profile">
         <Github size={11} /><span className="hidden lg:inline">GITHUB</span>
       </a>
-      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="hidden sm:flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#E2DCB9] hover:bg-[#15150F] hover:text-[#D4CDA4]" title="Fork and self-host this portfolio">
-        <ExternalLink size={11} /><span className="hidden lg:inline">USE TEMPLATE</span>
+      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="hidden sm:flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#E2DCB9] hover:bg-[#15150F] hover:text-[#D4CDA4]" title="Fork this repository and configure your own independent portfolio">
+        <ExternalLink size={11} /><span className="hidden lg:inline">FORK SYSTEM</span>
       </a>
       <button onClick={onToggleTraceMode} className={`flex items-center gap-1 px-2 py-1 border border-[#15150F] ${traceModeActive ? 'bg-[#15150F] text-[#C3E54E]' : 'hover:bg-[#15150F] hover:text-[#D4CDA4]'}`} title="Toggle relationship traces">
         <Activity size={11} /><span className="hidden lg:inline">TRACE</span>
