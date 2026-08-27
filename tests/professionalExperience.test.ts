@@ -3,11 +3,11 @@ import test from 'node:test';
 import { resolveProfessionalExperience } from '../src/services/experienceResolver';
 import { OWNER_PROFILE } from '../src/data/ownerProfile.generated';
 import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
+import { getRepositoryEvidence } from '../src/data/repositoryEvidence';
 import { ExperienceNode, GeneratedOwnerProfile, OwnerExperienceEvidence } from '../src/types';
 import { parseLinkedInProfileText, buildGeneratedOwnerProfile } from '../scripts/linkedinProfileParser';
 
 test('1. Reconstructing importer output is compatible with experienceResolver', () => {
-  // Take the canonical parsed structure and verify resolveProfessionalExperience processes it seamlessly
   const resolved = resolveProfessionalExperience({
     importedExperience: OWNER_PROFILE.experience,
     curatedEvidence: OWNER_EXPERIENCE_EVIDENCE
@@ -18,7 +18,6 @@ test('1. Reconstructing importer output is compatible with experienceResolver', 
 });
 
 test('2. LinkedIn re-import does not modify or delete ownerExperienceEvidence', () => {
-  // Simulate re-importing an updated profile with new importedAt or modified descriptions
   const reimportedProfile: GeneratedOwnerProfile = {
     source: {
       kind: 'linkedin_pdf',
@@ -91,18 +90,15 @@ test('2. LinkedIn re-import does not modify or delete ownerExperienceEvidence', 
   assert.equal(resolved.length, 2);
   const primaryNode = resolved[0];
 
-  // LinkedIn facts updated
   assert.equal(primaryNode.role, 'Full Stack Engineer');
   assert.equal(primaryNode.keyOutputs[0], 'Reimported output statement from LinkedIn PDF.');
 
-  // Curated engineering evidence preserved
-  assert.ok(primaryNode.architectedSystemsDetails && primaryNode.architectedSystemsDetails.length >= 2);
+  assert.ok(primaryNode.architectedSystemsDetails && primaryNode.architectedSystemsDetails.length >= 3);
   assert.ok(primaryNode.systemsDelivered && primaryNode.systemsDelivered.length >= 3);
   assert.ok(primaryNode.engineeringContributions && primaryNode.engineeringContributions.length >= 4);
   assert.ok(primaryNode.infrastructureOperations && primaryNode.infrastructureOperations.length >= 3);
-  assert.ok(primaryNode.evidenceLinks && primaryNode.evidenceLinks.length >= 3);
+  assert.ok(primaryNode.evidenceLinks && primaryNode.evidenceLinks.length >= 5);
 
-  // TowerDesk platform surfaces intact
   const towerdesk = primaryNode.systemsDelivered.find(s => s.name.includes('TowerDesk'));
   assert.ok(towerdesk);
   assert.equal(towerdesk.surfaces?.length, 3, 'TowerDesk must have 3 surfaces (Backend, Admin/Web, Mobile)');
@@ -163,7 +159,6 @@ test('6. Multiple same-company roles WITHOUT promotion evidence do NOT produce P
       gridPosition: { x: 0, y: 0 },
       progressionGroup: 'acme',
       progressionOrder: 2
-      // No promotionNote!
     },
     {
       id: 'role-01-developer',
@@ -179,7 +174,6 @@ test('6. Multiple same-company roles WITHOUT promotion evidence do NOT produce P
       gridPosition: { x: 0, y: 0 },
       progressionGroup: 'acme',
       progressionOrder: 1
-      // No promotionNote!
     }
   ];
 
@@ -245,7 +239,113 @@ test('8. Freelance work cannot accidentally inherit CodeFier evidence', () => {
   assert.equal(aok.architectedSystemsDetails?.length || 0, 0, 'AOK Health Solutions must NOT inherit CodeFier architecture');
 });
 
-test('9. Empty evidence collections do not produce corrupted objects or fallback placeholders', () => {
+test('9. TowerDesk resolves as ONE professional platform with 3 surfaces', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const towerdesk = codefierEvidence.systemsDelivered?.find(s => s.name.includes('TowerDesk'))!;
+
+  assert.ok(towerdesk, 'TowerDesk platform must exist');
+  assert.ok(towerdesk.surfaces && towerdesk.surfaces.length === 3, 'TowerDesk platform must have exactly 3 surfaces');
+
+  const backend = towerdesk.surfaces.find(s => s.name.includes('Backend'))!;
+  const web = towerdesk.surfaces.find(s => s.name.includes('Web'))!;
+  const mobile = towerdesk.surfaces.find(s => s.name.includes('Mobile'))!;
+
+  assert.ok(backend && web && mobile, 'All 3 surfaces must be present');
+  assert.equal(backend.provenance, 'VERIFIED');
+  assert.equal(web.provenance, 'VERIFIED');
+  assert.equal(mobile.provenance, 'VERIFIED');
+});
+
+test('10. Original and sanitized TowerDesk repository aliases resolve to identical evidence records', () => {
+  const originalBackend = getRepositoryEvidence('towerdesk-backend');
+  const cleanBackend = getRepositoryEvidence('towerdesk-backend-clean');
+  assert.ok(originalBackend);
+  assert.equal(originalBackend, cleanBackend);
+
+  const originalWeb = getRepositoryEvidence('tower-desk');
+  const cleanWeb = getRepositoryEvidence('tower-desk-clean');
+  assert.ok(originalWeb);
+  assert.equal(originalWeb, cleanWeb);
+
+  const originalMobile = getRepositoryEvidence('binghatti-concierge-app-rn-expo');
+  const showcaseMobile = getRepositoryEvidence('towerdesk-mobile-showcase');
+  assert.ok(originalMobile);
+  assert.equal(originalMobile, showcaseMobile);
+});
+
+test('11. Worthy CRM evidence resolves to CodeFier and verified claims are VERIFIED', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const crmDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Worthy Real Estate CRM'))!;
+  const crmArch = codefierEvidence.architectedSystems?.find(s => s.name.includes('Worthy CRM'))!;
+
+  assert.ok(crmDelivered);
+  assert.ok(crmArch);
+  assert.equal(crmDelivered.provenance, 'VERIFIED');
+  assert.equal(crmArch.provenance, 'VERIFIED');
+
+  // Verify capabilities include RBAC, atomic lead entry, and screenshot proof
+  assert.ok(crmDelivered.capabilities?.some(c => c.includes('ADMIN, CEO, AGENT')));
+  assert.ok(crmDelivered.capabilities?.some(c => c.includes('Bulk Lead Entry')));
+  assert.ok(crmDelivered.capabilities?.some(c => c.includes('WhatsApp Media Proof')));
+  assert.ok(crmDelivered.capabilities?.some(c => c.includes('audit_logs')));
+
+  // Direct repo evidence check
+  const crmEvidence = getRepositoryEvidence('worthy-crm');
+  assert.ok(crmEvidence);
+  assert.ok(crmEvidence.subsystems.some(s => s.name.includes('Audit Logger')));
+  assert.ok(crmEvidence.subsystems.some(s => s.name.includes('Notifications')));
+});
+
+test('12. Remapp data service is modeled as API ingestion and NOT browser scraping', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const remappDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Remapp'))!;
+  const remappArch = codefierEvidence.architectedSystems?.find(s => s.name.includes('Remapp'))!;
+
+  assert.ok(remappDelivered);
+  assert.ok(remappArch);
+  assert.equal(remappDelivered.provenance, 'VERIFIED');
+  assert.equal(remappArch.provenance, 'VERIFIED');
+
+  // Verify it is labeled API Ingestion
+  assert.ok(remappDelivered.name.includes('Ingestion') || remappDelivered.name.includes('Synchronization'));
+  assert.ok(!remappDelivered.name.toLowerCase().includes('scraping'));
+  assert.ok(remappDelivered.capabilities?.some(c => c.includes('Direct Remapp JSON API Ingestion')));
+  assert.ok(remappDelivered.capabilities?.some(c => c.includes('Exponential Retry Backoff')));
+});
+
+test('13. Production nightly schedule remains CURATED while ingestion automation is VERIFIED', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const nightlyOp = codefierEvidence.infrastructureOperations?.find(o => o.area.includes('Scheduled Ingestion'))!;
+
+  assert.ok(nightlyOp);
+  assert.equal(nightlyOp.provenance, 'CURATED', 'Deployment schedule cadence must remain CURATED');
+
+  // The ingestion pipeline architecture itself is VERIFIED from code
+  const remappArch = codefierEvidence.architectedSystems?.find(s => s.name.includes('Remapp'))!;
+  assert.equal(remappArch.provenance, 'VERIFIED');
+});
+
+test('14. CRM external property integration is cache-backed and not claimed as relational DB sync', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const crmDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Worthy Real Estate CRM'))!;
+
+  assert.ok(crmDelivered);
+  const cacheCap = crmDelivered.capabilities?.find(c => c.includes('External Property'));
+  assert.ok(cacheCap);
+  assert.ok(cacheCap.includes('Disk Cache-Backed') || cacheCap.includes('HTTP'));
+  assert.ok(!cacheCap.includes('Relational DB sync') && !cacheCap.includes('MySQL sync'));
+});
+
+test('15. TowerDesk mobile implementation maturity honestly discloses hybrid/mock modules', () => {
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const towerdesk = codefierEvidence.systemsDelivered?.find(s => s.name.includes('TowerDesk'))!;
+  const mobileSurface = towerdesk?.surfaces?.find(s => s.name.includes('Mobile'))!;
+
+  assert.ok(mobileSurface);
+  assert.ok(mobileSurface.role.includes('API-backed') && mobileSurface.role.includes('mock'));
+});
+
+test('16. Empty evidence collections do not produce corrupted objects or fallback placeholders', () => {
   const bareOrg: ExperienceNode[] = [
     {
       id: 'exp-bare',
@@ -278,52 +378,7 @@ test('9. Empty evidence collections do not produce corrupted objects or fallback
   assert.deepEqual(node.evidenceLinks, []);
 });
 
-test('10. CURATED evidence remains strictly labeled CURATED and is not silently upgraded to VERIFIED', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier');
-  assert.ok(codefierEvidence);
-
-  // Internal CRM must be CURATED
-  const crm = codefierEvidence.systemsDelivered?.find(s => s.name.includes('CRM'));
-  assert.ok(crm);
-  assert.equal(crm.provenance, 'CURATED');
-
-  // Remapp data ingestion service must be CURATED
-  const remapp = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Property Data Ingestion'));
-  assert.ok(remapp);
-  assert.equal(remapp.provenance, 'CURATED');
-
-  // Verified open-source TowerDesk backend architecture remains VERIFIED
-  const towerdeskArch = codefierEvidence.architectedSystems?.find(a => a.name.includes('TowerDesk'));
-  assert.ok(towerdeskArch);
-  assert.equal(towerdeskArch.provenance, 'VERIFIED');
-});
-
-test('11. Project IDs resolve safely to known repository keys', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
-  const towerdesk = codefierEvidence.systemsDelivered?.find(s => s.name.includes('TowerDesk'))!;
-
-  assert.ok(towerdesk);
-  assert.ok(towerdesk.surfaces && towerdesk.surfaces.length === 3);
-
-  const backendSurface = towerdesk.surfaces.find(s => s.name.includes('Backend'))!;
-  const webSurface = towerdesk.surfaces.find(s => s.name.includes('Admin'))!;
-  const mobileSurface = towerdesk.surfaces.find(s => s.name.includes('Mobile'))!;
-
-  assert.equal(backendSurface.linkedProjectId, 'towerdesk-backend-clean');
-  assert.equal(webSurface.linkedProjectId, 'tower-desk-clean');
-  assert.equal(mobileSurface.linkedProjectId, 'towerdesk-mobile-showcase');
-
-  assert.equal(backendSurface.status, 'ORIGINAL BACKEND RETIRED');
-  assert.equal(webSurface.status, 'FRONTEND SHOWCASE');
-  assert.equal(mobileSurface.status, 'SHOWCASE REPOSITORY');
-
-  const links = codefierEvidence.evidenceLinks!;
-  assert.ok(links.some(l => l.projectId === 'towerdesk-backend-clean'));
-  assert.ok(links.some(l => l.projectId === 'tower-desk-clean'));
-  assert.ok(links.some(l => l.projectId === 'towerdesk-mobile-showcase'));
-});
-
-test('12. Freshly generated ownerProfile.generated.ts from actual importer compiles with the resolver', () => {
+test('17. Freshly generated ownerProfile.generated.ts from actual importer compiles with the resolver', () => {
   const mockMainText = [
     'Salih Bukhari',
     'Full Stack Engineer',
