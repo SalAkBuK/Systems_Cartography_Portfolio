@@ -101,6 +101,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'architecture' | 'metrics' | 'manifest'>('overview');
   const activeOperator = operator || OPERATOR_METADATA;
+  const uniqueOrganizations = Array.from(
+    new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
+  ).filter(Boolean).length;
 
   return (
     <aside className="w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden h-72 lg:h-full">
@@ -982,18 +985,18 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Operator Production Telemetry */}
+                {/* Operator Portfolio Telemetry */}
                 <div className="grid grid-cols-2 gap-1.5">
                   <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                    <span className="text-[7.5px] opacity-60 uppercase font-bold">PRODUCTION SYSTEMS</span>
+                    <span className="text-[7.5px] opacity-60 uppercase font-bold">PUBLIC PROJECTS</span>
                     <span className="text-[14px] font-bold text-[#15150F]">
-                      {projects.filter(p => p.status === 'PRODUCTION').length} DEPLOYED
+                      {projects.length} MAPPED
                     </span>
                   </div>
                   <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
                     <span className="text-[7.5px] opacity-60 uppercase font-bold">CAREER ORGANIZATIONS</span>
                     <span className="text-[14px] font-bold text-[#15150F]">
-                      {experience.length} EMPLOYERS
+                      {uniqueOrganizations} {uniqueOrganizations === 1 ? 'ORGANIZATION' : 'ORGANIZATIONS'}
                     </span>
                   </div>
                 </div>
@@ -1095,7 +1098,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <>
                 <div className="border-b border-[#15150F] pb-2.5">
                   <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
-                    PROFESSIONAL DOCK // {experience.length} EMPLOYERS
+                    PROFESSIONAL DOCK // {uniqueOrganizations} {uniqueOrganizations === 1 ? 'ORGANIZATION' : 'ORGANIZATIONS'}
                   </span>
                   <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
                     PROFESSIONAL EXPERIENCE OVERVIEW
@@ -1106,7 +1109,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     Professional experience is decoupled from physical topology and rendered in the movable Experience Dock.
                   </p>
                   <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
-                    <div>› CLICK EMPLOYER: Focus verified project systems</div>
+                    <div>› CLICK EMPLOYER: Focus linked project systems</div>
                     <div>› CLICK AGAIN: Clear focus and return to neutral</div>
                     <div>› DRAG DOCK HEADER: Reposition viewport overlay</div>
                     <div>› CLICK RESET: Restore default top dock position</div>
@@ -1126,7 +1129,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 </div>
                 <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
                   <p>
-                    Technical capability nodes model core architectural proficiencies and verified signal conduits across repositories.
+                    Technical capability nodes represent commonly detected technologies and their repository associations.
                   </p>
                   <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
                     <div>› CLICK CAPABILITY: Focus connected repositories</div>
