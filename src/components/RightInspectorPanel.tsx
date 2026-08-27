@@ -1167,8 +1167,8 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
                         <div className="flex items-center justify-between pt-1 border-t border-[#15150F]/20 group-hover:border-[#D4CDA4]/20 text-[8px] font-mono">
                           <span className="text-[#5C5946] group-hover:text-[#A8A48B]">
-                            {org.linkedSystemsCount > 0 
-                              ? `SYSTEMS LINKED // ${String(org.linkedSystemsCount).padStart(2, '0')}` 
+                            {org.linkedSystemsCount > 0
+                              ? `SYSTEMS LINKED // ${String(org.linkedSystemsCount).padStart(2, '0')}`
                               : `PROGRESSION // ${org.roleCount} ${org.roleCount === 1 ? 'ROLE' : 'ROLES'}`}
                           </span>
                           <span className="font-bold text-[#15150F] group-hover:text-[#C3E54E] flex items-center gap-0.5">
