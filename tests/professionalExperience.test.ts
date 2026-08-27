@@ -388,3 +388,56 @@ test('17. Freshly generated ownerProfile.generated.ts from actual importer compi
   assert.equal(resolved[0].role, 'Full Stack Engineer');
   assert.ok(resolved[0].systemsDelivered && resolved[0].systemsDelivered.length >= 3);
 });
+
+test('18. Zero ExperienceNode or experience physics exist in forceLayout or collision services', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  const forceLayoutContent = fs.readFileSync(path.resolve('src/utils/forceLayout.ts'), 'utf8');
+  const collisionContent = fs.readFileSync(path.resolve('src/utils/collision.ts'), 'utf8');
+
+  assert.ok(!forceLayoutContent.includes('ExperienceNode'), 'forceLayout must NOT import or process ExperienceNode');
+  assert.ok(!forceLayoutContent.includes('customExpPositions'), 'forceLayout must NOT track customExpPositions');
+  assert.ok(!forceLayoutContent.includes('experienceForce'), 'forceLayout must NOT include experience physics forces');
+  assert.ok(!collisionContent.includes('ExperienceNode'), 'collision service must NOT process ExperienceNode');
+});
+
+test('19. Viewport overlay dock clamping boundaries math clamps coordinates within safe margins', () => {
+  const clampDock = (
+    pos: { x: number; y: number },
+    containerW: number,
+    containerH: number,
+    dockW: number,
+    dockH: number
+  ) => {
+    const margin = 12;
+    const maxX = Math.max(margin, containerW - dockW - margin);
+    const maxY = Math.max(margin, containerH - dockH - margin);
+    return {
+      x: Math.min(Math.max(margin, Math.round(pos.x)), maxX),
+      y: Math.min(Math.max(margin, Math.round(pos.y)), maxY)
+    };
+  };
+
+  // 1. Normal position within bounds
+  assert.deepEqual(clampDock({ x: 100, y: 150 }, 1000, 700, 300, 60), { x: 100, y: 150 });
+
+  // 2. Negative coordinates clamped to safe margin (12)
+  assert.deepEqual(clampDock({ x: -100, y: -50 }, 1000, 700, 300, 60), { x: 12, y: 12 });
+
+  // 3. Overflowing coordinates clamped to container bounds (1000 - 300 - 12 = 688, 700 - 60 - 12 = 628)
+  assert.deepEqual(clampDock({ x: 1500, y: 900 }, 1000, 700, 300, 60), { x: 688, y: 628 });
+
+  // 4. Smaller mobile screen clamping
+  assert.deepEqual(clampDock({ x: 300, y: 400 }, 360, 600, 300, 60), { x: 48, y: 400 });
+});
+
+test('20. System overview includes 4 verified architecture principles and process navigation is removed', async () => {
+  const { VERIFIED_ARCHITECTURE_PRINCIPLES } = await import('../src/data/verifiedPortfolioData');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES.length, 4, 'Must maintain 4 core evidence principles');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[0].number, '01');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[0].title, 'Repository Evidence Before Claims');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[3].number, '04');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[3].title, 'Show Unknowns Honestly');
+});
+

@@ -65,8 +65,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
     { id: 'projects', num: '02', label: 'PROJECT TOPOLOGY', count: (projects || []).length, icon: Cpu },
     { id: 'experience', num: '03', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
     { id: 'infrastructure', num: '04', label: 'INFRASTRUCTURE', count: (skills || []).length, icon: Layers },
-    { id: 'process', num: '05', label: 'SYSTEM PROCESS', count: ARCHITECTURE_PRINCIPLES.length, icon: GitCommit },
-    { id: 'contact', num: '06', label: 'EXTERNAL INTERFACE', icon: Share2 },
+    { id: 'contact', num: '05', label: 'EXTERNAL INTERFACE', icon: Share2 },
   ];
 
   const categories: { id: SystemCategory | 'all'; label: string; color?: string }[] = [
@@ -101,7 +100,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
           Owner Technical Index
         </h2>
         <span className="text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
-          INDX // 00-06
+          INDX // 00-05
         </span>
       </div>
 

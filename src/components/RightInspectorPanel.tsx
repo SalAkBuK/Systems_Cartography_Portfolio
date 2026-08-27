@@ -16,19 +16,20 @@ import {
   Info,
   Flame,
   Check,
-  Search
+  Search,
+  Workflow,
+  Radio
 } from 'lucide-react';
 import { 
   ProjectData, 
   InfrastructureSkill, 
   ExperienceNode, 
   SubsystemNode,
-  ArchitecturePrinciple,
   OperatorMetadata,
   EvidenceProvenance
 } from '../types';
 import {
-  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
+  VERIFIED_ARCHITECTURE_PRINCIPLES,
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA,
   VERIFIED_PROJECTS as PROJECTS,
@@ -69,7 +70,6 @@ interface RightInspectorPanelProps {
   selectedSkill: InfrastructureSkill | null;
   selectedExperience: ExperienceNode | null;
   selectedSubsystem: SubsystemNode | null;
-  selectedPrinciple: ArchitecturePrinciple | null;
   onSelectProject: (id: string) => void;
   onSelectSkill: (id: string) => void;
   onDrillIntoProject: (id: string) => void;
@@ -86,7 +86,6 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   selectedSkill,
   selectedExperience,
   selectedSubsystem,
-  selectedPrinciple,
   onSelectProject,
   onSelectSkill,
   onDrillIntoProject,
@@ -113,8 +112,6 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               ? `CAPABILITY // ${selectedSkill.code}`
               : selectedExperience
               ? `BUILD LOG // ${selectedExperience.code}`
-              : selectedPrinciple
-              ? `PRINCIPLE // ${selectedPrinciple.number}`
               : 'SYSTEM // ROOT CONSOLE'}
           </span>
         </div>
@@ -949,40 +946,8 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           </div>
         )}
 
-        {/* CASE 4: SELECTED PRINCIPLE */}
-        {selectedPrinciple && !selectedProject && !selectedSkill && !selectedExperience && (
-          <div className="flex flex-col gap-4">
-            <div className="border-b border-[#15150F] pb-2.5">
-              <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold uppercase tracking-widest inline-block mb-1">
-                OPERATING PRINCIPLE // {selectedPrinciple.number}
-              </span>
-              <div className="text-[13px] font-bold text-[#15150F] leading-tight">
-                {selectedPrinciple.title}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                RULE SPECIFICATION
-              </div>
-              <p className="text-[10.5px] text-[#15150F] bg-[#E2DCB9] p-3 border border-[#15150F] leading-relaxed">
-                {selectedPrinciple.rule}
-              </p>
-            </div>
-
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                CONCRETE DEMONSTRATION
-              </div>
-              <div className="p-3 border border-[#15150F] bg-[#CBC59B]/40 text-[10px] text-[#22211A] leading-relaxed">
-                {selectedPrinciple.demonstration}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CASE 5: ROOT OPERATOR CONSOLE */}
-        {!selectedProject && !selectedSkill && !selectedExperience && !selectedPrinciple && (
+        {/* CASE 4: SYSTEM OVERVIEW / ROOT OPERATOR CONSOLE */}
+        {!selectedProject && !selectedSkill && !selectedExperience && (
           <div className="flex flex-col gap-4">
             {/* Operator Identity Block */}
             <div className="border-b border-[#15150F] pb-3">
@@ -992,14 +957,18 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             </div>
 
             {/* Quick Metrics */}
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-3 gap-1">
               <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                <span className="text-[7.5px] opacity-60 uppercase font-bold">SYSTEMS VISUALIZED</span>
-                <span className="text-[15px] font-bold text-[#15150F]">{projects.length} REPOSITORIES</span>
+                <span className="text-[7px] opacity-60 uppercase font-bold">REPOSITORIES</span>
+                <span className="text-[13px] font-bold text-[#15150F]">{projects.length}</span>
               </div>
               <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
-                <span className="text-[7.5px] opacity-60 uppercase font-bold">CAPABILITY PLINTHS</span>
-                <span className="text-[15px] font-bold text-[#15150F]">{skills.length} MODULES</span>
+                <span className="text-[7px] opacity-60 uppercase font-bold">CAPABILITIES</span>
+                <span className="text-[13px] font-bold text-[#15150F]">{skills.length}</span>
+              </div>
+              <div className="p-2 border border-[#15150F] bg-[#E2DCB9] flex flex-col">
+                <span className="text-[7px] opacity-60 uppercase font-bold">CAREER ROLES</span>
+                <span className="text-[13px] font-bold text-[#15150F]">{experience.length}</span>
               </div>
             </div>
 
@@ -1011,6 +980,56 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <p className="text-[10px] text-[#22211A] bg-[#E2DCB9]/80 p-2.5 border border-[#15150F] leading-relaxed">
                 {activeOperator.systemManifesto}
               </p>
+            </div>
+
+            {/* Evidence Classification Taxonomy */}
+            <div>
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                EVIDENCE CLASSIFICATION TAXONOMY
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-[8px] font-mono">
+                <div className="p-1.5 bg-[#15150F] text-[#C3E54E] border border-[#15150F] flex flex-col">
+                  <span className="font-bold">● VERIFIED</span>
+                  <span className="text-[7px] text-[#A8A48B] leading-tight">Public GitHub files, manifests, and code</span>
+                </div>
+                <div className="p-1.5 bg-[#E2A96B]/30 text-[#15150F] border border-[#15150F] flex flex-col">
+                  <span className="font-bold text-[#7A3E2E]">▲ CURATED</span>
+                  <span className="text-[7px] text-[#5C5946] leading-tight">Reviewed LinkedIn import / owner evidence</span>
+                </div>
+                <div className="p-1.5 bg-[#CBC59B] text-[#15150F] border border-[#15150F] flex flex-col">
+                  <span className="font-bold text-[#15150F]">◆ DERIVED</span>
+                  <span className="text-[7px] text-[#5C5946] leading-tight">Multi-signal heuristic classifications</span>
+                </div>
+                <div className="p-1.5 bg-[#E2DCB9] text-[#7A3E2E] border border-[#15150F] flex flex-col">
+                  <span className="font-bold">○ UNAVAILABLE</span>
+                  <span className="text-[7px] text-[#5C5946] leading-tight">Unclaimed / unestablished evidence gap</span>
+                </div>
+              </div>
+            </div>
+
+            {/* EVIDENCE PRINCIPLES */}
+            <div>
+              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>EVIDENCE PRINCIPLES</span>
+                <span className="text-[7.5px] text-[#C3E54E] bg-[#15150F] px-1 py-0.2 font-mono font-bold">
+                  {VERIFIED_ARCHITECTURE_PRINCIPLES.length} INTEGRITY RULES
+                </span>
+              </div>
+              <div className="flex flex-col gap-1.5 border border-[#15150F] bg-[#E2DCB9]/40 p-2 divide-y divide-[#15150F]/20">
+                {VERIFIED_ARCHITECTURE_PRINCIPLES.map((pr) => (
+                  <div key={pr.id} className="pt-1.5 first:pt-0 flex flex-col gap-0.5">
+                    <span className="font-bold text-[9.5px] text-[#15150F]">
+                      {pr.number} // {pr.title}
+                    </span>
+                    <p className="text-[9px] text-[#22211A] font-medium leading-snug">
+                      {pr.summary}
+                    </p>
+                    <p className="text-[8.5px] text-[#5C5946] leading-tight">
+                      {pr.elaboration}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Primary Stack */}
