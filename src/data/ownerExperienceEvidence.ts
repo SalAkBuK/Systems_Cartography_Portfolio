@@ -11,6 +11,10 @@ import { OwnerExperienceEvidence } from '../types';
  * - CURATED: explicitly supplied/confirmed by the portfolio owner (e.g. professional attribution, production schedule).
  * - DERIVED: safely inferred from supporting evidence.
  * - UNAVAILABLE: insufficient evidence.
+ *
+ * Note on Provenance Boundary:
+ * Technical facts and subsystem architectures are VERIFIED in repositoryEvidence.ts.
+ * Professional attribution claims ("Salih delivered/built X at CodeFier") are recorded as CURATED.
  */
 export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
   {
@@ -39,7 +43,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
       'Tailwind CSS'
     ],
 
-    // 1. SYSTEMS ARCHITECTED (High Evidentiary Bar)
+    // 1. SYSTEMS ARCHITECTED (High Evidentiary Bar — Only explicit architectural responsibilities)
     architectedSystems: [
       {
         id: 'arch-towerdesk-multi-tenant',
@@ -54,37 +58,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         ],
         linkedProjectId: 'towerdesk-backend-clean',
         technologies: ['NestJS', 'TypeScript', 'Prisma', 'PostgreSQL', 'Socket.IO', 'BullMQ', 'Redis'],
-        provenance: 'VERIFIED'
-      },
-      {
-        id: 'arch-worthy-crm-pipeline',
-        name: 'Role-Enforced Sales CRM & Evidence Ingress Architecture (Worthy CRM)',
-        description: 'Transaction-safe real estate CRM architecture enforcing strict 3-role isolation (Admin, CEO, Agent), atomic multi-row lead creation, sequential follow-up workflows, mandatory screenshot proof verification, and structured audit logging.',
-        architecturalScope: [
-          'Strict 3-Role Isolation (ADMIN, CEO, AGENT) with Assigned Lead Scoping',
-          'Atomic Multi-Row Lead Creation with Rollback Safety',
-          'Sequential Follow-Up Attempt State Constraints with Call/WhatsApp Proof',
-          'Structured Audit Logging for Operational Mutations (audit_logs table)',
-          'Automated Cron Notification & Escalation Engine with Deduplication Keys'
-        ],
-        linkedProjectId: 'worthy-crm',
-        technologies: ['PHP 8', 'MySQL', 'PDO', 'JSON', 'Cron'],
-        provenance: 'VERIFIED'
-      },
-      {
-        id: 'arch-remapp-sync-pipeline',
-        name: 'External Property Data Ingestion & Gateway Service (Remapp)',
-        description: 'Resilient data ingestion architecture directly consuming Remapp JSON API endpoints with bearer authentication, retry backoff (MAX_RETRIES=5), 429 rate-limit recovery, incremental JSONL caching, and an API-key protected downstream distribution server.',
-        architecturalScope: [
-          'Direct REST API Ingestion (List & Detail Endpoints with Auto-Login)',
-          'Resilient Network Layer with Exponential Backoff & 429 Rate-Limit Handling',
-          'Incremental State & JSONL Cache Engine Preventing Redundant Fetches',
-          'API-Key Protected Distribution Server (/projects, /refresh, /refresh/status)',
-          'Disk-Cached Downstream Ingestion for CRM Operational Isolation'
-        ],
-        linkedProjectId: 'remapp-scraper',
-        technologies: ['Python', 'Requests', 'Node.js', 'Express', 'JSONL'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       }
     ],
 
@@ -104,7 +78,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
             status: 'ORIGINAL BACKEND RETIRED',
             linkedProjectId: 'towerdesk-backend-clean',
             repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-backend-clean',
-            provenance: 'VERIFIED'
+            provenance: 'CURATED'
           },
           {
             name: 'Web / Admin Dashboard',
@@ -113,7 +87,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
             status: 'FRONTEND SHOWCASE',
             linkedProjectId: 'tower-desk-clean',
             repositoryUrl: 'https://github.com/SalAkBuK/tower-desk-clean',
-            provenance: 'VERIFIED'
+            provenance: 'CURATED'
           },
           {
             name: 'Mobile Application',
@@ -122,7 +96,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
             status: 'SHOWCASE REPOSITORY',
             linkedProjectId: 'towerdesk-mobile-showcase',
             repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-mobile-showcase',
-            provenance: 'VERIFIED'
+            provenance: 'CURATED'
           }
         ],
         linkedProjectIds: [
@@ -141,13 +115,13 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
           'BullMQ',
           'TypeScript'
         ],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       },
       {
         id: 'sys-worthy-crm',
         name: 'Worthy Real Estate CRM Platform',
         tagline: 'Operational CRM coordinating lead lifecycles, agent follow-up integrity, evidence verification, and property records.',
-        status: 'OPERATIONAL CRM PLATFORM',
+        status: 'IMPLEMENTED INTERNAL PLATFORM',
         description: 'Internal management platform built to coordinate real estate operations, customer leads, assigned agent follow-up sequences with mandatory screenshot proof, and disk-cached property catalogue views.',
         capabilities: [
           'Authentication & 3-Role Isolation (ADMIN, CEO, AGENT) with Brute-Force Protection',
@@ -160,13 +134,13 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         ],
         linkedProjectIds: ['worthy-crm'],
         technologies: ['PHP 8', 'MySQL', 'PDO', 'Bootstrap', 'JavaScript', 'REST APIs'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       },
       {
         id: 'sys-remapp-ingestion',
         name: 'Remapp Property Data Ingestion & Synchronization Service',
         tagline: 'Automated data ingestion service pulling external Remapp API listings into a normalized cache for CRM operations.',
-        status: 'AUTOMATED INGESTION SERVICE',
+        status: 'IMPLEMENTED INGESTION SERVICE',
         description: 'Automated integration service fetching external Remapp API listings via resilient Python batch worker with retry backoff and incremental JSONL caching, served through a protected Node.js API to the CRM.',
         dataFlow: 'Remapp API (Direct Endpoints) → Python Ingestion Worker (Retry Backoff & Incremental JSONL) → Protected Node.js API Server → Downstream Disk Cache (Worthy CRM)',
         capabilities: [
@@ -178,7 +152,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         ],
         linkedProjectIds: ['remapp-scraper'],
         technologies: ['Python', 'Requests', 'Node.js', 'Express', 'JSONL', 'REST APIs'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       }
     ],
 
@@ -189,28 +163,21 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         description: 'Engineered role-based client workflows in Next.js and Expo Router; implemented guarded REST endpoints, Prisma data layer, and Socket.IO realtime event listeners across web and mobile surfaces.',
         impactArea: 'Multi-tenant Property Operations',
         technologies: ['NestJS', 'Next.js', 'React Native', 'Socket.IO', 'Prisma'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       },
       {
         title: 'Role-Enforced CRM & Evidence Verification Engine (Worthy CRM)',
         description: 'Built core CRM architecture with 3-role boundary enforcement, atomic bulk lead creation, sequential follow-up validation, mandatory call/WhatsApp screenshot uploads, and structured audit logging.',
         impactArea: 'Internal Operational CRM & Evidence Ingress',
         technologies: ['PHP 8', 'MySQL', 'PDO', 'RBAC', 'Audit Logging'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       },
       {
         title: 'Resilient External Property Ingestion Pipeline (Remapp)',
         description: 'Developed Python batch ingestion runner with exponential retry backoff, 429 recovery, incremental JSONL caching, and protected Node.js API server for downstream property distribution.',
         impactArea: 'External Property API Ingestion',
         technologies: ['Python', 'Requests', 'Node.js', 'Express', 'JSONL'],
-        provenance: 'VERIFIED'
-      },
-      {
-        title: 'Sanitized Showcase Preparation & Audit',
-        description: 'Curated and validated public showcase repositories removing production credentials, real contracts, and sensitive tenant data while maintaining full architectural fidelity and test coverage.',
-        impactArea: 'Public Showcase Verification',
-        technologies: ['Vitest', 'Jest', 'Playwright', 'TypeScript'],
-        provenance: 'VERIFIED'
+        provenance: 'CURATED'
       }
     ],
 
@@ -225,7 +192,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
       {
         area: 'Showcase Hosting & Client Builds',
         details: 'Configured and maintained frontend showcase builds on Netlify and mobile application builds with EAS Expo.',
-        status: 'SHOWCASE ACTIVE',
+        status: 'SHOWCASE REPOSITORY',
         provenance: 'CURATED'
       },
       {
