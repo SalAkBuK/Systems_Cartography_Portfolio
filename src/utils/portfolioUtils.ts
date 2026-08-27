@@ -130,27 +130,28 @@ export function formatIsoYearMonth(ym: string | null): string {
 }
 
 export function computeGroupedTenure(groupNodes: ExperienceNode[], fallbackYearRange: string): string {
+  const formattedFallback = fallbackYearRange.toUpperCase().replace(' - ', ' → ');
   const startDates = groupNodes.map(n => n.startDate).filter((d): d is string => Boolean(d));
   const endDates = groupNodes.map(n => n.endDate);
-  
+
   if (startDates.length === 0) {
-    return fallbackYearRange.toUpperCase().replace(' - ', ' → ');
+    return formattedFallback;
   }
 
   const earliestStart = [...startDates].sort()[0];
-  const isCurrent = endDates.some(d => d === null || d === undefined);
+  const isCurrent = endDates.some(d => d === null);
 
   if (isCurrent) {
     return `${formatIsoYearMonth(earliestStart)} → PRESENT`;
   }
 
-  const validEndDates = endDates.filter((d): d is string => Boolean(d));
-  if (validEndDates.length === 0) {
-    return `${formatIsoYearMonth(earliestStart)} → PRESENT`;
+  const validEndDates = endDates.filter((d): d is string => typeof d === 'string' && d.trim().length > 0);
+  if (validEndDates.length > 0) {
+    const latestEnd = [...validEndDates].sort().reverse()[0];
+    return `${formatIsoYearMonth(earliestStart)} → ${formatIsoYearMonth(latestEnd)}`;
   }
 
-  const latestEnd = [...validEndDates].sort().reverse()[0];
-  return `${formatIsoYearMonth(earliestStart)} → ${formatIsoYearMonth(latestEnd)}`;
+  return formattedFallback;
 }
 
 export interface GroupedExperienceEntry extends ExperienceNode {
@@ -171,7 +172,7 @@ export function groupExperienceByProgression(experience: ExperienceNode[]): Grou
   const order: string[] = [];
 
   for (const exp of experience) {
-    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+    const groupKey = (exp.progressionGroup || exp.organization || '').trim().toLowerCase();
     if (!groups[groupKey]) {
       groups[groupKey] = [];
       order.push(groupKey);
@@ -201,5 +202,3 @@ export function groupExperienceByProgression(experience: ExperienceNode[]): Grou
     };
   });
 }
-
-

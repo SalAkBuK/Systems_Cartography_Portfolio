@@ -639,3 +639,61 @@ test('30. onSelectExperience is required and back buttons clear selected ID with
   assert.ok(appContent.includes("onSelectExperience={handleSelectExperience}"), 'App.tsx must pass onSelectExperience to RightInspectorPanel');
 });
 
+test('31. computeGroupedTenure does not treat undefined endDate as PRESENT and falls back to yearRange', async () => {
+  const { computeGroupedTenure } = await import('../src/utils/portfolioUtils');
+
+  // Case A: startDate exists, but endDate is undefined (not null)
+  const mockNodeUndefinedEnd: any = {
+    id: 'exp-test-1',
+    startDate: '2023-01',
+    endDate: undefined,
+    yearRange: 'January 2023 - December 2024'
+  };
+
+  const tenureA = computeGroupedTenure([mockNodeUndefinedEnd], mockNodeUndefinedEnd.yearRange);
+  assert.equal(tenureA, 'JANUARY 2023 → DECEMBER 2024', 'Undefined endDate must NOT produce PRESENT');
+
+  // Case B: explicit current role with endDate: null
+  const mockNodeCurrent: any = {
+    id: 'exp-test-2',
+    startDate: '2025-12',
+    endDate: null,
+    yearRange: 'December 2025 - Present'
+  };
+
+  const tenureB = computeGroupedTenure([mockNodeCurrent], mockNodeCurrent.yearRange);
+  assert.equal(tenureB, 'DEC 2025 → PRESENT', 'Explicit endDate: null must produce PRESENT');
+});
+
+test('32. groupExperienceByProgression normalizes progressionGroup casing without splitting organizations', async () => {
+  const { groupExperienceByProgression } = await import('../src/utils/portfolioUtils');
+
+  const mockCasedProgression: any[] = [
+    {
+      id: 'exp-c1',
+      organization: 'CodeFier',
+      progressionGroup: 'CodeFier',
+      role: 'Full Stack Engineer',
+      progressionOrder: 2,
+      yearRange: 'December 2025 - Present',
+      startDate: '2025-12',
+      endDate: null
+    },
+    {
+      id: 'exp-c2',
+      organization: 'CodeFier',
+      progressionGroup: 'codefier',
+      role: 'React Developer',
+      progressionOrder: 1,
+      yearRange: 'September 2025 - November 2025',
+      startDate: '2025-09',
+      endDate: '2025-11'
+    }
+  ];
+
+  const grouped = groupExperienceByProgression(mockCasedProgression);
+  assert.equal(grouped.length, 1, 'Different casing in progressionGroup (CodeFier vs codefier) must group into exactly one card');
+  assert.equal(grouped[0].role, 'Full Stack Engineer');
+  assert.equal(grouped[0].roleCount, 2);
+  assert.equal(grouped[0].organizationTenure, 'SEP 2025 → PRESENT');
+});
