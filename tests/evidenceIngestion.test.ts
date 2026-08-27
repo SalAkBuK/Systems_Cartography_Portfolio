@@ -425,9 +425,78 @@ test('FormCrash is multi-classified and discoverable under TOOL and FULL filters
   assert.equal(matchesProjectClassification(project, 'infrastructure'), false, 'Must not match INFRA filter');
 });
 
-test('Experience entries do not participate in physical topology force simulation', () => {
-  const graphWithEmptyExp = createTopologyGraph([], [], []);
-  assert.equal(graphWithEmptyExp.nodes.size, 0, 'No physics nodes generated when experience is decoupled');
+test('ordinary full-stack application with test frameworks does not automatically match TOOL', () => {
+  const fullstackAppRepo: GitHubRepoRaw = {
+    ...repo,
+    id: 60,
+    name: 'ecommerce-portal',
+    full_name: 'SalAkBuK/ecommerce-portal',
+    html_url: 'https://github.com/SalAkBuK/ecommerce-portal',
+    description: 'A customer-facing online store with cart, checkout, and inventory catalog',
+    language: 'TypeScript',
+    topics: ['react', 'nextjs', 'postgres', 'jest', 'playwright']
+  };
+
+  const project = transformGitHubRepoToProject(fullstackAppRepo, 0, 1);
+
+  assert.equal(project.category, 'fullstack');
+  assert.equal(matchesProjectClassification(project, 'tooling'), false, 'Ordinary app with tests must not match TOOL filter');
+  assert.equal(matchesProjectClassification(project, 'fullstack'), true, 'Must match FULL filter');
+});
+
+test('frontend app whose README contains "## Testing" section does not become tooling', () => {
+  const frontendAppRepo: GitHubRepoRaw = {
+    ...repo,
+    id: 61,
+    name: 'marketing-site',
+    full_name: 'SalAkBuK/marketing-site',
+    html_url: 'https://github.com/SalAkBuK/marketing-site',
+    description: 'Corporate marketing website and component library',
+    language: 'TypeScript',
+    topics: ['react', 'tailwind', 'vite']
+  };
+
+  const project = transformGitHubRepoToProject(frontendAppRepo, 0, 1);
+
+  assert.equal(project.category, 'frontend');
+  assert.equal(matchesProjectClassification(project, 'tooling'), false, 'Frontend app with tests in README must not match TOOL filter');
+  assert.equal(matchesProjectClassification(project, 'frontend'), true, 'Must match FRONTEND filter');
+});
+
+test('backend service with test frameworks remains backend and not tooling', () => {
+  const backendRepo: GitHubRepoRaw = {
+    ...repo,
+    id: 62,
+    name: 'billing-service',
+    full_name: 'SalAkBuK/billing-service',
+    html_url: 'https://github.com/SalAkBuK/billing-service',
+    description: 'Payment gateway webhooks and invoicing backend service',
+    language: 'Go',
+    topics: ['api', 'grpc', 'postgres', 'unit-tests']
+  };
+
+  const project = transformGitHubRepoToProject(backendRepo, 0, 1);
+
+  assert.equal(project.category, 'backend');
+  assert.equal(matchesProjectClassification(project, 'tooling'), false, 'Backend service with unit tests must not match TOOL filter');
+  assert.equal(matchesProjectClassification(project, 'backend'), true, 'Must match BACKEND filter');
+});
+
+test('createTopologyGraph operates strictly on projects and skills without accepting experience', () => {
+  const mockProjects = [transformGitHubRepoToProject(repo, 0, 1)];
+  const graph = createTopologyGraph(mockProjects, VERIFIED_SKILLS);
+
+  // Assert all node types are project or skill only
+  for (const node of graph.nodes.values()) {
+    assert.ok(node.type === 'project' || node.type === 'skill', 'Node type must be project or skill only');
+    assert.notEqual(node.type, 'experience', 'Experience must never be a force-layout node');
+  }
+
+  // Assert all edges are between project and skill only
+  for (const edge of graph.edges) {
+    assert.ok(edge.sourceType === 'project' || edge.sourceType === 'skill');
+    assert.ok(edge.targetType === 'project' || edge.targetType === 'skill');
+  }
 });
 
 
