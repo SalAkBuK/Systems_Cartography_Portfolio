@@ -103,9 +103,57 @@ const evidenceByRepository: Record<string, Evidence> = {
       { decision: 'Make the server authoritative for executions', rationale: 'Browser state, evidence, and verdicts remain consistent and durable.', tradeoff: 'The dashboard depends on the local control server and installed Chromium.' }
     ],
     resilienceTesting: 'The project is itself a resilience-testing workbench. Its bundled deterministic demo verifies that a vulnerable repeated checkout creates two orders while an idempotent implementation creates one; this is demo evidence, not a production benchmark.'
+  },
+  'worthy-crm': {
+    problem: 'Coordinate real estate sales workflows, lead assignments, and sequential follow-up attempts while enforcing role isolation between Admin, CEO, and Agents and requiring verified call/WhatsApp evidence.',
+    solution: 'A PHP 8 / MySQL web application with session-based RBAC, transaction-safe bulk lead entry, sequential agent follow-up validations with mandatory screenshot proof, structured audit logging, automated system notifications, and an HTTP/cache-backed external property catalogue.',
+    architectureNotes: 'Repository source: controllers and middleware enforce auth, CSRF, and role boundaries; AdminLeadsController wraps multi-row lead creation in database transactions; AgentLeadsController enforces sequential attempt constraints and mandatory screenshot uploads; AuditLog writes structured user events; external_projects_service integrates with downstream Remapp API using JSON disk caching.',
+    subsystems: [
+      subsystem('wcrm-auth', 'Role Boundary & Session Auth', 'auth', 'Enforce user roles and session boundaries', 'Admin, CEO, and Agent role segregation with session management, CSRF protection, and brute-force login lockouts.', ['PHP 8', 'MySQL', 'RBAC'], -50, -28),
+      subsystem('wcrm-leads', 'Transactional Lead Pipeline', 'backend', 'Manage lead assignments and followups', 'Multi-row lead entry saved in single transactions; agents see only assigned leads with sequential attempt constraints and mandatory screenshot proof.', ['PHP 8', 'PDO', 'MySQL'], 0, -38),
+      subsystem('wcrm-audit', 'Structured Audit Logger', 'telemetry', 'Track operational mutations and security events', 'AuditLog model records user actions, action types, JSON metadata, IP addresses, and timestamps to audit_logs table.', ['MySQL', 'JSON'], 52, -20),
+      subsystem('wcrm-notify', 'Automated System Notifications', 'worker', 'Process scheduled alerts and escalations', 'Cron-triggered SystemTasksController processes idle leads, upcoming followups, overdue escalations, and retention purging with dedup keys.', ['PHP 8', 'Cron', 'MySQL'], -35, 35, 'Scheduled jobs'),
+      subsystem('wcrm-ext', 'External Property Adapter', 'backend', 'Consume external property catalogue', 'HTTP client with Bearer authentication and disk-cache fallback consuming external property endpoints without relational DB coupling.', ['cURL', 'JSON Cache'], 36, 38, 'HTTPS / REST')
+    ],
+    keyDecisions: [
+      { decision: 'Wrap bulk lead entry in single database transactions', rationale: 'All rows succeed or roll back together, preventing partial or corrupt lead imports.', tradeoff: 'Requires strict per-row pre-validation before committing.' },
+      { decision: 'Cache external property catalogue to disk rather than relational DB sync', rationale: 'Isolates the core operational CRM database from external catalogue volatility and schema changes.', tradeoff: 'Catalogue updates rely on scheduled refresh and disk-cache reads.' }
+    ],
+    resilienceTesting: 'Repository evidence: PDO prepared statements for SQL injection prevention, CSRF validation on all mutations, brute-force lockout (5 attempts / 10 mins), file upload mime/size validation with random filenames, and PHPUnit test suite configuration.'
+  },
+  'remapp-scraper': {
+    problem: 'Ingest large-scale real estate listings and detail records from the Remapp API without running into rate limits or memory exhaustion, and serve fresh structured property data to downstream CRM systems.',
+    solution: 'A Python batch ingestion worker with retry backoff, incremental state tracking, and JSONL caching, paired with a Node.js/Express API server exposing authenticated endpoints for data retrieval and on-demand refresh triggers.',
+    architectureNotes: 'Repository source: dist/fetch_public_projects.py performs direct HTTP requests to Remapp API endpoints with Bearer auth, exponential backoff (MAX_RETRIES=5), rate-limit recovery (429), and incremental JSONL caching; server.js provides API-key protected REST endpoints (/projects, /projects/:id, /refresh, /refresh/status) serving normalized JSON outputs.',
+    subsystems: [
+      subsystem('rmp-fetcher', 'Resilient API Fetcher', 'worker', 'Ingest project list and detail records', 'Python batch worker calling Remapp API endpoints with automated credential login, retry backoff, and 429 recovery.', ['Python', 'Requests'], -48, -25),
+      subsystem('rmp-state', 'Incremental State Engine', 'database', 'Manage fetch progress and detail cache', 'Incremental state and JSONL detail caching preventing redundant network fetches and supporting resumable sync.', ['JSONL', 'File System'], 0, -36),
+      subsystem('rmp-api', 'Protected Gateway API', 'backend', 'Serve cached data to downstream systems', 'Node.js/Express server exposing authenticated /projects, /projects/:id, /refresh, and /refresh/status endpoints.', ['Node.js', 'Express'], 48, 25, 'HTTPS / REST'),
+      subsystem('rmp-norm', 'Data Normalization Layer', 'backend', 'Structure and format property metadata', 'Normalizes raw API payloads into consistent project schemas and price/handover structures.', ['JavaScript', 'Python'], -25, 38)
+    ],
+    keyDecisions: [
+      { decision: 'Use direct API integration rather than browser scraping', rationale: 'Direct JSON endpoints provide structured data, faster execution, and lower resource overhead.', tradeoff: 'Requires active session token maintenance and auto-login handling.' },
+      { decision: 'Maintain JSONL detail cache with incremental state', rationale: 'Enables resumable fetches and avoids re-querying unchanged project details across runs.', tradeoff: 'Requires local disk storage management and state synchronization.' }
+    ],
+    resilienceTesting: 'Repository evidence: retry backoff with exponential backoff on network/rate-limit failures, memory-conscious batching, API key validation, error logging to JSONL, and unit tests in test/ directory.'
   }
 };
 
+// Aliases mapping canonical original repositories to evidence records
+const repositoryAliases: Record<string, string> = {
+  'towerdesk-backend': 'towerdesk-backend-clean',
+  'towerdesk-backend-clean': 'towerdesk-backend-clean',
+  'tower-desk': 'tower-desk-clean',
+  'tower-desk-clean': 'tower-desk-clean',
+  'binghatti-concierge-app-rn-expo': 'towerdesk-mobile-showcase',
+  'towerdesk-mobile-showcase': 'towerdesk-mobile-showcase',
+  'worthy-crm': 'worthy-crm',
+  'remapp-scraper': 'remapp-scraper'
+};
+
 export function getRepositoryEvidence(repositoryName: string): Evidence | null {
-  return evidenceByRepository[repositoryName.toLowerCase()] || null;
+  const normalized = repositoryName.toLowerCase().trim();
+  const canonicalKey = repositoryAliases[normalized] || normalized;
+  return evidenceByRepository[canonicalKey] || null;
 }
+
