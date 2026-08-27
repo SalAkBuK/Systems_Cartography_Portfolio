@@ -64,7 +64,7 @@ export function analyzeArchitecture(
   const devopsFrameworks = dependencies.frameworks.devops;
 
   // Determine Category and multi-classifications from semantic purpose, documentation, topics, and frameworks
-  const purposeText = `${repoName} ${documentation.challenge?.text || ''} ${documentation.solution?.text || ''} ${(inspection.topics || []).join(' ')}`.toLowerCase();
+  const purposeText = `${repoName} ${inspection.description || ''} ${documentation.challenge?.text || ''} ${documentation.solution?.text || ''} ${(inspection.topics || []).join(' ')}`.toLowerCase();
 
   const strongToolingTopics = [
     'cli', 'devtools', 'developer-tools', 'linter', 'compiler', 'parser',

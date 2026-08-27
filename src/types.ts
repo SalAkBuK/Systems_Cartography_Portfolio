@@ -56,6 +56,7 @@ export interface PerformanceEvidence {
 }
 
 export interface ProjectProvenanceMap {
+  summary?: EvidenceProvenance;
   problem?: EvidenceProvenance;
   solution?: EvidenceProvenance;
   architectureNotes?: EvidenceProvenance;

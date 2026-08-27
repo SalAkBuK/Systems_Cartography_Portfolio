@@ -197,7 +197,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
                       SYSTEM SUMMARY
                     </span>
-                    <ProvenanceBadge provenance={selectedProject.provenance?.problem || 'VERIFIED'} />
+                    <ProvenanceBadge provenance={selectedProject.provenance?.summary || 'VERIFIED'} />
                   </div>
                   <p className="text-[10.5px] text-[#15150F] bg-[#E2DCB9]/70 p-2.5 border border-[#15150F]">
                     {selectedProject.summary}
@@ -241,7 +241,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   <div className="mb-2 p-2 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] flex flex-col gap-1">
                     <div className="flex items-center justify-between">
                       <span className="text-[9px] font-bold text-[#C3E54E] uppercase tracking-wider">
-                        TIER: {selectedProject.category === 'fullstack' ? 'FULL-STACK DISTRIBUTED' : selectedProject.category.toUpperCase()}
+                        TIER: {selectedProject.category === 'fullstack' ? 'FULL-STACK' : selectedProject.category.toUpperCase()}
                       </span>
                       <span className="text-[7.5px] px-1 py-0.5 bg-[#C3E54E] text-[#15150F] font-bold">
                         {selectedProject.techStack.length} TECHNOLOGIES
@@ -249,14 +249,14 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     </div>
                     <div className="text-[8.5px] text-[#A8A48B] leading-tight">
                       {selectedProject.category === 'fullstack' 
-                        ? 'Includes client-side reactive interface, API transaction gateway, and persistence layer.'
+                        ? 'Repository signals indicate both frontend and backend application concerns.'
                         : selectedProject.category === 'backend'
-                        ? 'Focused on server runtime, compute algorithms, and data invariants.'
+                        ? 'Repository signals indicate primarily server-side application concerns.'
                         : selectedProject.category === 'frontend'
-                        ? 'Focused on component architecture, state management, and user rendering.'
+                        ? 'Repository signals indicate primarily client-facing application concerns.'
                         : selectedProject.category === 'infrastructure'
-                        ? 'Focused on orchestration, containerization, networks, and service meshes.'
-                        : 'Focused on developer productivity, CLI interfaces, and compilers.'}
+                        ? 'Repository purpose is classified as infrastructure-oriented.'
+                        : 'Repository purpose is classified as developer/tooling-oriented.'}
                     </div>
                   </div>
 
