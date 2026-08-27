@@ -190,9 +190,9 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         provenance: 'CURATED'
       },
       {
-        area: 'Showcase Hosting & Client Builds',
-        details: 'Configured and maintained frontend showcase builds on Netlify and mobile application builds with EAS Expo.',
-        status: 'SHOWCASE REPOSITORY',
+        area: 'Frontend Hosting & Mobile Build Pipeline',
+        details: 'Configured and maintained TowerDesk frontend deployment on Netlify and mobile application builds through Expo EAS.',
+        status: 'IMPLEMENTED',
         provenance: 'CURATED'
       },
       {
