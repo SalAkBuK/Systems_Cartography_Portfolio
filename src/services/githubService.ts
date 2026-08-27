@@ -71,22 +71,33 @@ export interface GitHubSyncResult {
  * Determine category with deep multi-tier analysis of language, topics, and description
  */
 export function inferCategory(language: string | null, topics: string[] = [], description: string = ''): SystemCategory {
-  const text = `${language || ''} ${topics.join(' ')} ${description}`.toLowerCase();
+  const text = `${topics.join(' ')} ${description}`.toLowerCase();
   
-  // 1. Tooling / Compilers / CLIs / Linters / Testing Workbenches
-  const toolingKeywords = [
-    'workbench', 'resilience', 'testing', 'test runner', 'perturbation',
-    'cli', 'linter', 'compiler', 'interpreter', 'tool', 'bundler', 'vite',
-    'webpack', 'babel', 'esbuild', 'plugin', 'generator', 'sdk', 'devtools',
-    'parser', 'transpiler', 'macro', 'boilerplate', 'starter', 'inspector',
-    'scraper', 'bot', 'crawler', 'fuzzer', 'simulation'
+  // 1. Tooling / Compilers / CLIs / Linters / Testing Workbenches (Strong purpose signals)
+  const strongToolingTopics = [
+    'cli', 'devtools', 'developer-tools', 'linter', 'compiler', 'parser',
+    'generator', 'fuzzer', 'test-runner', 'resilience-testing', 'workbench',
+    'testing-tool', 'benchmarking'
   ];
-  if (toolingKeywords.some(kw => text.includes(kw) || topics.some(t => t.toLowerCase().includes(kw)))) {
+  const strongToolingPhrases = [
+    'testing workbench', 'resilience-testing', 'resilience testing',
+    'chaos engineering', 'developer tool', 'developer tooling', 'devtools',
+    'dev tool', 'cli tool', 'cli utility', 'command line tool', 'command-line interface',
+    'code generator', 'code generation', 'scaffolding tool', 'compiler',
+    'transpiler', 'linter', 'parser', 'ast parser', 'fuzzer', 'profiler',
+    'test runner', 'benchmarking harness'
+  ];
+
+  const hasToolingTopic = topics.some(t => strongToolingTopics.includes(t.toLowerCase()));
+  const hasToolingPhrase = strongToolingPhrases.some(phrase => text.includes(phrase));
+  const isToolingLang = ['shell', 'bash', 'makefile', 'nix', 'lua', 'powershell', 'dockerfile'].includes((language || '').toLowerCase());
+
+  if (hasToolingTopic || hasToolingPhrase) {
     return 'tooling';
   }
 
   // 2. Infrastructure / Cloud Orchestration / Network
-  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'network', 'daemon', 'proxy', 'ebpf', 'nginx', 'envoy', 'cluster', 'mesh', 'cloud-native', 'sysadmin'];
+  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'ebpf', 'cluster', 'mesh', 'cloud-native'];
   if (infraKeywords.some(kw => text.includes(kw) || topics.some(t => t.toLowerCase().includes(kw)))) {
     return 'infrastructure';
   }
@@ -112,6 +123,10 @@ export function inferCategory(language: string | null, topics: string[] = [], de
     return 'backend';
   }
 
+  if (isToolingLang) {
+    return 'tooling';
+  }
+
   // 4. Fallback on primary language heuristics
   const lang = (language || '').toLowerCase();
   if (['go', 'rust', 'c', 'c++', 'zig', 'java', 'kotlin', 'scala', 'c#', 'elixir', 'erlang', 'haskell', 'clojure'].includes(lang)) {
@@ -126,25 +141,36 @@ export function inferCategory(language: string | null, topics: string[] = [], de
   if (['html', 'css', 'vue', 'svelte', 'dart'].includes(lang)) {
     return 'frontend';
   }
-  if (['shell', 'bash', 'makefile', 'nix', 'lua', 'powershell', 'dockerfile'].includes(lang)) {
-    return 'tooling';
-  }
 
   return 'fullstack';
 }
 
 export function inferClassifications(language: string | null, topics: string[] = [], description: string = ''): SystemCategory[] {
   const primary = inferCategory(language, topics, description);
-  const text = `${language || ''} ${topics.join(' ')} ${description}`.toLowerCase();
+  const text = `${topics.join(' ')} ${description}`.toLowerCase();
   const list: SystemCategory[] = [primary];
 
-  const toolingKeywords = ['workbench', 'resilience', 'testing', 'cli', 'tool', 'inspector', 'scraper', 'bot', 'parser', 'generator', 'sdk'];
-  if (toolingKeywords.some(kw => text.includes(kw))) list.push('tooling');
+  const strongToolingTopics = [
+    'cli', 'devtools', 'developer-tools', 'linter', 'compiler', 'parser',
+    'generator', 'fuzzer', 'test-runner', 'resilience-testing', 'workbench',
+    'testing-tool', 'benchmarking'
+  ];
+  const strongToolingPhrases = [
+    'testing workbench', 'resilience-testing', 'resilience testing',
+    'chaos engineering', 'developer tool', 'developer tooling', 'devtools',
+    'dev tool', 'cli tool', 'cli utility', 'command line tool', 'command-line interface',
+    'code generator', 'code generation', 'scaffolding tool', 'compiler',
+    'transpiler', 'linter', 'parser', 'ast parser', 'fuzzer', 'profiler',
+    'test runner', 'benchmarking harness'
+  ];
+  if (topics.some(t => strongToolingTopics.includes(t.toLowerCase())) || strongToolingPhrases.some(phrase => text.includes(phrase))) {
+    list.push('tooling');
+  }
 
   const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure'];
   if (infraKeywords.some(kw => text.includes(kw))) list.push('infrastructure');
 
-  const frontendMarkers = ['react', 'vue', 'svelte', 'tailwind', 'ui', 'frontend', 'dashboard', 'client'];
+  const frontendMarkers = ['react', 'vue', 'svelte', 'tailwind', 'ui', 'frontend', 'dashboard', 'client', 'nextjs', 'next.js'];
   if (frontendMarkers.some(m => text.includes(m))) list.push('frontend');
 
   const backendMarkers = ['api', 'backend', 'server', 'nestjs', 'fastify', 'express', 'database', 'postgres', 'sqlite', 'prisma'];

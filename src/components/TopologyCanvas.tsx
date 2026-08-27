@@ -220,10 +220,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const { nodes, edges } = createTopologyGraph(
       projects,
       activeSkills,
-      [],
       customProjectPositions,
-      customSkillPositions,
-      {}
+      customSkillPositions
     );
 
     let frame = 0;
@@ -279,10 +277,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.currentPos,
       customProjectPositions,
       customSkillPositions,
-      {},
       projects,
       activeSkills,
-      [],
       GRID_SNAP_STEP,
       gridSnapEnabled
     );
@@ -297,10 +293,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.currentPos,
       customProjectPositions,
       customSkillPositions,
-      {},
       projects,
-      activeSkills,
-      []
+      activeSkills
     );
   }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills]);
 
@@ -426,10 +420,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.currentPos,
             customProjectPositions,
             customSkillPositions,
-            {},
             projects,
             activeSkills,
-            [],
             GRID_SNAP_STEP,
             gridSnapEnabled
           );
@@ -504,10 +496,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.currentPos,
             customProjectPositions,
             customSkillPositions,
-            {},
             projects,
             activeSkills,
-            [],
             GRID_SNAP_STEP,
             gridSnapEnabled
           );
