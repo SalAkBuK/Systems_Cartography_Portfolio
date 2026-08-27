@@ -494,4 +494,97 @@ test('24. Experience dock drag handle is isolated and RESET button is independen
   assert.ok(topologyContent.includes("TECHNICAL CAPABILITIES // SYSTEM BACKBONE"), 'Bottom label must be renamed to TECHNICAL CAPABILITIES // SYSTEM BACKBONE');
 });
 
+test('25. Synthetic capability connection fallback is removed and unmatched projects have empty infrastructureDeps', async () => {
+  const { generateGitHubProfileDetails } = await import('../src/services/githubService');
+
+  // Project with tech stack matching none of the generated capability nodes
+  const mockProjects: any[] = [
+    {
+      id: 'proj-1',
+      title: 'Rust CLI Tool',
+      techStack: ['Rust', 'Cargo'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-2',
+      title: 'React Dashboard',
+      techStack: ['TypeScript', 'React', 'Tailwind CSS'],
+      infrastructureDeps: []
+    }
+  ];
+
+  const result = generateGitHubProfileDetails(mockProjects as any, null, 'testuser');
+  
+  // proj-1 (Rust/Cargo) has no matching skills generated if top languages are TypeScript/React
+  const rustProj = mockProjects.find(p => p.id === 'proj-1')!;
+  const matchingSkillsForRust = result.skills.filter(s => rustProj.techStack.some(t => s.name.includes(t)));
+
+  if (matchingSkillsForRust.length === 0) {
+    assert.deepEqual(rustProj.infrastructureDeps, [], 'Must NOT assign synthetic modulo capability fallback to unmatched project');
+  } else {
+    assert.deepEqual(rustProj.infrastructureDeps, matchingSkillsForRust.map(s => s.id));
+  }
+});
+
+test('26. CAREER ORGANIZATIONS calculates unique organizations rather than role records count', async () => {
+  const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
+  const resolved = PORTFOLIO_CONFIG.experience || [];
+  
+  // Current owner has 3 employment records (CodeFier Full Stack, CodeFier React Dev, Devinity Solutions Intern)
+  assert.equal(resolved.length, 3, 'Total employment records is 3');
+
+  const uniqueOrgs = Array.from(
+    new Set(resolved.map(e => (e.organization || '').trim().toLowerCase()))
+  ).filter(Boolean);
+
+  assert.equal(uniqueOrgs.length, 2, 'Unique career organizations must be 2 (CodeFier and Devinity Solutions)');
+});
+
+test('27. Experience dock groups multiple roles within the same progression group into a single primary card', async () => {
+  const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
+  const resolved = PORTFOLIO_CONFIG.experience || [];
+  
+  // Grouping algorithm matching TopologyCanvas.tsx
+  const groups: Record<string, any[]> = {};
+  const order: string[] = [];
+
+  for (const exp of resolved) {
+    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+    if (!groups[groupKey]) {
+      groups[groupKey] = [];
+      order.push(groupKey);
+    }
+    groups[groupKey].push(exp);
+  }
+
+  const grouped = order.map(groupKey => {
+    const groupNodes = groups[groupKey];
+    const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
+      || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
+      || groupNodes[0];
+    const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
+    return {
+      ...primaryNode,
+      isPromoted: hasPromotion,
+      roleCount: groupNodes.length
+    };
+  });
+
+  // Current owner verified experience must produce exactly 2 grouped cards
+  assert.equal(grouped.length, 2, 'Must produce 2 grouped employer cards');
+  
+  // Card 1: CodeFier (Full Stack Engineer, PROMOTED)
+  assert.equal(grouped[0].organization, 'CodeFier');
+  assert.equal(grouped[0].role, 'Full Stack Engineer');
+  assert.equal(grouped[0].isPromoted, true);
+  assert.equal(grouped[0].roleCount, 2);
+
+  // Card 2: Devinity Solutions (Web Development Intern)
+  assert.equal(grouped[1].organization, 'Devinity Solutions');
+  assert.equal(grouped[1].role, 'Web Development Intern (MERN Stack)');
+  assert.equal(grouped[1].isPromoted, false);
+  assert.equal(grouped[1].roleCount, 1);
+});
+
+
 

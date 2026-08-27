@@ -113,6 +113,36 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
+  // Group activeExperience by progressionGroup / organization so one card is shown per company/progression
+  const groupedExperience = useMemo(() => {
+    const groups: Record<string, ExperienceNode[]> = {};
+    const order: string[] = [];
+
+    for (const exp of activeExperience) {
+      const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+        order.push(groupKey);
+      }
+      groups[groupKey].push(exp);
+    }
+
+    return order.map(groupKey => {
+      const groupNodes = groups[groupKey];
+      // Find primary or latest role in progression group (with progressionRoles or highest progressionOrder)
+      const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
+        || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
+        || groupNodes[0];
+      const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
+      const promotionNote = groupNodes.find(n => n.promotionNote)?.promotionNote;
+      return {
+        ...primaryNode,
+        promotionNote: primaryNode.promotionNote || (hasPromotion ? (promotionNote || 'PROMOTED') : undefined),
+        groupedRoleIds: groupNodes.map(n => n.id)
+      };
+    });
+  }, [activeExperience]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -984,7 +1014,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       )}
 
       {/* PROFESSIONAL EXPERIENCE DOCK (Movable Viewport Overlay) */}
-      {activeExperience.length > 0 && (
+      {groupedExperience.length > 0 && (
         <div 
           ref={dockRef}
           style={{ left: `${dockPosition.x}px`, top: `${dockPosition.y}px` }}
@@ -1016,7 +1046,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
             {/* Controls: Career count + Independent Reset button */}
             <div className="flex items-center gap-2 pl-2">
-              <span className="text-[7.5px] text-[#C3E54E] font-mono shrink-0">CAREER // {activeExperience.length}</span>
+              <span className="text-[7.5px] text-[#C3E54E] font-mono shrink-0">CAREER // {groupedExperience.length}</span>
               {isDockMoved && (
                 <button
                   type="button"
@@ -1034,15 +1064,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {activeExperience.map((exp) => {
-              const isSelected = selectedExperienceId === exp.id;
+            {groupedExperience.map((exp) => {
+              const isSelected = selectedExperienceId ? exp.groupedRoleIds.includes(selectedExperienceId) : false;
               const isPromoted = Boolean(exp.promotionNote);
               return (
                 <button
                   key={exp.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSelectExperience(exp.id);
+                    if (selectedExperienceId && exp.groupedRoleIds.includes(selectedExperienceId)) {
+                      onSelectExperience(selectedExperienceId);
+                    } else {
+                      onSelectExperience(exp.id);
+                    }
                   }}
                   className={`px-2.5 py-1 text-left font-mono border transition-all text-[9px] shrink-0 flex items-center gap-2 shadow-[2px_2px_0px_#15150F] cursor-pointer ${
                     isSelected
