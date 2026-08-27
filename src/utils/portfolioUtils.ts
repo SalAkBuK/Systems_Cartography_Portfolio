@@ -2,9 +2,9 @@ import { ExperienceNode, EvidenceProvenance, SystemCategory } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 
 /**
- * Resolves professional experience with deterministic merge and provenance tracking.
- * Precedence: PORTFOLIO_CONFIG.experience -> GitHub/project-derived experience when curated is absent.
- * If both sources are retained, merges deterministically without duplicates and preserves owner curation.
+ * Resolves professional experience with clean source precedence and provenance tracking.
+ * Precedence: Configured professional employment history (CURATED) always wins when present.
+ * GitHub-derived snapshot experience (DERIVED) is only used as a fallback when configured is absent.
  */
 export function resolveExperience(
   configured?: ExperienceNode[],
@@ -16,25 +16,7 @@ export function resolveExperience(
   }));
 
   if (configuredList.length > 0) {
-    const existingIds = new Set(configuredList.map(e => e.id.toLowerCase().trim()));
-    const existingRoleOrgs = new Set(
-      configuredList.map(e => `${e.role.toLowerCase().trim()}::${e.organization.toLowerCase().trim()}`)
-    );
-
-    const nonDuplicateDerived = (gitHubDerived || [])
-      .filter(e => {
-        const idMatch = existingIds.has(e.id.toLowerCase().trim());
-        const roleOrgMatch = existingRoleOrgs.has(
-          `${e.role.toLowerCase().trim()}::${e.organization.toLowerCase().trim()}`
-        );
-        return !idMatch && !roleOrgMatch;
-      })
-      .map(e => ({
-        ...e,
-        provenance: e.provenance || ('DERIVED' as EvidenceProvenance)
-      }));
-
-    return [...configuredList, ...nonDuplicateDerived];
+    return configuredList;
   }
 
   return (gitHubDerived || []).map(e => ({

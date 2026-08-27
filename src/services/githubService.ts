@@ -664,10 +664,10 @@ export function generateGitHubProfileDetails(
   });
 
   // Re-link projects to these skills
-  projects.forEach((p, pIdx) => {
+  projects.forEach((p) => {
     if (skills.length > 0) {
       const linked = skills.filter(s => p.techStack.some(t => s.name.includes(t))).map(s => s.id);
-      p.infrastructureDeps = linked.length > 0 ? linked : [skills[pIdx % skills.length].id];
+      p.infrastructureDeps = linked;
     }
   });
 

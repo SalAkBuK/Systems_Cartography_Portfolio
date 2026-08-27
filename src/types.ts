@@ -287,7 +287,6 @@ export type ActiveView =
   | 'projects'
   | 'experience'
   | 'infrastructure'
-  | 'process'
   | 'contact';
 
 export interface ViewportState {
