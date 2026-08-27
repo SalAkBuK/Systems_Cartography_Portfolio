@@ -36,6 +36,7 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+import { groupExperienceByProgression } from '../utils/portfolioUtils';
 
 export const ProvenanceBadge: React.FC<{ provenance?: EvidenceProvenance }> = ({ provenance = 'VERIFIED' }) => {
   if (provenance === 'CURATED') {
@@ -74,6 +75,7 @@ interface RightInspectorPanelProps {
   selectedSubsystem: SubsystemNode | null;
   onSelectProject: (id: string) => void;
   onSelectSkill: (id: string) => void;
+  onSelectExperience: (id: string) => void;
   onDrillIntoProject: (id: string) => void;
   onOpenCaseStudy: () => void;
   onOpenContact: () => void;
@@ -91,6 +93,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   selectedSubsystem,
   onSelectProject,
   onSelectSkill,
+  onSelectExperience,
   onDrillIntoProject,
   onOpenCaseStudy,
   onOpenContact,
@@ -104,6 +107,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   const uniqueOrganizations = Array.from(
     new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean).length;
+
+  // Shared generic progression grouping (used across Experience Dock and Experience Index)
+  const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
 
   return (
     <aside className="w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden h-72 lg:h-full">
@@ -123,9 +129,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               : activeView === 'projects'
               ? 'PROJECTS // TOPOLOGY OVERVIEW'
               : activeView === 'experience'
-              ? 'CAREER // PROFESSIONAL EXPERIENCE'
+              ? 'CAREER // PROFESSIONAL INDEX'
               : activeView === 'infrastructure'
-              ? 'CAPABILITIES // TECHNICAL OVERVIEW'
+              ? 'CAPABILITIES // TECHNICAL INDEX'
               : 'SYSTEM // SYSTEM OVERVIEW'}
           </span>
         </div>
@@ -518,6 +524,16 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
         {/* CASE 2: SELECTED INFRASTRUCTURE SKILL */}
         {selectedSkill && !selectedProject && (
           <div className="flex flex-col gap-4">
+            {/* Back to Capabilities Index button */}
+            <button
+              type="button"
+              onClick={() => onSelectSkill(selectedSkill.id)}
+              className="flex items-center gap-1.5 py-1 px-2 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] border border-[#15150F] text-[8.5px] font-mono font-bold tracking-wider transition-colors cursor-pointer w-fit shadow-[1px_1px_0px_#15150F]"
+              title="Return to Technical Capabilities Index"
+            >
+              <span>← TECHNICAL CAPABILITIES</span>
+            </button>
+
             <div className="border-b border-[#15150F] pb-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-bold text-[#15150F]">{selectedSkill.code} // {selectedSkill.name}</span>
@@ -614,6 +630,16 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
         {/* CASE 3: SELECTED EXPERIENCE NODE */}
         {selectedExperience && !selectedProject && !selectedSkill && (
           <div className="flex flex-col gap-4">
+            {/* Back to Experience Index button */}
+            <button
+              type="button"
+              onClick={() => onSelectExperience(selectedExperience.id)}
+              className="flex items-center gap-1.5 py-1 px-2 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] border border-[#15150F] text-[8.5px] font-mono font-bold tracking-wider transition-colors cursor-pointer w-fit shadow-[1px_1px_0px_#15150F]"
+              title="Return to Professional Experience Index"
+            >
+              <span>← PROFESSIONAL EXPERIENCE</span>
+            </button>
+
             {/* Header section */}
             <div className="border-b border-[#15150F] pb-2.5 flex flex-col gap-1">
               <div className="flex items-center justify-between">
@@ -1094,50 +1120,128 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 </div>
               </>
             ) : activeView === 'experience' ? (
-              /* --- EXPERIENCE OVERVIEW PROMPT --- */
-              <>
-                <div className="border-b border-[#15150F] pb-2.5">
-                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
-                    PROFESSIONAL DOCK // {uniqueOrganizations} {uniqueOrganizations === 1 ? 'ORGANIZATION' : 'ORGANIZATIONS'}
-                  </span>
-                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
-                    PROFESSIONAL EXPERIENCE OVERVIEW
+              /* --- PROFESSIONAL EXPERIENCE INDEX --- */
+              <div className="flex flex-col gap-3">
+                <div className="border-b border-[#15150F] pb-2 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                      CAREER INDEX // {groupedExperience.length} {groupedExperience.length === 1 ? 'ORGANIZATION' : 'ORGANIZATIONS'}
+                    </span>
+                    <span className="text-[7.5px] font-mono text-[#5C5946]">{experience.length} ROLES RECORDED</span>
+                  </div>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1">
+                    PROFESSIONAL EXPERIENCE INDEX
                   </div>
                 </div>
-                <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
-                  <p>
-                    Professional experience is decoupled from physical topology and rendered in the movable Experience Dock.
-                  </p>
-                  <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
-                    <div>› CLICK EMPLOYER: Focus linked project systems</div>
-                    <div>› CLICK AGAIN: Clear focus and return to neutral</div>
-                    <div>› DRAG DOCK HEADER: Reposition viewport overlay</div>
-                    <div>› CLICK RESET: Restore default top dock position</div>
-                  </div>
+
+                <div className="flex flex-col gap-2">
+                  {groupedExperience.map((org) => {
+                    return (
+                      <button
+                        key={org.id}
+                        onClick={() => onSelectExperience(org.id)}
+                        className="p-2.5 bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-all text-left group shadow-[2px_2px_0px_#15150F] cursor-pointer flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-[11px] uppercase tracking-tight group-hover:text-[#C3E54E]">
+                              {org.code} // {org.organization}
+                            </span>
+                            {org.promotionNote && (
+                              <span className="text-[6.5px] px-1 py-0.2 bg-[#2E6B3A] text-[#D4CDA4] font-bold group-hover:bg-[#C3E54E] group-hover:text-[#15150F]">
+                                PROMOTED
+                              </span>
+                            )}
+                          </div>
+                          <ProvenanceBadge provenance={org.provenance || 'CURATED'} />
+                        </div>
+
+                        <div className="flex flex-col text-[9.5px]">
+                          <span className="font-semibold text-[#15150F] group-hover:text-[#D4CDA4]">
+                            {org.role}
+                          </span>
+                          <span className="text-[8px] text-[#5C5946] group-hover:text-[#A8A48B] font-mono">
+                            {org.organizationTenure}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-[#15150F]/20 group-hover:border-[#D4CDA4]/20 text-[8px] font-mono">
+                          <span className="text-[#5C5946] group-hover:text-[#A8A48B]">
+                            {org.linkedSystemsCount > 0
+                              ? `SYSTEMS LINKED // ${String(org.linkedSystemsCount).padStart(2, '0')}`
+                              : `PROGRESSION // ${org.roleCount} ${org.roleCount === 1 ? 'ROLE' : 'ROLES'}`}
+                          </span>
+                          <span className="font-bold text-[#15150F] group-hover:text-[#C3E54E] flex items-center gap-0.5">
+                            <span>OPEN</span>
+                            <span>→</span>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </>
+
+                <div className="p-1.5 bg-[#CBC59B]/50 border border-[#15150F]/30 text-[7.5px] text-[#5C5946] font-mono">
+                  TIP // EXPERIENCE DOCK CAN ALSO BE REPOSITIONED ON TOPOLOGY
+                </div>
+              </div>
             ) : activeView === 'infrastructure' ? (
-              /* --- TECHNICAL CAPABILITIES OVERVIEW PROMPT --- */
-              <>
-                <div className="border-b border-[#15150F] pb-2.5">
-                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
-                    TECHNICAL CAPABILITIES // {skills.length} MODULES
-                  </span>
-                  <div className="text-[12px] font-bold text-[#15150F] mt-1.5">
-                    SYSTEM CAPABILITIES MATRIX
+              /* --- TECHNICAL CAPABILITIES INDEX --- */
+              <div className="flex flex-col gap-3">
+                <div className="border-b border-[#15150F] pb-2 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold uppercase tracking-wider">
+                      CAPABILITY MATRIX // {skills.length} MODULES
+                    </span>
+                    <span className="text-[7.5px] font-mono text-[#5C5946]">COMMONLY DETECTED TECH</span>
+                  </div>
+                  <div className="text-[12px] font-bold text-[#15150F] mt-1">
+                    TECHNICAL CAPABILITIES INDEX
                   </div>
                 </div>
-                <div className="p-3 border border-[#15150F] bg-[#E2DCB9] text-[9.5px] text-[#22211A] leading-relaxed flex flex-col gap-2">
-                  <p>
-                    Technical capability nodes represent commonly detected technologies and their repository associations.
-                  </p>
-                  <div className="p-2 bg-[#15150F] text-[#D4CDA4] text-[8.5px] font-mono flex flex-col gap-1">
-                    <div>› CLICK CAPABILITY: Focus connected repositories</div>
-                    <div>› CLICK AGAIN: Clear focus and return to neutral</div>
-                    <div>› HOVER CAPABILITY: Preview signal conduits</div>
-                  </div>
+
+                <div className="flex flex-col gap-2">
+                  {skills.map((skill) => {
+                    const associatedProjectsCount = skill.systemCount || skill.usedInProjects.length;
+                    return (
+                      <button
+                        key={skill.id}
+                        onClick={() => onSelectSkill(skill.id)}
+                        className="p-2.5 bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-all text-left group shadow-[2px_2px_0px_#15150F] cursor-pointer flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] uppercase tracking-tight group-hover:text-[#C3E54E]">
+                            {skill.code} // {skill.name}
+                          </span>
+                          <span className="text-[7px] font-bold px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] group-hover:bg-[#C3E54E] group-hover:text-[#15150F] border border-[#15150F] tracking-wider uppercase">
+                            {skill.category.toUpperCase()}
+                          </span>
+                        </div>
+
+                        {skill.primaryUseCases && skill.primaryUseCases.length > 0 && (
+                          <p className="text-[9px] text-[#3D3A2C] group-hover:text-[#D4CDA4] leading-snug line-clamp-2">
+                            {skill.primaryUseCases[0]}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1 border-t border-[#15150F]/20 group-hover:border-[#D4CDA4]/20 text-[8px] font-mono">
+                          <span className="text-[#5C5946] group-hover:text-[#A8A48B]">
+                            REPOSITORY ASSOCIATIONS // {String(associatedProjectsCount).padStart(2, '0')}
+                          </span>
+                          <span className="font-bold text-[#15150F] group-hover:text-[#C3E54E] flex items-center gap-0.5">
+                            <span>OPEN</span>
+                            <span>→</span>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </>
+
+                <div className="p-1.5 bg-[#CBC59B]/50 border border-[#15150F]/30 text-[7.5px] text-[#5C5946] font-mono">
+                  TIP // CLICKING A CAPABILITY HIGHLIGHTS ITS CONDUITS ON THE CANVAS
+                </div>
+              </div>
             ) : (
               /* --- SYSTEM OVERVIEW (Default) --- */
               <>
