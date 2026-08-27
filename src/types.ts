@@ -116,6 +116,77 @@ export interface InfrastructureSkill {
   samplePattern: string;
 }
 
+export interface ArchitectedSystem {
+  id?: string;
+  name: string;
+  description: string;
+  architecturalScope: string[];
+  linkedProjectId?: string;
+  technologies?: string[];
+  provenance?: EvidenceProvenance;
+}
+
+export interface SystemSurface {
+  name: string; // e.g. 'Backend', 'Admin / Web', 'Mobile'
+  role: string;
+  tech: string[];
+  status?: string; // e.g. 'ORIGINAL BACKEND RETIRED', 'FRONTEND SHOWCASE', 'ACTIVE'
+  linkedProjectId?: string;
+  repositoryUrl?: string;
+  showcaseUrl?: string;
+  provenance?: EvidenceProvenance;
+}
+
+export interface DeliveredSystem {
+  id?: string;
+  name: string; // e.g. 'TowerDesk Platform', 'Internal CRM Platform', 'Property Data Ingestion Service'
+  tagline: string;
+  status?: string; // e.g. 'FRONTEND SHOWCASE // ORIGINAL BACKEND RETIRED'
+  surfaces?: SystemSurface[];
+  description: string;
+  capabilities?: string[];
+  dataFlow?: string;
+  linkedProjectIds?: string[];
+  technologies: string[];
+  provenance?: EvidenceProvenance;
+}
+
+export interface EngineeringContribution {
+  title: string;
+  description: string;
+  impactArea?: string;
+  technologies?: string[];
+  provenance?: EvidenceProvenance;
+}
+
+export interface InfrastructureOperation {
+  area: string;
+  details: string;
+  status?: string;
+  provenance?: EvidenceProvenance;
+}
+
+export interface ExperienceEvidenceLink {
+  label: string;
+  type: 'repository' | 'showcase' | 'case_study' | 'documentation' | 'external';
+  url?: string;
+  projectId?: string;
+  note?: string;
+}
+
+export interface OwnerExperienceEvidence {
+  organizationId: string; // matches organization name, slug, or progressionGroup
+  organizationName?: string;
+  architectedSystems?: ArchitectedSystem[];
+  systemsDelivered?: DeliveredSystem[];
+  engineeringContributions?: EngineeringContribution[];
+  infrastructureOperations?: InfrastructureOperation[];
+  evidenceLinks?: ExperienceEvidenceLink[];
+  technologies?: string[];
+  gridPosition?: { x: number; y: number };
+  provenance?: EvidenceProvenance;
+}
+
 export interface ExperienceNode {
   id: string;
   code: string;
@@ -138,6 +209,14 @@ export interface ExperienceNode {
   /** Oldest role is 1; later promotions increment within the same organization. */
   progressionOrder?: number;
   promotionNote?: string;
+
+  // Curated Professional Evidence Overlay fields
+  architectedSystemsDetails?: ArchitectedSystem[];
+  systemsDelivered?: DeliveredSystem[];
+  engineeringContributions?: EngineeringContribution[];
+  infrastructureOperations?: InfrastructureOperation[];
+  evidenceLinks?: ExperienceEvidenceLink[];
+  progressionRoles?: ExperienceNode[];
 }
 
 export interface GeneratedOwnerProfile {

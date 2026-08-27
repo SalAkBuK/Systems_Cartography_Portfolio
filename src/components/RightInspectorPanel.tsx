@@ -603,61 +603,349 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
         {/* CASE 3: SELECTED EXPERIENCE NODE */}
         {selectedExperience && !selectedProject && !selectedSkill && (
           <div className="flex flex-col gap-4">
-            <div className="border-b border-[#15150F] pb-2.5">
+            {/* Header section */}
+            <div className="border-b border-[#15150F] pb-2.5 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#15150F]">{selectedExperience.code} // {selectedExperience.role}</span>
+                <span className="text-[13px] font-bold text-[#15150F]">
+                  {selectedExperience.code} // {selectedExperience.organization}
+                </span>
                 <ProvenanceBadge provenance={selectedExperience.provenance || 'CURATED'} />
               </div>
-              <div className="text-[10px] text-[#3D3A2C] font-semibold mt-0.5">
-                {selectedExperience.organization} · {selectedExperience.location}
+              <div className="flex items-center gap-1.5 text-[10px] text-[#3D3A2C] font-semibold">
+                <span>{selectedExperience.role}</span>
+                <span>·</span>
+                <span>{selectedExperience.location}</span>
               </div>
-              <div className="text-[9px] text-[#5C5946] mt-0.5">
-                TIMEFRAME: {selectedExperience.yearRange}
-              </div>
-            </div>
-
-            {/* Key Deliverables */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                SYSTEM OUTPUTS &amp; DELIVERABLES
-              </div>
-              <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-1.5">
-                {selectedExperience.keyOutputs.map((out, i) => (
-                  <div key={i} className="flex items-start gap-1.5 text-[9.5px]">
-                    <span className="text-[#2E6B3A] font-bold">✓</span>
-                    <span className="text-[#22211A]">{out}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Systems Architected */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                SYSTEMS ARCHITECTED
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {selectedExperience.systemsArchitected.map(sys => (
-                  <span key={sys} className="px-2 py-1 bg-[#E2DCB9] border border-[#15150F] text-[9.5px] font-semibold">
-                    {sys}
+              <div className="flex items-center justify-between text-[9px] text-[#5C5946] mt-0.5 font-mono">
+                <span>TIMEFRAME: {selectedExperience.yearRange}</span>
+                {selectedExperience.promotionNote && (
+                  <span className="text-[7.5px] px-1 py-0.2 bg-[#2E6B3A] text-[#D4CDA4] font-bold">
+                    ↑ {selectedExperience.promotionNote}
                   </span>
-                ))}
+                )}
               </div>
             </div>
 
-            {/* Technologies */}
-            <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                TECHNOLOGY SURFACE
+            {/* 1. CAREER PROGRESSION TIMELINE (When multiple roles in progressionGroup) */}
+            {selectedExperience.progressionRoles && selectedExperience.progressionRoles.length > 1 && (
+              <div>
+                <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>CAREER PROGRESSION // TIMELINE</span>
+                  <span className="text-[7.5px] opacity-75">{selectedExperience.progressionRoles.length} ROLES</span>
+                </div>
+                <div className="flex flex-col border border-[#15150F] bg-[#E2DCB9]/40 divide-y divide-[#15150F]/30">
+                  {selectedExperience.progressionRoles.map((r, i) => (
+                    <div key={r.id || i} className="p-2.5 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[10.5px] text-[#15150F]">
+                          {r.role}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {r.endDate === null && (
+                            <span className="text-[7.5px] px-1 bg-[#15150F] text-[#C3E54E] font-bold">
+                              CURRENT
+                            </span>
+                          )}
+                          {r.promotionNote && (
+                            <span className="text-[7.5px] px-1 bg-[#2E6B3A] text-[#D4CDA4] font-bold">
+                              ↑ PROMOTED
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-[8.5px] font-mono text-[#5C5946]">
+                        {r.yearRange}
+                      </div>
+                      {r.keyOutputs && r.keyOutputs.length > 0 && (
+                        <p className="text-[9px] text-[#3D3A2C] leading-snug mt-0.5">
+                          {r.keyOutputs[0]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1">
-                {selectedExperience.technologies.map(t => (
-                  <span key={t} className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
-                    {t}
+            )}
+
+            {/* 2. SYSTEMS ARCHITECTED (High Evidentiary Bar) */}
+            {((selectedExperience.architectedSystemsDetails && selectedExperience.architectedSystemsDetails.length > 0) ||
+              (selectedExperience.systemsArchitected && selectedExperience.systemsArchitected.length > 0)) && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                    SYSTEMS ARCHITECTED
                   </span>
-                ))}
+                  <span className="text-[7.5px] px-1 bg-[#15150F] text-[#C3E54E] font-bold">
+                    HIGH BAR
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {selectedExperience.architectedSystemsDetails && selectedExperience.architectedSystemsDetails.length > 0 ? (
+                    selectedExperience.architectedSystemsDetails.map((arch, idx) => (
+                      <div key={idx} className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[10px] text-[#15150F]">{arch.name}</span>
+                          <ProvenanceBadge provenance={arch.provenance || 'VERIFIED'} />
+                        </div>
+                        <p className="text-[9.5px] text-[#22211A] leading-snug">
+                          {arch.description}
+                        </p>
+                        {arch.architecturalScope && arch.architecturalScope.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-1 border-t border-[#15150F]/20">
+                            {arch.architecturalScope.map((sc, i) => (
+                              <span key={i} className="text-[7.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
+                                {sc}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {arch.linkedProjectId && (
+                          <button
+                            onClick={() => onSelectProject(arch.linkedProjectId!)}
+                            className="mt-1 flex items-center justify-between px-2 py-1 bg-[#CBC59B] border border-[#15150F] text-[8.5px] font-bold hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors cursor-pointer text-left"
+                          >
+                            <span>INSPECT ARCHITECTURE REPO: {arch.linkedProjectId}</span>
+                            <ArrowUpRight size={10} />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedExperience.systemsArchitected.map(sys => (
+                        <span key={sys} className="px-2 py-1 bg-[#E2DCB9] border border-[#15150F] text-[9.5px] font-semibold">
+                          {sys}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* 3. PROFESSIONAL SYSTEMS DELIVERED */}
+            {selectedExperience.systemsDelivered && selectedExperience.systemsDelivered.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider">
+                    PROFESSIONAL SYSTEMS DELIVERED ({selectedExperience.systemsDelivered.length})
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {selectedExperience.systemsDelivered.map((del, dIdx) => (
+                    <div key={dIdx} className="p-2.5 border border-[#15150F] bg-[#E2DCB9]/80 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[10.5px] text-[#15150F]">{del.name}</span>
+                        <ProvenanceBadge provenance={del.provenance || 'CURATED'} />
+                      </div>
+                      {del.status && (
+                        <div className="text-[7.5px] font-bold text-[#7A3E2E] bg-[#EFEAD0] px-1.5 py-0.5 border border-[#15150F]/30 w-fit">
+                          STATUS: {del.status}
+                        </div>
+                      )}
+                      <p className="text-[9.5px] text-[#3D3A2C] leading-snug">
+                        {del.description || del.tagline}
+                      </p>
+
+                      {/* Data Flow Diagram (if present) */}
+                      {del.dataFlow && (
+                        <div className="p-2 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] text-[8px] font-mono leading-relaxed">
+                          <span className="text-[#C3E54E] font-bold block mb-0.5">DATA INGESTION PIPELINE:</span>
+                          {del.dataFlow}
+                        </div>
+                      )}
+
+                      {/* Capabilities (if present) */}
+                      {del.capabilities && del.capabilities.length > 0 && (
+                        <div className="flex flex-col gap-0.5 pt-1 border-t border-[#15150F]/20">
+                          <span className="text-[7.5px] font-bold opacity-60 uppercase">SYSTEM CAPABILITIES:</span>
+                          {del.capabilities.map((cap, cIdx) => (
+                            <div key={cIdx} className="flex items-start gap-1 text-[8.5px] text-[#22211A]">
+                              <span className="text-[#2E6B3A] font-bold">▪</span>
+                              <span>{cap}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Surface Breakdown Tree (e.g. Backend, Admin Web, Mobile) */}
+                      {del.surfaces && del.surfaces.length > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1 border-t border-[#15150F]/20">
+                          <span className="text-[7.5px] font-bold opacity-60 uppercase">PLATFORM SURFACES:</span>
+                          <div className="divide-y divide-[#15150F]/20 bg-[#DCD6B2]/60 border border-[#15150F]/30">
+                            {del.surfaces.map((sfc, sIdx) => (
+                              <div key={sIdx} className="p-2 flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-[9.5px] text-[#15150F]">
+                                    {sIdx === del.surfaces!.length - 1 ? '└──' : '├──'} {sfc.name}
+                                  </span>
+                                  {sfc.status && (
+                                    <span className="text-[7px] px-1 bg-[#15150F] text-[#C3E54E] font-bold">
+                                      {sfc.status}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[8.5px] text-[#5C5946] leading-snug pl-3">
+                                  {sfc.role}
+                                </p>
+                                <div className="flex flex-wrap gap-1 pl-3 mt-0.5">
+                                  {sfc.tech.map(t => (
+                                    <span key={t} className="text-[7px] px-1 bg-[#E2DCB9] text-[#15150F] border border-[#15150F]/30 font-mono">
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                                {sfc.linkedProjectId && (
+                                  <div className="pl-3 mt-1">
+                                    <button
+                                      onClick={() => onSelectProject(sfc.linkedProjectId!)}
+                                      className="flex items-center gap-1 px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] text-[7.5px] font-bold transition-colors cursor-pointer"
+                                    >
+                                      <span>INSPECT {sfc.linkedProjectId}</span>
+                                      <ArrowUpRight size={9} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. MAJOR ENGINEERING CONTRIBUTIONS */}
+            {((selectedExperience.engineeringContributions && selectedExperience.engineeringContributions.length > 0) ||
+              (selectedExperience.keyOutputs && selectedExperience.keyOutputs.length > 0)) && (
+              <div>
+                <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                  ENGINEERING CONTRIBUTIONS &amp; DELIVERABLES
+                </div>
+                <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] flex flex-col gap-2">
+                  {selectedExperience.engineeringContributions && selectedExperience.engineeringContributions.length > 0 ? (
+                    selectedExperience.engineeringContributions.map((contrib, i) => (
+                      <div key={i} className="flex flex-col gap-0.5 border-b border-[#15150F]/20 pb-1.5 last:border-b-0 last:pb-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1 text-[9.5px] font-bold text-[#15150F]">
+                            <span className="text-[#2E6B3A]">✓</span>
+                            <span>{contrib.title}</span>
+                          </div>
+                          <ProvenanceBadge provenance={contrib.provenance || 'CURATED'} />
+                        </div>
+                        <p className="text-[9px] text-[#22211A] leading-snug pl-3">
+                          {contrib.description}
+                        </p>
+                        {contrib.impactArea && (
+                          <div className="pl-3 mt-0.5">
+                            <span className="text-[7px] px-1 bg-[#15150F] text-[#8EA9DA] font-mono">
+                              IMPACT: {contrib.impactArea}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    selectedExperience.keyOutputs.map((out, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[9.5px]">
+                        <span className="text-[#2E6B3A] font-bold">✓</span>
+                        <span className="text-[#22211A]">{out}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 5. INFRASTRUCTURE & OPERATIONS */}
+            {selectedExperience.infrastructureOperations && selectedExperience.infrastructureOperations.length > 0 && (
+              <div>
+                <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                  INFRASTRUCTURE &amp; OPERATIONS
+                </div>
+                <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9]/60 flex flex-col gap-2">
+                  {selectedExperience.infrastructureOperations.map((infra, i) => (
+                    <div key={i} className="flex flex-col gap-0.5 border-b border-[#15150F]/20 pb-1.5 last:border-b-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9.5px] font-bold text-[#15150F]">
+                          0{i + 1} // {infra.area}
+                        </span>
+                        {infra.status && (
+                          <span className="text-[7px] px-1 bg-[#15150F] text-[#C3E54E] font-bold">
+                            {infra.status}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-[#3D3A2C] leading-snug">
+                        {infra.details}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 6. EVIDENCE & PROJECT REPOSITORY LINKS */}
+            {selectedExperience.evidenceLinks && selectedExperience.evidenceLinks.length > 0 && (
+              <div>
+                <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                  CONNECTED EVIDENCE REPOSITORIES ({selectedExperience.evidenceLinks.length})
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {selectedExperience.evidenceLinks.map((link, i) => (
+                    <div key={i} className="flex flex-col gap-1 p-2 bg-[#E2DCB9] border border-[#15150F]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[9.5px]">{link.label}</span>
+                        <span className="text-[7.5px] px-1 bg-[#15150F] text-[#8EA9DA] uppercase font-bold">
+                          {link.type}
+                        </span>
+                      </div>
+                      {link.note && <p className="text-[8.5px] text-[#5C5946]">{link.note}</p>}
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {link.projectId && (
+                          <button
+                            onClick={() => onSelectProject(link.projectId!)}
+                            className="flex-1 py-1 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] font-bold text-[8px] tracking-wider transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>INSPECT ON TOPOLOGY</span>
+                            <ArrowUpRight size={10} />
+                          </button>
+                        )}
+                        {link.url && (
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="py-1 px-2 bg-[#CBC59B] text-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] font-bold text-[8px] tracking-wider border border-[#15150F] transition-colors flex items-center gap-1"
+                          >
+                            <Github size={10} />
+                            <span>GITHUB</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 7. TECHNOLOGY SURFACE */}
+            {selectedExperience.technologies && selectedExperience.technologies.length > 0 && (
+              <div>
+                <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
+                  TECHNOLOGY SURFACE
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedExperience.technologies.map(t => (
+                    <span key={t} className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] font-bold">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
