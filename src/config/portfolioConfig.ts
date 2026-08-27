@@ -1,5 +1,6 @@
 import { ExperienceNode, OperatorMetadata } from '../types';
 import { OWNER_PROFILE } from '../data/ownerProfile.generated';
+import { resolveProfessionalExperience } from '../services/experienceResolver';
 
 const githubTarget = OWNER_PROFILE.githubTarget.replace(/\/$/, '');
 const githubUsername = githubTarget.split('/').filter(Boolean).pop() || 'owner';
@@ -57,5 +58,5 @@ export const PORTFOLIO_CONFIG: {
   projectLinks: {
     // Optional manual override. GitHub repository Website/Homepage remains the fallback.
   },
-  experience: OWNER_PROFILE.experience
+  experience: resolveProfessionalExperience({ importedExperience: OWNER_PROFILE.experience })
 };

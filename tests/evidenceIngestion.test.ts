@@ -37,7 +37,7 @@ const repo: GitHubRepoRaw = {
 };
 
 test('owner identity and GitHub source live in one self-hosting configuration', () => {
-  assert.equal(PORTFOLIO_CONFIG.operator.name, 'Salih Mohammad Bukhari');
+  assert.equal(PORTFOLIO_CONFIG.operator.name, 'Salih Bukhari');
   assert.equal(PORTFOLIO_CONFIG.githubTarget, 'https://github.com/SalAkBuK');
   assert.equal(PORTFOLIO_CONFIG.operator.contact.github, 'https://github.com/SalAkBuK');
 });
