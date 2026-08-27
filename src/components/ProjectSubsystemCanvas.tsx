@@ -11,7 +11,8 @@ import {
   Shield,
   Zap,
   Radio,
-  FileText
+  FileText,
+  ExternalLink
 } from 'lucide-react';
 import { ProjectData, SubsystemNode } from '../types';
 import { project3DToIso } from './TopologyCanvas';
@@ -69,6 +70,17 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {project.links.demo && (
+            <a
+              href={project.links.demo}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1 text-[9.5px] font-bold uppercase bg-[#C3E54E] text-[#15150F] border border-precision hover:bg-[#B2D63B] transition-colors"
+            >
+              <ExternalLink size={11} />
+              <span>LIVE SYSTEM</span>
+            </a>
+          )}
           <button
             onClick={onOpenCaseStudy}
             className="flex items-center gap-1 px-2.5 py-1 text-[9.5px] font-bold uppercase bg-[#E2DCB9] border border-precision hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
