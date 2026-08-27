@@ -499,4 +499,47 @@ test('createTopologyGraph operates strictly on projects and skills without accep
   }
 });
 
+test('summary provenance is VERIFIED from GitHub metadata while challenge and solution remain UNAVAILABLE', () => {
+  const physioBotRepo: GitHubRepoRaw = {
+    ...repo,
+    id: 70,
+    name: 'physio_bot',
+    full_name: 'SalAkBuK/physio_bot',
+    html_url: 'https://github.com/SalAkBuK/physio_bot',
+    description: 'Whatsapp Bot for Physio appointments automations with google sheets x n8n',
+    language: 'JavaScript',
+    topics: ['n8n', 'whatsapp']
+  };
+
+  const project = transformGitHubRepoToProject(physioBotRepo, 0, 1);
+
+  // Summary accurately sourced from GitHub metadata has VERIFIED provenance
+  assert.equal(project.provenance?.summary, 'VERIFIED', 'System summary provenance must be VERIFIED from GitHub metadata');
+  
+  // Without inspected challenge/solution or curated evidence, engineering challenge and solution remain UNAVAILABLE
+  assert.equal(project.provenance?.problem, 'UNAVAILABLE', 'Engineering challenge must remain UNAVAILABLE without evidence');
+  assert.equal(project.provenance?.solution, 'UNAVAILABLE', 'Architectural solution must remain UNAVAILABLE without evidence');
+  assert.ok(project.summary.includes('Whatsapp Bot for Physio appointments automations'));
+});
+
+test('uninspected repository with strong tooling phrase in GitHub description classifies as tooling', () => {
+  const cliToolRepo: GitHubRepoRaw = {
+    ...repo,
+    id: 71,
+    name: 'schema-validator',
+    full_name: 'SalAkBuK/schema-validator',
+    html_url: 'https://github.com/SalAkBuK/schema-validator',
+    description: 'A developer tool and CLI tool for validating Prisma models and database migrations',
+    language: 'TypeScript',
+    topics: []
+  };
+
+  // Transformed without deep inspection (inspectionParam undefined)
+  const project = transformGitHubRepoToProject(cliToolRepo, 0, 1);
+
+  assert.equal(project.category, 'tooling', 'Repo with CLI tool / developer tool in description must classify as tooling');
+  assert.equal(matchesProjectClassification(project, 'tooling'), true);
+});
+
+
 

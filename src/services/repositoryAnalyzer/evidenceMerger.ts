@@ -185,6 +185,7 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
   };
 
   const provenanceMap: ProjectProvenanceMap = {
+    summary: 'VERIFIED',
     problem: problemProvenance,
     solution: solutionProvenance,
     architectureNotes: architectureProvenance,
