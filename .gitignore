@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# One-time owner setup input. Generated profile data is committed; source PDFs are not.
+imports/*.pdf
