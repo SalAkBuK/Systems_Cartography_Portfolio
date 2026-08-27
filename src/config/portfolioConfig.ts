@@ -1,8 +1,19 @@
 import { ExperienceNode, OperatorMetadata } from '../types';
+import { OWNER_PROFILE } from '../data/ownerProfile.generated';
+
+const githubTarget = OWNER_PROFILE.githubTarget.replace(/\/$/, '');
+const githubUsername = githubTarget.split('/').filter(Boolean).pop() || 'owner';
+const ownerName = OWNER_PROFILE.operator.name || 'Portfolio Owner';
+const ownerRole = OWNER_PROFILE.operator.role || 'Software Developer';
+const siteOwnerId = ownerName
+  .toUpperCase()
+  .replace(/[^A-Z0-9]+/g, '.')
+  .replace(/^\.+|\.+$/g, '') || 'OWNER';
 
 /**
- * Fork owners should only need to edit this file and, optionally, .env.
- * Public repository data is loaded automatically from githubTarget.
+ * Fork owners normally run `npm run setup -- <linkedin-profile.pdf>` once.
+ * That command generates ownerProfile.generated.ts and infers githubTarget from
+ * the fork's git remote. Manual edits here are only needed for optional overrides.
  */
 export const PORTFOLIO_CONFIG: {
   siteId: string;
@@ -12,38 +23,31 @@ export const PORTFOLIO_CONFIG: {
   templateRepositoryUrl: string;
   contactFormEndpoint: string;
   operator: OperatorMetadata;
-  /**
-   * Optional manual override for deployed project links (e.g. { 'repo-name': 'https://myapp.vercel.app' }).
-   * Note: The portfolio also automatically ingests the "Website" / "Homepage" field from GitHub repository settings.
-   */
   projectLinks?: Record<string, string>;
-  /**
-   * Optional list of verified professional / employment experiences (e.g. from LinkedIn / career history).
-   */
   experience?: ExperienceNode[];
 } = {
-  siteId: 'SALIH.SYSTEMS.PORTFOLIO',
-  pageTitle: 'Salih Mohammad Bukhari // Systems Cartography',
-  metaDescription: 'Public GitHub systems portfolio of full-stack developer Salih Mohammad Bukhari.',
-  githubTarget: 'https://github.com/SalAkBuK',
+  siteId: `${siteOwnerId}.SYSTEMS.PORTFOLIO`,
+  pageTitle: `${ownerName} // Systems Cartography`,
+  metaDescription: `Public GitHub systems portfolio of ${ownerRole} ${ownerName}.`,
+  githubTarget,
   templateRepositoryUrl: 'https://github.com/SalAkBuK/Systems_Cartography_Portfolio',
   contactFormEndpoint: (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_CONTACT_FORM_ENDPOINT?.trim() || '',
   operator: {
-    name: 'Salih Mohammad Bukhari',
-    handle: '@SalAkBuK',
-    role: 'Full-Stack Developer',
-    location: 'Rawalpindi, Pakistan',
-    status: 'GITHUB VERIFIED // AVAILABLE BY INQUIRY',
-    focus: 'Product-oriented web and mobile systems spanning frontend, mobile, backend APIs, and data flows.',
+    name: ownerName,
+    handle: `@${githubUsername}`,
+    role: ownerRole,
+    location: OWNER_PROFILE.operator.location,
+    status: 'OWNER CURATED // AVAILABLE BY INQUIRY',
+    focus: OWNER_PROFILE.operator.focus,
     yearsActive: 0,
     commitsIndexed: 'Not indexed',
     productionUptime: 'Not claimed',
-    primaryStack: ['JavaScript / TypeScript', 'React', 'React Native', 'Node.js', 'NestJS', 'PostgreSQL'],
-    systemManifesto: 'Hands-on developer building modern web and mobile products with React, React Native, Node.js, and NestJS, with a focus on end-to-end product delivery, API design, and scalable backend architecture.',
+    primaryStack: [...OWNER_PROFILE.operator.primaryStack],
+    systemManifesto: OWNER_PROFILE.operator.systemManifesto,
     contact: {
-      email: 'bukharian1776@gmail.com',
-      github: 'https://github.com/SalAkBuK',
-      linkedin: 'https://www.linkedin.com/in/salih-bukhari-33439b194/',
+      email: OWNER_PROFILE.operator.contact.email,
+      github: githubTarget,
+      linkedin: OWNER_PROFILE.operator.contact.linkedin,
       pgpKeyId: '',
       pgpFingerprint: '',
       matrix: '',
@@ -51,27 +55,7 @@ export const PORTFOLIO_CONFIG: {
     }
   },
   projectLinks: {
-    // Example:
-    // 'tower-desk-clean': 'https://towerdesk.example.com',
-    // 'pillcheck': 'https://pillcheck.example.com'
+    // Optional manual override. GitHub repository Website/Homepage remains the fallback.
   },
-  experience: [
-    // Example:
-    // {
-    //   id: 'exp-01',
-    //   code: 'EXP-01',
-    //   role: 'Full-Stack Developer',
-    //   organization: 'Company Name',
-    //   location: 'Rawalpindi, Pakistan',
-    //   yearRange: '2023 - PRESENT',
-    //   systemDomain: 'Web & Mobile Systems',
-    //   keyOutputs: [
-    //     'Architected multi-tenant backend services using NestJS and PostgreSQL',
-    //     'Delivered cross-platform client applications using React Native and Next.js'
-    //   ],
-    //   systemsArchitected: ['TowerDesk Property Management', 'Mobile Ingress Portal'],
-    //   technologies: ['TypeScript', 'NestJS', 'React', 'React Native', 'PostgreSQL'],
-    //   gridPosition: { x: -140, y: -40 }
-    // }
-  ]
+  experience: OWNER_PROFILE.experience
 };
