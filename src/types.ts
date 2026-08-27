@@ -67,25 +67,25 @@ export interface ProjectProvenanceMap {
 
 export interface ProjectData {
   id: string;
-  code: string; // e.g. 'P01'
+  code: string;
   title: string;
   tagline: string;
   category: SystemCategory;
   status: SystemStatus;
   year: string;
   dimensions: {
-    width: number;  // scope
-    height: number; // depth/complexity
-    levels: number; // stacked tiers
+    width: number;
+    height: number;
+    levels: number;
   };
-  gridPosition: { x: number; y: number }; // isometric coordinates
+  gridPosition: { x: number; y: number };
   accentColor: string;
   summary: string;
   problem: string;
   solution: string;
   architectureNotes: string;
   techStack: string[];
-  infrastructureDeps: string[]; // IDs of connected skills/infra
+  infrastructureDeps: string[];
   subsystems: SubsystemNode[];
   metrics: { label: string; value: string; note?: string; provenance?: EvidenceProvenance }[];
   keyDecisions: KeyDecision[];
@@ -103,14 +103,14 @@ export interface ProjectData {
 
 export interface InfrastructureSkill {
   id: string;
-  code: string; // e.g. 'INF-01'
+  code: string;
   name: string;
   category: SystemCategory;
   yearsActive: number;
-  proficiencyScore: number; // 1-100
+  proficiencyScore: number;
   gridPosition: { x: number; y: number };
   systemCount: number;
-  usedInProjects: string[]; // Project IDs
+  usedInProjects: string[];
   primaryUseCases: string[];
   technicalHighlights: string[];
   samplePattern: string;
@@ -118,7 +118,7 @@ export interface InfrastructureSkill {
 
 export interface ExperienceNode {
   id: string;
-  code: string; // e.g. 'EXP-01'
+  code: string;
   yearRange: string;
   role: string;
   organization: string;
@@ -129,6 +129,43 @@ export interface ExperienceNode {
   technologies: string[];
   gridPosition: { x: number; y: number };
   provenance?: EvidenceProvenance;
+  /** ISO YYYY-MM chronology emitted by the one-time profile importer. */
+  startDate?: string;
+  /** Null means the role is current. */
+  endDate?: string | null;
+  /** Shared slug for consecutive roles at the same organization. */
+  progressionGroup?: string;
+  /** Oldest role is 1; later promotions increment within the same organization. */
+  progressionOrder?: number;
+  promotionNote?: string;
+}
+
+export interface GeneratedOwnerProfile {
+  source: {
+    kind: 'linkedin_pdf';
+    importedAt: string;
+    reviewed: boolean;
+    warnings: string[];
+  };
+  /** Normally inferred from the fork's git remote during setup. */
+  githubTarget: string;
+  operator: {
+    name: string;
+    role: string;
+    location: string;
+    focus: string;
+    primaryStack: string[];
+    systemManifesto: string;
+    contact: {
+      email: string;
+      linkedin: string;
+    };
+  };
+  experience: ExperienceNode[];
+  skills: string[];
+  certifications: string[];
+  /** Kept raw when LinkedIn's PDF does not provide enough structure to merge safely. */
+  education: { raw: string }[];
 }
 
 export interface ArchitecturePrinciple {
