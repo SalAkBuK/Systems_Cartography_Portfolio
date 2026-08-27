@@ -388,3 +388,229 @@ test('17. Freshly generated ownerProfile.generated.ts from actual importer compi
   assert.equal(resolved[0].role, 'Full Stack Engineer');
   assert.ok(resolved[0].systemsDelivered && resolved[0].systemsDelivered.length >= 3);
 });
+
+test('18. Zero ExperienceNode or experience physics exist in forceLayout or collision services', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  const forceLayoutContent = fs.readFileSync(path.resolve('src/utils/forceLayout.ts'), 'utf8');
+  const collisionContent = fs.readFileSync(path.resolve('src/utils/collision.ts'), 'utf8');
+
+  assert.ok(!forceLayoutContent.includes('ExperienceNode'), 'forceLayout must NOT import or process ExperienceNode');
+  assert.ok(!forceLayoutContent.includes('customExpPositions'), 'forceLayout must NOT track customExpPositions');
+  assert.ok(!forceLayoutContent.includes('experienceForce'), 'forceLayout must NOT include experience physics forces');
+  assert.ok(!collisionContent.includes('ExperienceNode'), 'collision service must NOT process ExperienceNode');
+});
+
+test('19. Viewport overlay dock clamping boundaries math clamps coordinates within safe margins', () => {
+  const clampDock = (
+    pos: { x: number; y: number },
+    containerW: number,
+    containerH: number,
+    dockW: number,
+    dockH: number
+  ) => {
+    const margin = 12;
+    const maxX = Math.max(margin, containerW - dockW - margin);
+    const maxY = Math.max(margin, containerH - dockH - margin);
+    return {
+      x: Math.min(Math.max(margin, Math.round(pos.x)), maxX),
+      y: Math.min(Math.max(margin, Math.round(pos.y)), maxY)
+    };
+  };
+
+  // 1. Normal position within bounds
+  assert.deepEqual(clampDock({ x: 100, y: 150 }, 1000, 700, 300, 60), { x: 100, y: 150 });
+
+  // 2. Negative coordinates clamped to safe margin (12)
+  assert.deepEqual(clampDock({ x: -100, y: -50 }, 1000, 700, 300, 60), { x: 12, y: 12 });
+
+  // 3. Overflowing coordinates clamped to container bounds (1000 - 300 - 12 = 688, 700 - 60 - 12 = 628)
+  assert.deepEqual(clampDock({ x: 1500, y: 900 }, 1000, 700, 300, 60), { x: 688, y: 628 });
+
+  // 4. Smaller mobile screen clamping
+  assert.deepEqual(clampDock({ x: 300, y: 400 }, 360, 600, 300, 60), { x: 48, y: 400 });
+});
+
+test('20. System overview includes 4 verified architecture principles and process navigation is removed', async () => {
+  const { VERIFIED_ARCHITECTURE_PRINCIPLES } = await import('../src/data/verifiedPortfolioData');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES.length, 4, 'Must maintain 4 core evidence principles');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[0].number, '01');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[0].title, 'Repository Evidence Before Claims');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[3].number, '04');
+  assert.equal(VERIFIED_ARCHITECTURE_PRINCIPLES[3].title, 'Show Unknowns Honestly');
+});
+
+test('21. System Overview and Operator Profile have distinct structural content and view semantics', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
+
+  // Verify activeView is passed and inspected in RightInspectorPanel
+  assert.ok(panelContent.includes("activeView === 'identity'"), 'RightInspectorPanel must branch on identity view');
+  assert.ok(panelContent.includes("OPERATOR // PROFILE CONSOLE"), 'Title bar must show OPERATOR // PROFILE CONSOLE for identity view');
+  assert.ok(panelContent.includes("SYSTEM // SYSTEM OVERVIEW"), 'Title bar must show SYSTEM // SYSTEM OVERVIEW for system overview');
+  assert.ok(panelContent.includes("CAREER FOOTPRINT // SUMMARY"), 'Identity view must show concise career footprint snapshot');
+  assert.ok(panelContent.includes("EVIDENCE CLASSIFICATION TAXONOMY"), 'System overview must show evidence taxonomy');
+});
+
+test('22. Technical Capabilities and Experience views support neutral tab switching and toggle-off', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  const normalizedApp = appContent.replace(/\r\n/g, '\n');
+
+  // Verify skill toggle-off logic
+  assert.ok(normalizedApp.includes("if (selectedSkillId === id) {\n      setSelectedSkillId(null);"), 'handleSelectSkill must toggle off when clicked again');
+
+  // Verify experience toggle-off logic
+  assert.ok(normalizedApp.includes("if (selectedExperienceId === id) {\n      setSelectedExperienceId(null);"), 'handleSelectExperience must toggle off when clicked again');
+
+  // Verify no auto-selection on tab navigation
+  assert.ok(!appContent.includes("setSelectedSkillId(skills[0].id)"), 'Must not auto-select first capability on navigation switch');
+  assert.ok(!appContent.includes("setSelectedExperienceId(experience[0].id)"), 'Must not auto-select first employer on navigation switch');
+});
+
+test('23. Experience dock default position avoids collision with top-left application title badge', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  // Assert default position is y >= 48 so it does not overlap the top-left title badge (y: 12-28)
+  assert.ok(topologyContent.includes("DEFAULT_DOCK_POSITION = { x: 14, y: 52 }"), 'Dock default position must be y: 52 to avoid top-left label collision');
+});
+
+test('24. Experience dock drag handle is isolated and RESET button is independently clickable', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  // Assert dock container stops pointer/mouse/touch propagation
+  assert.ok(topologyContent.includes("onPointerDown={(e) => e.stopPropagation()}"), 'Dock container must stop pointer propagation');
+  assert.ok(topologyContent.includes("onMouseDown={(e) => e.stopPropagation()}"), 'Dock container must stop mouse propagation');
+
+  // Assert RESET button is not inside a button drag handle
+  assert.ok(topologyContent.includes("handleResetDockPosition()"), 'RESET button must trigger handleResetDockPosition independently');
+  assert.ok(topologyContent.includes("TECHNICAL CAPABILITIES // SYSTEM BACKBONE"), 'Bottom label must be renamed to TECHNICAL CAPABILITIES // SYSTEM BACKBONE');
+});
+
+test('25. Synthetic capability connection fallback is removed and unmatched projects have empty infrastructureDeps', async () => {
+  const { generateGitHubProfileDetails } = await import('../src/services/githubService');
+
+  // Create projects with 6 high-frequency technologies occupying all 6 capability slots
+  const mockProjects: any[] = [
+    {
+      id: 'proj-fe-1',
+      title: 'Frontend Portal',
+      techStack: ['TypeScript', 'React', 'Tailwind CSS'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-fe-2',
+      title: 'Mobile App',
+      techStack: ['TypeScript', 'React', 'Tailwind CSS'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-be-1',
+      title: 'Core API Gateway',
+      techStack: ['Node.js', 'PostgreSQL', 'Docker'],
+      infrastructureDeps: []
+    },
+    {
+      id: 'proj-be-2',
+      title: 'Auth Service',
+      techStack: ['Node.js', 'PostgreSQL', 'Docker'],
+      infrastructureDeps: []
+    },
+    // Guaranteed unmatched rare project using technologies outside the top 6
+    {
+      id: 'proj-rare',
+      title: 'Haskell Parsing Utility',
+      techStack: ['Haskell', 'Cabal'],
+      infrastructureDeps: []
+    }
+  ];
+
+  const result = generateGitHubProfileDetails(mockProjects as any, null, 'testuser');
+
+  // 1. Verify 6 capabilities are generated from the high-frequency stack
+  assert.equal(result.skills.length, 6, 'Must generate top 6 capability nodes');
+  assert.ok(
+    result.skills.every(s => !s.name.includes('Haskell') && !s.name.includes('Cabal')),
+    'Haskell and Cabal must not be among top 6 generated capability nodes'
+  );
+
+  // 2. Unconditionally assert rare project has empty infrastructureDeps (no synthetic modulo assignment)
+  const rareProj = mockProjects.find(p => p.id === 'proj-rare')!;
+  assert.deepEqual(rareProj.infrastructureDeps, [], 'Unmatched project must have empty infrastructureDeps');
+
+  // 3. Unconditionally assert none of the generated capability nodes list the rare project in usedInProjects
+  assert.ok(
+    result.skills.every(s => !s.usedInProjects.includes('proj-rare')),
+    'No generated capability must list the unmatched project in usedInProjects'
+  );
+});
+
+test('26. CAREER ORGANIZATIONS calculates unique organizations rather than role records count', async () => {
+  const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
+  const resolved = PORTFOLIO_CONFIG.experience || [];
+  
+  // Current owner has 3 employment records (CodeFier Full Stack, CodeFier React Dev, Devinity Solutions Intern)
+  assert.equal(resolved.length, 3, 'Total employment records is 3');
+
+  const uniqueOrgs = Array.from(
+    new Set(resolved.map(e => (e.organization || '').trim().toLowerCase()))
+  ).filter(Boolean);
+
+  assert.equal(uniqueOrgs.length, 2, 'Unique career organizations must be 2 (CodeFier and Devinity Solutions)');
+});
+
+test('27. Experience dock groups multiple roles within the same progression group into a single primary card', async () => {
+  const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
+  const resolved = PORTFOLIO_CONFIG.experience || [];
+  
+  // Grouping algorithm matching TopologyCanvas.tsx
+  const groups: Record<string, any[]> = {};
+  const order: string[] = [];
+
+  for (const exp of resolved) {
+    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
+    if (!groups[groupKey]) {
+      groups[groupKey] = [];
+      order.push(groupKey);
+    }
+    groups[groupKey].push(exp);
+  }
+
+  const grouped = order.map(groupKey => {
+    const groupNodes = groups[groupKey];
+    const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
+      || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
+      || groupNodes[0];
+    const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
+    return {
+      ...primaryNode,
+      isPromoted: hasPromotion,
+      roleCount: groupNodes.length
+    };
+  });
+
+  // Current owner verified experience must produce exactly 2 grouped cards
+  assert.equal(grouped.length, 2, 'Must produce 2 grouped employer cards');
+  
+  // Card 1: CodeFier (Full Stack Engineer, PROMOTED)
+  assert.equal(grouped[0].organization, 'CodeFier');
+  assert.equal(grouped[0].role, 'Full Stack Engineer');
+  assert.equal(grouped[0].isPromoted, true);
+  assert.equal(grouped[0].roleCount, 2);
+
+  // Card 2: Devinity Solutions (Web Development Intern)
+  assert.equal(grouped[1].organization, 'Devinity Solutions');
+  assert.equal(grouped[1].role, 'Web Development Intern (MERN Stack)');
+  assert.equal(grouped[1].isPromoted, false);
+  assert.equal(grouped[1].roleCount, 1);
+});
+
+
+

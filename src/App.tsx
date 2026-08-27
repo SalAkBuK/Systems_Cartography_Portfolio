@@ -10,7 +10,6 @@ import {
   OperatorMetadata
 } from './types';
 import {
-  VERIFIED_ARCHITECTURE_PRINCIPLES as ARCHITECTURE_PRINCIPLES,
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA
 } from './data/verifiedPortfolioData';
 import { PORTFOLIO_CONFIG } from './config/portfolioConfig';
@@ -142,7 +141,6 @@ export default function App() {
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedExperienceId, setSelectedExperienceId] = useState<string | null>(null);
   const [selectedSubsystem, setSelectedSubsystem] = useState<SubsystemNode | null>(null);
-  const [selectedPrincipleId, setSelectedPrincipleId] = useState<string | null>(null);
   
   const [selectedCategory, setSelectedCategory] = useState<SystemCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,7 +157,6 @@ export default function App() {
   const drilledProject = drilledProjectId ? projects.find(p => p.id === drilledProjectId) || null : null;
   const selectedSkill = selectedSkillId ? skills.find(s => s.id === selectedSkillId) || null : null;
   const selectedExperience = selectedExperienceId ? experience.find(e => e.id === selectedExperienceId) || null : null;
-  const selectedPrinciple = selectedPrincipleId ? ARCHITECTURE_PRINCIPLES.find(pr => pr.id === selectedPrincipleId) || null : null;
 
   // Public data is synchronized automatically from the configured GitHub target.
   const handleApplyGitHubSync = useCallback((result: GitHubSyncResult) => {
@@ -215,7 +212,6 @@ export default function App() {
     setSelectedProjectId(id);
     setSelectedSkillId(null);
     setSelectedExperienceId(null);
-    setSelectedPrincipleId(null);
     setSelectedSubsystem(null);
     setActiveView('projects');
   }, []);
@@ -235,38 +231,33 @@ export default function App() {
     setSelectedSubsystem(null);
   }, []);
 
-  // Handle Skill Selection
+  // Handle Skill Selection (with click-again toggle to clear)
   const handleSelectSkill = useCallback((id: string) => {
+    if (selectedSkillId === id) {
+      setSelectedSkillId(null);
+      return;
+    }
     setSelectedSkillId(id);
     setSelectedProjectId(null);
     setDrilledProjectId(null);
     setSelectedExperienceId(null);
-    setSelectedPrincipleId(null);
     setSelectedSubsystem(null);
     setActiveView('infrastructure');
-  }, []);
+  }, [selectedSkillId]);
 
-  // Handle Experience Selection
+  // Handle Experience Selection (with click-again toggle to clear)
   const handleSelectExperience = useCallback((id: string) => {
+    if (selectedExperienceId === id) {
+      setSelectedExperienceId(null);
+      return;
+    }
     setSelectedExperienceId(id);
     setSelectedProjectId(null);
     setDrilledProjectId(null);
     setSelectedSkillId(null);
-    setSelectedPrincipleId(null);
     setSelectedSubsystem(null);
     setActiveView('experience');
-  }, []);
-
-  // Handle Principle Selection
-  const handleSelectPrinciple = useCallback((id: string) => {
-    setSelectedPrincipleId(id);
-    setSelectedProjectId(null);
-    setDrilledProjectId(null);
-    setSelectedSkillId(null);
-    setSelectedExperienceId(null);
-    setSelectedSubsystem(null);
-    setActiveView('process');
-  }, []);
+  }, [selectedExperienceId]);
 
   // Reset View
   const handleResetView = useCallback(() => {
@@ -275,11 +266,10 @@ export default function App() {
     setDrilledProjectId(null);
     setSelectedSkillId(null);
     setSelectedExperienceId(null);
-    setSelectedPrincipleId(null);
     setSelectedSubsystem(null);
   }, []);
 
-  // Handle View Changes from Navigation
+  // Handle View Changes from Navigation (Neutral Tab Switching)
   const handleNavViewChange = (view: ActiveView) => {
     setActiveView(view);
     setDrilledProjectId(null);
@@ -288,38 +278,27 @@ export default function App() {
       setSelectedProjectId(null);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
-      setSelectedPrincipleId(null);
       setViewport({ x: 0, y: 0, zoom: 1 });
     } else if (view === 'identity') {
       setSelectedProjectId(null);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
-      setSelectedPrincipleId(null);
     } else if (view === 'projects') {
       if (!selectedProjectId && projects.length > 0) setSelectedProjectId(projects[0].id);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
-      setSelectedPrincipleId(null);
     } else if (view === 'experience') {
-      if (!selectedExperienceId && experience.length > 0) setSelectedExperienceId(experience[0].id);
+      // Neutral view: show Experience Dock without arbitrarily auto-selecting first employer
       setSelectedProjectId(null);
       setSelectedSkillId(null);
-      setSelectedPrincipleId(null);
     } else if (view === 'infrastructure') {
-      if (!selectedSkillId && skills.length > 0) setSelectedSkillId(skills[0].id);
+      // Neutral view: show Technical Capabilities without arbitrarily auto-selecting first capability
       setSelectedProjectId(null);
-      setSelectedExperienceId(null);
-      setSelectedPrincipleId(null);
-    } else if (view === 'process') {
-      if (!selectedPrincipleId) setSelectedPrincipleId(ARCHITECTURE_PRINCIPLES[0].id);
-      setSelectedProjectId(null);
-      setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'contact') {
       setSelectedProjectId(null);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
-      setSelectedPrincipleId(null);
     }
   };
 
@@ -451,11 +430,11 @@ export default function App() {
 
         {/* Right Contextual Inspector Panel */}
         {activeView !== 'contact' && <RightInspectorPanel
+          activeView={activeView}
           selectedProject={selectedProject}
           selectedSkill={selectedSkill}
           selectedExperience={selectedExperience}
           selectedSubsystem={selectedSubsystem}
-          selectedPrinciple={selectedPrinciple}
           onSelectProject={handleSelectProject}
           onSelectSkill={handleSelectSkill}
           onDrillIntoProject={handleDrillIntoProject}
