@@ -8,8 +8,7 @@ import {
   GitCommit, 
   Share2, 
   Filter,
-  Search,
-  Github
+  Search
 } from 'lucide-react';
 import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
 import {
@@ -48,20 +47,20 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   setIsMobileOpen,
   projects = [],
   skills = INFRASTRUCTURE_SKILLS,
-  experience = EXPERIENCE_HISTORY,
-  templateRepositoryUrl
+  experience = EXPERIENCE_HISTORY
 }) => {
   const systemLogs = [
-    'Public viewer: read only.',
-    'Project source: GitHub.',
+    'Public instance: owner read only.',
+    'Owner identity: source controlled.',
+    'Project source: configured GitHub.',
     'Claims require repository evidence.'
   ];
 
   const navItems: { id: ActiveView; num: string; label: string; count?: number; icon: React.ComponentType<{ size: number }> }[] = [
     { id: 'system_overview', num: '00', label: 'SYSTEM OVERVIEW', icon: Compass },
-    { id: 'identity', num: '01', label: 'OPERATOR IDENTITY', icon: User },
+    { id: 'identity', num: '01', label: 'OPERATOR PROFILE', icon: User },
     { id: 'projects', num: '02', label: 'PROJECT TOPOLOGY', count: (projects || []).length, icon: Cpu },
-    { id: 'experience', num: '03', label: 'EXPERIENCE LOG', count: (experience || []).length, icon: History },
+    { id: 'experience', num: '03', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
     { id: 'infrastructure', num: '04', label: 'INFRASTRUCTURE', count: (skills || []).length, icon: Layers },
     { id: 'process', num: '05', label: 'SYSTEM PROCESS', count: ARCHITECTURE_PRINCIPLES.length, icon: GitCommit },
     { id: 'contact', num: '06', label: 'EXTERNAL INTERFACE', icon: Share2 },
@@ -96,7 +95,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
       {/* Technical Index Header */}
       <div className="p-3 border-b border-[#15150F] bg-[#CBC59B]/50 flex items-center justify-between">
         <h2 className="text-[11px] font-bold uppercase tracking-tighter opacity-70">
-          Technical Index
+          Owner Technical Index
         </h2>
         <span className="text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
           INDX // 00-06
@@ -144,11 +143,6 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </nav>
 
-      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[9px] font-bold tracking-wider">
-        <span className="flex items-center gap-1.5"><Github size={11} /> USE THIS TEMPLATE</span>
-        <span>FORK →</span>
-      </a>
-
       {/* Search & Filter Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">
         <div className="flex items-center justify-between text-[8.5px] font-bold tracking-widest opacity-60">
@@ -191,7 +185,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
       {/* Fast Project Jump List */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#15150F]/30 flex flex-col min-h-32">
         <div className="px-3 py-1 bg-[#CBC59B]/80 text-[8px] font-bold tracking-widest opacity-60 uppercase flex justify-between items-center sticky top-0 z-10 border-b border-[#15150F]/20">
-          <span>MAPPED STRUCTURES ({filteredProjects.length})</span>
+          <span>OWNER PROJECTS ({filteredProjects.length})</span>
           <span>TIER</span>
         </div>
 
@@ -235,7 +229,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
 
       {/* Evidence state */}
       <div className="p-2.5 border-t border-[#15150F] text-[8.5px] uppercase leading-relaxed font-mono bg-[#CBC59B]/40 shrink-0">
-        <p className="font-bold opacity-60 mb-0.5">Evidence state:</p>
+        <p className="font-bold opacity-60 mb-0.5">Owner evidence state:</p>
         <div className="flex flex-col gap-0.5 opacity-85">
           {systemLogs.map((log, idx) => (
             <p key={idx} className="truncate">• {log}</p>
