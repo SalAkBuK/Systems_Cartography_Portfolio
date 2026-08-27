@@ -87,6 +87,7 @@ export interface AnalyzedTesting {
 export interface AnalyzedArchitecture {
   subsystems: SubsystemNode[];
   category: SystemCategory;
+  classifications?: SystemCategory[];
   detectedLayers: string[];
   provenance: EvidenceProvenance;
   architectureSummary: string;
@@ -119,5 +120,6 @@ export interface UnifiedRepositoryAnalysis {
   
   techStack: string[];
   category: SystemCategory;
+  classifications?: SystemCategory[];
   provenanceMap: ProjectProvenanceMap;
 }

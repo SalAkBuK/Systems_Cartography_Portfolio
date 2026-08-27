@@ -17,6 +17,7 @@ import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+import { matchesProjectClassification } from '../utils/portfolioUtils';
 
 interface LeftNavigationRailProps {
   activeView: ActiveView;
@@ -78,7 +79,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   ];
 
   const filteredProjects = projects.filter(p => {
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesCategory = matchesProjectClassification(p, selectedCategory);
     const matchesSearch = searchQuery === '' || 
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
