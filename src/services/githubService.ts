@@ -682,31 +682,53 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
 
   const user: GitHubUser = await userRes.json();
 
-  // 2. Fetch Repositories (sorted by recently updated, up to 15)
-  const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=15`, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json'
-    }
-  });
+  // 2. Fetch Repositories (sorted by recently updated, with pagination up to 100 per page)
+  const allRawRepos: GitHubRepoRaw[] = [];
+  let page = 1;
+  const maxPages = 5;
 
-  if (!reposRes.ok) {
-    throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+  while (page <= maxPages) {
+    const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+
+    if (!reposRes.ok) {
+      if (page === 1) {
+        if (reposRes.status === 403) {
+          throw new Error(`GitHub API rate limit reached. Please wait a moment.`);
+        }
+        throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+      }
+      break;
+    }
+
+    const pageRepos: GitHubRepoRaw[] = await reposRes.json();
+    if (!Array.isArray(pageRepos) || pageRepos.length === 0) {
+      break;
+    }
+
+    allRawRepos.push(...pageRepos);
+
+    if (pageRepos.length < 100) {
+      break;
+    }
+    page++;
   }
 
-  const rawRepos: GitHubRepoRaw[] = await reposRes.json();
-
-  if (rawRepos.length === 0) {
+  if (allRawRepos.length === 0) {
     throw new Error(`User "@${cleanUser}" has no public repositories to visualize.`);
   }
 
   // Filter out forks if there are enough original repos, or include non-empty repos
-  const nonForkRepos = rawRepos.filter(r => !r.fork && r.size > 0);
-  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : rawRepos.filter(r => r.size > 0);
-  const finalRepos = candidateRepos.slice(0, 10);
+  const nonForkRepos = allRawRepos.filter(r => !r.fork && r.size > 0);
+  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : allRawRepos.filter(r => r.size > 0);
+  const finalRepos = candidateRepos.length > 0 ? candidateRepos : allRawRepos;
 
-  // Inspect top candidate repository for richer evidence if available
+  // Inspect top candidate repositories for richer evidence if available (top 5 to conserve rate limits)
   const inspectionPromises = finalRepos.map(async (repo, idx) => {
-    if (idx < 3) {
+    if (idx < 5) {
       return fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch).catch(() => undefined);
     }
     return undefined;
@@ -727,7 +749,7 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
     skills,
     operator,
     experience,
-    rawCount: rawRepos.length
+    rawCount: allRawRepos.length
   };
 }
 
