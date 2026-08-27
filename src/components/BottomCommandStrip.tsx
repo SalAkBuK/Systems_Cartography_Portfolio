@@ -3,7 +3,8 @@ import {
   Activity, 
   RotateCcw,
   ShieldCheck,
-  Radio
+  Radio,
+  Linkedin
 } from 'lucide-react';
 import { ViewportState } from '../types';
 
@@ -17,6 +18,7 @@ interface BottomCommandStripProps {
   onOpenContact: () => void;
   operatorName: string;
   operatorLocation: string;
+  operatorLinkedin?: string;
 }
 
 export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
@@ -28,7 +30,8 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
   onOpenResume,
   onOpenContact,
   operatorName,
-  operatorLocation
+  operatorLocation,
+  operatorLinkedin
 }) => {
   const [localTime, setLocalTime] = useState<string>('');
 
@@ -60,6 +63,19 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
         </div>
 
         <div className="flex items-center gap-3 ml-auto shrink-0">
+          {operatorLinkedin && operatorLinkedin.trim() && (
+            <a
+              href={operatorLinkedin.trim()}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 px-1.5 py-0.5 border border-[#15150F] bg-[#D4CDA4] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+              title="View LinkedIn Profile"
+            >
+              <Linkedin size={10} />
+              <span>LINKEDIN</span>
+            </a>
+          )}
+
           <div className="flex items-center gap-2 border-l border-[#15150F]/40 pl-3">
             <span className="opacity-50">COORD:</span>
             <span>X:{Math.round(viewport.x)} Y:{Math.round(viewport.y)} Z:{viewport.zoom.toFixed(2)}x</span>

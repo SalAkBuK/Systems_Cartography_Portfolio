@@ -128,6 +128,7 @@ export interface ExperienceNode {
   systemsArchitected: string[];
   technologies: string[];
   gridPosition: { x: number; y: number };
+  provenance?: EvidenceProvenance;
 }
 
 export interface ArchitecturePrinciple {

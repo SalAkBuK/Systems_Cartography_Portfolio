@@ -24,6 +24,7 @@ import { CaseStudyModal } from './components/CaseStudyModal';
 import { ContactPage } from './components/ContactPage';
 import { ResumeModal } from './components/ResumeModal';
 import { connectGitHubTarget, GitHubSyncResult } from './services/githubService';
+import { resolveExperience } from './utils/portfolioUtils';
 import { Menu, X } from 'lucide-react';
 
 const STORAGE_KEY_PROJECTS = 'sys_cartography_custom_projects';
@@ -95,14 +96,14 @@ export default function App() {
 
   const [experience, setExperience] = useState<ExperienceNode[]>(() => {
     if (PORTFOLIO_CONFIG.experience && PORTFOLIO_CONFIG.experience.length > 0) {
-      return PORTFOLIO_CONFIG.experience;
+      return resolveExperience(PORTFOLIO_CONFIG.experience);
     }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_EXPERIENCE);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return resolveExperience(undefined, parsed);
         }
       }
     } catch {
@@ -175,15 +176,16 @@ export default function App() {
         github: configuredOperator.contact.github || result.operator.contact.github
       }
     };
+    const resolvedExperience = resolveExperience(PORTFOLIO_CONFIG.experience, result.experience);
     setProjects(result.projects);
     setSkills(result.skills);
-    setExperience(result.experience);
+    setExperience(resolvedExperience);
     setGitHubSource(result.sourceIdentifier);
     setOperator(mergedOperator);
     try {
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
       localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
-      localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(result.experience));
+      localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(resolvedExperience));
       localStorage.setItem(STORAGE_KEY_GITHUB_SOURCE, result.sourceIdentifier);
       localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(mergedOperator));
     } catch {
@@ -477,6 +479,7 @@ export default function App() {
         onOpenContact={() => handleNavViewChange('contact')}
         operatorName={operator.name}
         operatorLocation={operator.location}
+        operatorLinkedin={operator.contact.linkedin}
       />
 
       {/* Deep Dive Case Study Spec Modal */}

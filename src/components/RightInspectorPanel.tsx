@@ -606,6 +606,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             <div className="border-b border-[#15150F] pb-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-bold text-[#15150F]">{selectedExperience.code} // {selectedExperience.role}</span>
+                <ProvenanceBadge provenance={selectedExperience.provenance || 'CURATED'} />
               </div>
               <div className="text-[10px] text-[#3D3A2C] font-semibold mt-0.5">
                 {selectedExperience.organization} · {selectedExperience.location}
