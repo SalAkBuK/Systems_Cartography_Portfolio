@@ -71,6 +71,7 @@ export interface ProjectData {
   title: string;
   tagline: string;
   category: SystemCategory;
+  classifications?: SystemCategory[];
   status: SystemStatus;
   year: string;
   dimensions: {

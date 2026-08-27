@@ -7,7 +7,7 @@ import {
   ExperienceNode, 
   OperatorMetadata 
 } from '../types';
-import { getRepositoryEvidence } from '../data/repositoryEvidence';
+import { getCanonicalRepositoryKey, getRepositoryEvidence } from '../data/repositoryEvidence';
 import { analyzeRepository, RawRepositoryInspection } from './repositoryAnalyzer';
 
 export interface GitHubUser {
@@ -37,14 +37,18 @@ export interface GitHubRepoRaw {
   watchers_count: number;
   language: string | null;
   topics: string[];
-  size: number; // in KB
+  size: number;
   created_at: string;
   updated_at: string;
-  pushed_at: string;
+  pushed_at?: string;
   archived: boolean;
   fork: boolean;
   default_branch: string;
-  license: { key: string; name: string; spdx_id: string } | null;
+  license: {
+    key?: string;
+    name?: string;
+    spdx_id?: string;
+  } | null;
   owner: {
     login: string;
     avatar_url: string;
@@ -55,12 +59,12 @@ export interface GitHubRepoRaw {
 export interface GitHubSyncResult {
   sourceType: 'user' | 'repo';
   sourceIdentifier: string;
-  user: GitHubUser | null;
+  user: GitHubUser;
   projects: ProjectData[];
   skills: InfrastructureSkill[];
   operator: OperatorMetadata;
   experience: ExperienceNode[];
-  rawCount: number;
+  rawCount?: number;
 }
 
 /**
@@ -69,16 +73,22 @@ export interface GitHubSyncResult {
 export function inferCategory(language: string | null, topics: string[] = [], description: string = ''): SystemCategory {
   const text = `${language || ''} ${topics.join(' ')} ${description}`.toLowerCase();
   
-  // 1. Infrastructure / Cloud Orchestration / Network
-  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'network', 'daemon', 'proxy', 'ebpf', 'nginx', 'envoy', 'cluster', 'mesh', 'cloud-native', 'sysadmin'];
-  if (infraKeywords.some(kw => text.includes(kw))) {
-    return 'infrastructure';
+  // 1. Tooling / Compilers / CLIs / Linters / Testing Workbenches
+  const toolingKeywords = [
+    'workbench', 'resilience', 'testing', 'test runner', 'perturbation',
+    'cli', 'linter', 'compiler', 'interpreter', 'tool', 'bundler', 'vite',
+    'webpack', 'babel', 'esbuild', 'plugin', 'generator', 'sdk', 'devtools',
+    'parser', 'transpiler', 'macro', 'boilerplate', 'starter', 'inspector',
+    'scraper', 'bot', 'crawler', 'fuzzer', 'simulation'
+  ];
+  if (toolingKeywords.some(kw => text.includes(kw) || topics.some(t => t.toLowerCase().includes(kw)))) {
+    return 'tooling';
   }
 
-  // 2. Tooling / Compilers / CLIs / Linters
-  const toolingKeywords = ['cli', 'linter', 'compiler', 'interpreter', 'tool', 'bundler', 'vite', 'webpack', 'babel', 'esbuild', 'plugin', 'generator', 'sdk', 'devtools', 'parser', 'transpiler', 'macro', 'boilerplate', 'starter'];
-  if (toolingKeywords.some(kw => text.includes(kw))) {
-    return 'tooling';
+  // 2. Infrastructure / Cloud Orchestration / Network
+  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure', 'consensus', 'p2p', 'network', 'daemon', 'proxy', 'ebpf', 'nginx', 'envoy', 'cluster', 'mesh', 'cloud-native', 'sysadmin'];
+  if (infraKeywords.some(kw => text.includes(kw) || topics.some(t => t.toLowerCase().includes(kw)))) {
+    return 'infrastructure';
   }
 
   // 3. Frontend vs Backend vs Full-Stack Multi-factor Detection
@@ -121,6 +131,32 @@ export function inferCategory(language: string | null, topics: string[] = [], de
   }
 
   return 'fullstack';
+}
+
+export function inferClassifications(language: string | null, topics: string[] = [], description: string = ''): SystemCategory[] {
+  const primary = inferCategory(language, topics, description);
+  const text = `${language || ''} ${topics.join(' ')} ${description}`.toLowerCase();
+  const list: SystemCategory[] = [primary];
+
+  const toolingKeywords = ['workbench', 'resilience', 'testing', 'cli', 'tool', 'inspector', 'scraper', 'bot', 'parser', 'generator', 'sdk'];
+  if (toolingKeywords.some(kw => text.includes(kw))) list.push('tooling');
+
+  const infraKeywords = ['k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm', 'infrastructure'];
+  if (infraKeywords.some(kw => text.includes(kw))) list.push('infrastructure');
+
+  const frontendMarkers = ['react', 'vue', 'svelte', 'tailwind', 'ui', 'frontend', 'dashboard', 'client'];
+  if (frontendMarkers.some(m => text.includes(m))) list.push('frontend');
+
+  const backendMarkers = ['api', 'backend', 'server', 'nestjs', 'fastify', 'express', 'database', 'postgres', 'sqlite', 'prisma'];
+  if (backendMarkers.some(m => text.includes(m))) list.push('backend');
+
+  const hasFe = frontendMarkers.some(m => text.includes(m));
+  const hasBe = backendMarkers.some(m => text.includes(m));
+  if ((hasFe && hasBe) || text.includes('fullstack') || text.includes('webapp') || text.includes('platform')) {
+    list.push('fullstack');
+  }
+
+  return Array.from(new Set(list));
 }
 
 /**
@@ -685,9 +721,8 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
   // 2. Fetch Repositories (sorted by recently updated, with pagination up to 100 per page)
   const allRawRepos: GitHubRepoRaw[] = [];
   let page = 1;
-  const maxPages = 5;
 
-  while (page <= maxPages) {
+  while (true) {
     const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
       headers: {
         'Accept': 'application/vnd.github.v3+json'
@@ -700,8 +735,12 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
           throw new Error(`GitHub API rate limit reached. Please wait a moment.`);
         }
         throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+      } else {
+        if (reposRes.status === 403) {
+          throw new Error(`GitHub API rate limit reached while requesting page ${page} for "${cleanUser}".`);
+        }
+        throw new Error(`Failed to fetch all repositories for "${cleanUser}" while requesting page ${page}: ${reposRes.statusText || reposRes.status}`);
       }
-      break;
     }
 
     const pageRepos: GitHubRepoRaw[] = await reposRes.json();
@@ -724,11 +763,26 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
   // Filter out forks if there are enough original repos, or include non-empty repos
   const nonForkRepos = allRawRepos.filter(r => !r.fork && r.size > 0);
   const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : allRawRepos.filter(r => r.size > 0);
-  const finalRepos = candidateRepos.length > 0 ? candidateRepos : allRawRepos;
+  const eligibleRepos = candidateRepos.length > 0 ? candidateRepos : allRawRepos;
 
-  // Inspect top candidate repositories for richer evidence if available (top 5 to conserve rate limits)
+  // Deduplicate repositories belonging to the same explicit canonical cluster (e.g. TowerDesk canonical + clean showcase)
+  const seenClusters = new Map<string, GitHubRepoRaw>();
+  for (const repo of eligibleRepos) {
+    const clusterKey = getCanonicalRepositoryKey(repo.name);
+    if (!seenClusters.has(clusterKey)) {
+      seenClusters.set(clusterKey, repo);
+    } else {
+      const existing = seenClusters.get(clusterKey)!;
+      if (existing.name.toLowerCase() !== clusterKey && repo.name.toLowerCase() === clusterKey) {
+        seenClusters.set(clusterKey, repo);
+      }
+    }
+  }
+  const finalRepos = Array.from(seenClusters.values());
+
+  // Inspect top candidate repositories for richer evidence if available (top 3 to conserve rate limits)
   const inspectionPromises = finalRepos.map(async (repo, idx) => {
-    if (idx < 5) {
+    if (idx < 3) {
       return fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch).catch(() => undefined);
     }
     return undefined;

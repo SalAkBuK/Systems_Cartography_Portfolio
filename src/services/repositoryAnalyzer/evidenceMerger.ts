@@ -4,6 +4,7 @@ import {
   ProjectData, 
   ProjectProvenanceMap, 
   SubsystemNode, 
+  SystemCategory,
   SystemStatus 
 } from '../../types';
 import { getRepositoryEvidence } from '../../data/repositoryEvidence';
@@ -193,6 +194,17 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     metrics: 'VERIFIED'
   };
 
+  // Aggregate classifications from architecture analysis and curated subsystem evidence
+  const finalClassifications = new Set<SystemCategory>(architecture.classifications || [architecture.category]);
+  if (curated?.subsystems && curated.subsystems.length > 0) {
+    const hasCuratedFe = curated.subsystems.some(s => s.category === 'frontend');
+    const hasCuratedBe = curated.subsystems.some(s => s.category === 'backend' || s.category === 'auth');
+    const hasCuratedDb = curated.subsystems.some(s => s.category === 'database');
+    if (hasCuratedFe) finalClassifications.add('frontend');
+    if (hasCuratedBe || hasCuratedDb) finalClassifications.add('backend');
+    if (hasCuratedFe && (hasCuratedBe || hasCuratedDb)) finalClassifications.add('fullstack');
+  }
+
   const summary = repo.description
     ? `${repo.description} GitHub reports ${repo.stargazers_count} stars, ${repo.forks_count} forks, and ${repo.open_issues_count} open issues.`
     : `Public repository owned by ${repo.owner.login}. Primary language: ${repo.language || 'unreported'}.`;
@@ -203,6 +215,7 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     title: repo.name,
     tagline: repo.description || `Public ${architecture.category} repository; no description supplied on GitHub.`,
     category: architecture.category,
+    classifications: Array.from(finalClassifications),
     status,
     year,
     dimensions: { width, height, levels },
