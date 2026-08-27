@@ -530,9 +530,7 @@ test('25. Synthetic capability connection fallback is removed and unmatched proj
       techStack: ['Haskell', 'Cabal'],
       infrastructureDeps: []
     }
-  ];
-
-  const result = generateGitHubProfileDetails(mockProjects as any, null, 'testuser');
+  ];  const result = generateGitHubProfileDetails(mockProjects as any, null, 'testuser');
 
   // 1. Verify 6 capabilities are generated from the high-frequency stack
   assert.equal(result.skills.length, 6, 'Must generate top 6 capability nodes');
@@ -566,61 +564,46 @@ test('26. CAREER ORGANIZATIONS calculates unique organizations rather than role 
   assert.equal(uniqueOrgs.length, 2, 'Unique career organizations must be 2 (CodeFier and Devinity Solutions)');
 });
 
-test('27. Experience dock groups multiple roles within the same progression group into a single primary card', async () => {
+test('27. groupExperienceByProgression centralizes grouping with organization tenure and exact linked systems count', async () => {
   const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
+  const { groupExperienceByProgression } = await import('../src/utils/portfolioUtils');
   const resolved = PORTFOLIO_CONFIG.experience || [];
   
-  // Grouping algorithm matching TopologyCanvas.tsx
-  const groups: Record<string, any[]> = {};
-  const order: string[] = [];
-
-  for (const exp of resolved) {
-    const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
-    if (!groups[groupKey]) {
-      groups[groupKey] = [];
-      order.push(groupKey);
-    }
-    groups[groupKey].push(exp);
-  }
-
-  const grouped = order.map(groupKey => {
-    const groupNodes = groups[groupKey];
-    const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
-      || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
-      || groupNodes[0];
-    const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
-    return {
-      ...primaryNode,
-      isPromoted: hasPromotion,
-      roleCount: groupNodes.length
-    };
-  });
+  const grouped = groupExperienceByProgression(resolved);
 
   // Current owner verified experience must produce exactly 2 grouped cards
   assert.equal(grouped.length, 2, 'Must produce 2 grouped employer cards');
   
-  // Card 1: CodeFier (Full Stack Engineer, PROMOTED)
+  // Card 1: CodeFier (Full Stack Engineer, PROMOTED, SEP 2025 → PRESENT, exactly 3 delivered systems)
   assert.equal(grouped[0].organization, 'CodeFier');
   assert.equal(grouped[0].role, 'Full Stack Engineer');
   assert.equal(grouped[0].isPromoted, true);
   assert.equal(grouped[0].roleCount, 2);
+  assert.equal(grouped[0].organizationTenure, 'SEP 2025 → PRESENT');
+  assert.equal(grouped[0].linkedSystemsCount, 3, 'CodeFier linked systems count must be 3 (delivered systems only, no double-counting)');
 
-  // Card 2: Devinity Solutions (Web Development Intern)
+  // Card 2: Devinity Solutions (Web Development Intern, JUL 2024 → SEP 2024, 0 delivered systems)
   assert.equal(grouped[1].organization, 'Devinity Solutions');
   assert.equal(grouped[1].role, 'Web Development Intern (MERN Stack)');
   assert.equal(grouped[1].isPromoted, false);
   assert.equal(grouped[1].roleCount, 1);
+  assert.equal(grouped[1].organizationTenure, 'JUL 2024 → SEP 2024');
+  assert.equal(grouped[1].linkedSystemsCount, 0);
 });
 
-test('28. RightInspectorPanel experience index renders grouped organization cards and routes through onSelectExperience', async () => {
+test('28. Movable Experience Dock and RightInspectorPanel consume the same groupExperienceByProgression helper', async () => {
   const fs = await import('fs');
   const path = await import('path');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
 
-  // Verify experience index header and cards
+  // Verify both components import and use groupExperienceByProgression
+  assert.ok(topologyContent.includes("groupExperienceByProgression"), 'TopologyCanvas must import and use groupExperienceByProgression');
+  assert.ok(panelContent.includes("groupExperienceByProgression"), 'RightInspectorPanel must import and use groupExperienceByProgression');
+
+  // Verify Experience Index UI elements
   assert.ok(panelContent.includes("PROFESSIONAL EXPERIENCE INDEX"), 'Panel must render PROFESSIONAL EXPERIENCE INDEX');
-  assert.ok(panelContent.includes("groupedExperience.map"), 'Panel must map over groupedExperience to avoid duplicate organization cards');
-  assert.ok(panelContent.includes("onSelectExperience?.(org.id)"), 'Clicking an organization card must route through onSelectExperience');
+  assert.ok(panelContent.includes("org.organizationTenure"), 'Panel must render org.organizationTenure');
   assert.ok(panelContent.includes("SYSTEMS LINKED //"), 'Organization card must display linked systems count');
 });
 
@@ -636,18 +619,23 @@ test('29. RightInspectorPanel capability index renders capability cards and rout
   assert.ok(panelContent.includes("REPOSITORY ASSOCIATIONS //"), 'Capability card must display repository associations count');
 });
 
-test('30. Back buttons clear selected ID and preserve respective activeView without parallel state', async () => {
+test('30. onSelectExperience is required and back buttons clear selected ID without parallel state', async () => {
   const fs = await import('fs');
   const path = await import('path');
   const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
   const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
 
-  // Verify back buttons exist in detail views
+  // Verify onSelectExperience is declared as required in props
+  assert.ok(panelContent.includes("onSelectExperience: (id: string) => void;"), 'onSelectExperience must be required in RightInspectorPanelProps');
+  assert.ok(!panelContent.includes("onSelectExperience?: (id: string) => void;"), 'onSelectExperience must not be optional');
+
+  // Verify back buttons exist in detail views and route without optional chaining
   assert.ok(panelContent.includes("← PROFESSIONAL EXPERIENCE"), 'Experience detail must provide back button to index');
   assert.ok(panelContent.includes("← TECHNICAL CAPABILITIES"), 'Capability detail must provide back button to index');
-  assert.ok(panelContent.includes("onSelectExperience?.(selectedExperience.id)"), 'Experience back button must call onSelectExperience with selected ID to toggle off');
-  assert.ok(panelContent.includes("onSelectSkill(selectedSkill.id)"), 'Capability back button must call onSelectSkill with selected ID to toggle off');
+  assert.ok(panelContent.includes("onSelectExperience(selectedExperience.id)"), 'Experience back button must call onSelectExperience with selected ID');
+  assert.ok(panelContent.includes("onSelectSkill(selectedSkill.id)"), 'Capability back button must call onSelectSkill with selected ID');
 
   // Verify App.tsx passes shared onSelectExperience to RightInspectorPanel
   assert.ok(appContent.includes("onSelectExperience={handleSelectExperience}"), 'App.tsx must pass onSelectExperience to RightInspectorPanel');
 });
+

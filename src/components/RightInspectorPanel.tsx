@@ -36,6 +36,7 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+import { groupExperienceByProgression } from '../utils/portfolioUtils';
 
 export const ProvenanceBadge: React.FC<{ provenance?: EvidenceProvenance }> = ({ provenance = 'VERIFIED' }) => {
   if (provenance === 'CURATED') {
@@ -74,7 +75,7 @@ interface RightInspectorPanelProps {
   selectedSubsystem: SubsystemNode | null;
   onSelectProject: (id: string) => void;
   onSelectSkill: (id: string) => void;
-  onSelectExperience?: (id: string) => void;
+  onSelectExperience: (id: string) => void;
   onDrillIntoProject: (id: string) => void;
   onOpenCaseStudy: () => void;
   onOpenContact: () => void;
@@ -107,42 +108,8 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
     new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean).length;
 
-  // Generic progression grouping matching Experience Dock
-  const groupedExperience = React.useMemo(() => {
-    const groups: Record<string, ExperienceNode[]> = {};
-    const order: string[] = [];
-
-    for (const exp of experience) {
-      const groupKey = exp.progressionGroup || (exp.organization || '').trim().toLowerCase();
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-        order.push(groupKey);
-      }
-      groups[groupKey].push(exp);
-    }
-
-    return order.map(groupKey => {
-      const groupNodes = groups[groupKey];
-      // Find primary or latest role in progression group
-      const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
-        || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]
-        || groupNodes[0];
-      const hasPromotion = groupNodes.some(n => Boolean(n.promotionNote));
-      const promotionNote = groupNodes.find(n => n.promotionNote)?.promotionNote;
-      
-      const linkedSystemsCount = (primaryNode.systemsDelivered?.length || 0)
-        + (primaryNode.architectedSystemsDetails?.length || 0)
-        + (primaryNode.systemsArchitected?.length || 0);
-
-      return {
-        ...primaryNode,
-        promotionNote: primaryNode.promotionNote || (hasPromotion ? (promotionNote || 'PROMOTED') : undefined),
-        groupedRoleIds: groupNodes.map(n => n.id),
-        roleCount: groupNodes.length,
-        linkedSystemsCount
-      };
-    });
-  }, [experience]);
+  // Shared generic progression grouping (used across Experience Dock and Experience Index)
+  const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
 
   return (
     <aside className="w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden h-72 lg:h-full">
@@ -666,7 +633,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             {/* Back to Experience Index button */}
             <button
               type="button"
-              onClick={() => onSelectExperience?.(selectedExperience.id)}
+              onClick={() => onSelectExperience(selectedExperience.id)}
               className="flex items-center gap-1.5 py-1 px-2 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] border border-[#15150F] text-[8.5px] font-mono font-bold tracking-wider transition-colors cursor-pointer w-fit shadow-[1px_1px_0px_#15150F]"
               title="Return to Professional Experience Index"
             >
@@ -1172,7 +1139,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     return (
                       <button
                         key={org.id}
-                        onClick={() => onSelectExperience?.(org.id)}
+                        onClick={() => onSelectExperience(org.id)}
                         className="p-2.5 bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-all text-left group shadow-[2px_2px_0px_#15150F] cursor-pointer flex flex-col gap-1.5"
                       >
                         <div className="flex items-center justify-between">
@@ -1194,7 +1161,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                             {org.role}
                           </span>
                           <span className="text-[8px] text-[#5C5946] group-hover:text-[#A8A48B] font-mono">
-                            {org.yearRange.toUpperCase().replace(' - ', ' → ')}
+                            {org.organizationTenure}
                           </span>
                         </div>
 
