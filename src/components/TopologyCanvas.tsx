@@ -114,11 +114,143 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [hoveredSkillId, setHoveredSkillId] = useState<string | null>(null);
   const [containerDimensions, setContainerDimensions] = useState({ width: 1000, height: 700 });
+
+  // Movable Professional Experience Dock Viewport Overlay State & Persistence
+  const STORAGE_KEY_DOCK_POSITION = 'sys_cartography_experience_dock_position';
+  const DEFAULT_DOCK_POSITION = { x: 14, y: 14 };
+
+  const [dockPosition, setDockPosition] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_DOCK_POSITION);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number' && !isNaN(parsed.x) && !isNaN(parsed.y)) {
+          return { x: parsed.x, y: parsed.y };
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_DOCK_POSITION;
+  });
+
+  const [dockDragging, setDockDragging] = useState<{
+    startX: number;
+    startY: number;
+    startDockX: number;
+    startDockY: number;
+  } | null>(null);
+
+  // Clamping helper ensuring dock stays within container boundaries
+  const clampDock = useCallback((pos: { x: number; y: number }): { x: number; y: number } => {
+    const margin = 12;
+    const containerW = containerDimensions.width || 1000;
+    const containerH = containerDimensions.height || 700;
+    const dockW = dockRef.current?.offsetWidth || 340;
+    const dockH = dockRef.current?.offsetHeight || 60;
+    const maxX = Math.max(margin, containerW - dockW - margin);
+    const maxY = Math.max(margin, containerH - dockH - margin);
+    return {
+      x: Math.min(Math.max(margin, Math.round(pos.x)), maxX),
+      y: Math.min(Math.max(margin, Math.round(pos.y)), maxY)
+    };
+  }, [containerDimensions]);
+
+  // Re-clamp position on container resize
+  useEffect(() => {
+    setDockPosition(prev => clampDock(prev));
+  }, [clampDock]);
+
+  const handleDockPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDockDragging({
+      startX: e.clientX,
+      startY: e.clientY,
+      startDockX: dockPosition.x,
+      startDockY: dockPosition.y
+    });
+  };
+
+  const handleDockPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dockDragging) return;
+    e.stopPropagation();
+    const deltaX = e.clientX - dockDragging.startX;
+    const deltaY = e.clientY - dockDragging.startY;
+    const rawNewPos = {
+      x: dockDragging.startDockX + deltaX,
+      y: dockDragging.startDockY + deltaY
+    };
+    setDockPosition(clampDock(rawNewPos));
+  };
+
+  const handleDockPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dockDragging) return;
+    e.stopPropagation();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setDockDragging(null);
+    try {
+      localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(dockPosition));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDockPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dockDragging) return;
+    e.stopPropagation();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setDockDragging(null);
+  };
+
+  const handleResetDockPosition = useCallback(() => {
+    const defaultPos = clampDock(DEFAULT_DOCK_POSITION);
+    setDockPosition(defaultPos);
+    try {
+      localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(defaultPos));
+    } catch {
+      // ignore
+    }
+  }, [clampDock]);
+
+  const handleDockKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 32 : 16;
+    let dx = 0;
+    let dy = 0;
+    if (e.key === 'ArrowLeft') dx = -step;
+    else if (e.key === 'ArrowRight') dx = step;
+    else if (e.key === 'ArrowUp') dy = -step;
+    else if (e.key === 'ArrowDown') dy = step;
+    else return;
+
+    e.preventDefault();
+    setDockPosition(prev => {
+      const next = clampDock({ x: prev.x + dx, y: prev.y + dy });
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const isDockMoved = dockPosition.x !== DEFAULT_DOCK_POSITION.x || dockPosition.y !== DEFAULT_DOCK_POSITION.y;
 
   // Custom dragged positions for 3D project structures and skill nodes
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -851,15 +983,45 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </div>
       )}
 
-      {/* PROFESSIONAL EXPERIENCE DOCK (Outside physical project topology) */}
+      {/* PROFESSIONAL EXPERIENCE DOCK (Movable Viewport Overlay) */}
       {activeExperience.length > 0 && (
-        <div className="absolute top-3 left-3 sm:left-4 z-20 flex flex-col gap-1 select-none pointer-events-auto max-w-[calc(100vw-40px)] sm:max-w-md md:max-w-lg lg:max-w-xl">
-          <div className="flex items-center justify-between px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-[#C3E54E]" />
+        <div 
+          ref={dockRef}
+          style={{ left: `${dockPosition.x}px`, top: `${dockPosition.y}px` }}
+          className="absolute z-20 flex flex-col gap-1 select-none pointer-events-auto max-w-[calc(100vw-40px)] sm:max-w-md md:max-w-lg lg:max-w-xl transition-shadow"
+        >
+          <div 
+            tabIndex={0}
+            role="button"
+            aria-label="Drag experience dock, or use arrow keys to reposition"
+            onKeyDown={handleDockKeyDown}
+            onPointerDown={handleDockPointerDown}
+            onPointerMove={handleDockPointerMove}
+            onPointerUp={handleDockPointerUp}
+            onPointerCancel={handleDockPointerCancel}
+            className="flex items-center justify-between px-2 py-1 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F] cursor-grab active:cursor-grabbing select-none outline-none focus:ring-1 focus:ring-[#C3E54E]"
+          >
+            <div className="flex items-center gap-1.5 pointer-events-none">
+              <span className="text-[#C3E54E]">⠿</span>
               <span>PROFESSIONAL EXPERIENCE DOCK</span>
+              <span className="text-[7px] text-[#A8A48B] opacity-75 font-normal tracking-normal">[DRAG TO MOVE]</span>
             </div>
-            <span className="text-[7.5px] text-[#C3E54E] font-mono">CAREER // {activeExperience.length}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[7.5px] text-[#C3E54E] font-mono">CAREER // {activeExperience.length}</span>
+              {isDockMoved && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleResetDockPosition();
+                  }}
+                  className="text-[7px] bg-[#2A2920] text-[#C3E54E] hover:bg-[#C3E54E] hover:text-[#15150F] px-1 py-0.2 border border-[#15150F] transition-colors cursor-pointer"
+                  title="Reset dock to default top-left position"
+                >
+                  RESET
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {activeExperience.map((exp) => {
@@ -872,7 +1034,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     e.stopPropagation();
                     onSelectExperience(exp.id);
                   }}
-                  className={`px-2.5 py-1 text-left font-mono border transition-all text-[9px] shrink-0 flex items-center gap-2 shadow-[2px_2px_0px_#15150F] ${
+                  className={`px-2.5 py-1 text-left font-mono border transition-all text-[9px] shrink-0 flex items-center gap-2 shadow-[2px_2px_0px_#15150F] cursor-pointer ${
                     isSelected
                       ? 'bg-[#15150F] text-[#C3E54E] border-[#15150F] font-bold ring-1 ring-[#C3E54E]'
                       : 'bg-[#D4CDA4] text-[#15150F] border-[#15150F] hover:bg-[#E2DCB9]'
