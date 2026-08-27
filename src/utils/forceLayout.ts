@@ -52,10 +52,10 @@ export interface ConduitPathGeometry {
 export function createTopologyGraph(
   projects: ProjectData[],
   skills: InfrastructureSkill[],
-  experience: ExperienceNode[],
-  customProjects: Record<string, { x: number; y: number }>,
-  customSkills: Record<string, { x: number; y: number }>,
-  customExps: Record<string, { x: number; y: number }>,
+  experience: ExperienceNode[] = [],
+  customProjects: Record<string, { x: number; y: number }> = {},
+  customSkills: Record<string, { x: number; y: number }> = {},
+  customExps: Record<string, { x: number; y: number }> = {},
   draggingNode: { type: string; id: string; currentPos: { x: number; y: number } } | null = null
 ): { nodes: Map<string, LayoutNode>; edges: LayoutEdge[] } {
   const nodes = new Map<string, LayoutNode>();

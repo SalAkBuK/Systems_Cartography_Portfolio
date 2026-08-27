@@ -43,6 +43,10 @@ import {
   GRID_SNAP_STEP
 } from '../utils/collision';
 import {
+  matchesProjectClassification,
+  isProjectLinkedToExperience
+} from '../utils/portfolioUtils';
+import {
   createTopologyGraph,
   calculateConduitGeometry,
   stepForceSimulation,
@@ -116,10 +120,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [hoveredSkillId, setHoveredSkillId] = useState<string | null>(null);
   const [containerDimensions, setContainerDimensions] = useState({ width: 1000, height: 700 });
 
-  // Custom dragged positions for 3D project structures, skill nodes, and experience nodes
+  // Custom dragged positions for 3D project structures and skill nodes
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [customSkillPositions, setCustomSkillPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [customExpPositions, setCustomExpPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   // Grid snap state (enabled by default)
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
@@ -132,7 +135,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   // Active node drag state with live position tracking
   const [draggingNode, setDraggingNode] = useState<{
-    type: 'project' | 'skill' | 'experience';
+    type: 'project' | 'skill';
     id: string;
     startClientX: number;
     startClientY: number;
@@ -155,13 +158,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     }
     return customSkillPositions[skill.id] || skill.gridPosition;
   }, [draggingNode, customSkillPositions]);
-
-  const getExpPos = useCallback((exp: ExperienceNode) => {
-    if (draggingNode?.type === 'experience' && draggingNode.id === exp.id) {
-      return draggingNode.currentPos;
-    }
-    return customExpPositions[exp.id] || exp.gridPosition;
-  }, [draggingNode, customExpPositions]);
 
   // Check if a skill and project are connected through dependencies or tech stack matches
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -211,7 +207,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const resetAllPositions = useCallback(() => {
     setCustomProjectPositions({});
     setCustomSkillPositions({});
-    setCustomExpPositions({});
     setSnapNotice({ message: 'TOPOLOGY POSITIONS RESET TO DEFAULT', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
   }, []);
@@ -225,10 +220,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const { nodes, edges } = createTopologyGraph(
       projects,
       activeSkills,
-      activeExperience,
+      [],
       customProjectPositions,
       customSkillPositions,
-      customExpPositions
+      {}
     );
 
     let frame = 0;
@@ -248,18 +243,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       const nextProjects: Record<string, { x: number; y: number }> = {};
       const nextSkills: Record<string, { x: number; y: number }> = {};
-      const nextExps: Record<string, { x: number; y: number }> = {};
 
       nodes.forEach(node => {
         const rounded = { x: Math.round(node.x), y: Math.round(node.y) };
         if (node.type === 'project') nextProjects[node.id] = rounded;
         else if (node.type === 'skill') nextSkills[node.id] = rounded;
-        else if (node.type === 'experience') nextExps[node.id] = rounded;
       });
 
       setCustomProjectPositions(nextProjects);
       setCustomSkillPositions(nextSkills);
-      setCustomExpPositions(nextExps);
 
       if (frame < maxFrames && maxVelocity > 0.35) {
         requestAnimationFrame(animStep);
@@ -271,13 +263,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     };
 
     requestAnimationFrame(animStep);
-  }, [isSimulatingEquilibrium, projects, activeSkills, activeExperience, customProjectPositions, customSkillPositions, customExpPositions]);
+  }, [isSimulatingEquilibrium, projects, activeSkills, customProjectPositions, customSkillPositions]);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
-      Object.keys(customSkillPositions).length > 0 ||
-      Object.keys(customExpPositions).length > 0;
-  }, [customProjectPositions, customSkillPositions, customExpPositions]);
+      Object.keys(customSkillPositions).length > 0;
+  }, [customProjectPositions, customSkillPositions]);
 
   // Real-time preview calculation of snapped & collision-free landing spot
   const dragResolution = useMemo(() => {
@@ -288,14 +279,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.currentPos,
       customProjectPositions,
       customSkillPositions,
-      customExpPositions,
+      {},
       projects,
       activeSkills,
-      activeExperience,
+      [],
       GRID_SNAP_STEP,
       gridSnapEnabled
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, customExpPositions, projects, activeSkills, activeExperience, gridSnapEnabled]);
+  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills, gridSnapEnabled]);
 
   // Real-time raw collision warning if directly hovering over another node
   const liveCollision = useMemo(() => {
@@ -306,12 +297,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.currentPos,
       customProjectPositions,
       customSkillPositions,
-      customExpPositions,
+      {},
       projects,
       activeSkills,
-      activeExperience
+      []
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, customExpPositions, projects, activeSkills, activeExperience]);
+  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills]);
 
   // Update container size on resize
   useEffect(() => {
@@ -378,10 +369,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [fitAll, resetAllPositions, setViewport]);
 
-  // Filter projects
+  // Filter projects using centralized classification matcher
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
-      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      const matchesCategory = matchesProjectClassification(p, selectedCategory);
       const matchesSearch = searchQuery === '' || 
         p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -416,8 +407,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
       } else if (draggingNode.type === 'skill') {
         setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
-      } else if (draggingNode.type === 'experience') {
-        setCustomExpPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
       }
     };
 
@@ -428,8 +417,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             onSelectProject(draggingNode.id);
           } else if (draggingNode.type === 'skill') {
             onSelectSkill(draggingNode.id);
-          } else if (draggingNode.type === 'experience') {
-            onSelectExperience(draggingNode.id);
           }
         } else {
           // Resolve snap & collision avoidance on drop
@@ -439,10 +426,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.currentPos,
             customProjectPositions,
             customSkillPositions,
-            customExpPositions,
+            {},
             projects,
             activeSkills,
-            activeExperience,
+            [],
             GRID_SNAP_STEP,
             gridSnapEnabled
           );
@@ -453,8 +440,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
           } else if (draggingNode.type === 'skill') {
             setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          } else if (draggingNode.type === 'experience') {
-            setCustomExpPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
           }
 
           if (resolved.wasAdjusted) {
@@ -476,12 +461,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     };
 
     const handleWindowTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1 || !draggingNode) return;
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
       const touch = e.touches[0];
       const deltaScreenX = (touch.clientX - draggingNode.startClientX) / viewport.zoom;
       const deltaScreenY = (touch.clientY - draggingNode.startClientY) / viewport.zoom;
       
-      const moved = Math.hypot(deltaScreenX, deltaScreenY) > 4;
+      const moved = Math.hypot(deltaScreenX, deltaScreenY) > 3;
 
       const delta3D = projectIsoTo3D(deltaScreenX, deltaScreenY);
       const newPos = {
@@ -499,8 +485,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
       } else if (draggingNode.type === 'skill') {
         setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
-      } else if (draggingNode.type === 'experience') {
-        setCustomExpPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
       }
     };
 
@@ -511,8 +495,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             onSelectProject(draggingNode.id);
           } else if (draggingNode.type === 'skill') {
             onSelectSkill(draggingNode.id);
-          } else if (draggingNode.type === 'experience') {
-            onSelectExperience(draggingNode.id);
           }
         } else {
           // Resolve snap & collision avoidance on drop
@@ -522,10 +504,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.currentPos,
             customProjectPositions,
             customSkillPositions,
-            customExpPositions,
+            {},
             projects,
             activeSkills,
-            activeExperience,
+            [],
             GRID_SNAP_STEP,
             gridSnapEnabled
           );
@@ -536,8 +518,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
           } else if (draggingNode.type === 'skill') {
             setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          } else if (draggingNode.type === 'experience') {
-            setCustomExpPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
           }
 
           if (resolved.wasAdjusted) {
@@ -569,7 +549,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
     };
-  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, customExpPositions, gridSnapEnabled, onSelectProject, onSelectSkill, onSelectExperience]);
+  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, onSelectExperience, projects, activeSkills]);
 
   // Handle Pan & Drag on canvas surface
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -878,6 +858,52 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           <span className={snapNotice.type === 'collision' ? 'text-[#FF7B72]' : 'text-[#C3E54E]'}>
             {snapNotice.message}
           </span>
+        </div>
+      )}
+
+      {/* PROFESSIONAL EXPERIENCE DOCK (Outside physical project topology) */}
+      {activeExperience.length > 0 && (
+        <div className="absolute top-3 left-3 sm:left-4 z-20 flex flex-col gap-1 select-none pointer-events-auto max-w-[calc(100vw-40px)] sm:max-w-md md:max-w-lg lg:max-w-xl">
+          <div className="flex items-center justify-between px-2 py-0.5 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-[#C3E54E]" />
+              <span>PROFESSIONAL EXPERIENCE DOCK</span>
+            </div>
+            <span className="text-[7.5px] text-[#C3E54E] font-mono">CAREER // {activeExperience.length}</span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {activeExperience.map((exp) => {
+              const isSelected = selectedExperienceId === exp.id;
+              const isPromoted = Boolean(exp.promotionNote);
+              return (
+                <button
+                  key={exp.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectExperience(exp.id);
+                  }}
+                  className={`px-2.5 py-1 text-left font-mono border transition-all text-[9px] shrink-0 flex items-center gap-2 shadow-[2px_2px_0px_#15150F] ${
+                    isSelected
+                      ? 'bg-[#15150F] text-[#C3E54E] border-[#15150F] font-bold ring-1 ring-[#C3E54E]'
+                      : 'bg-[#D4CDA4] text-[#15150F] border-[#15150F] hover:bg-[#E2DCB9]'
+                  }`}
+                  title={`${exp.role} @ ${exp.organization} (${exp.yearRange})`}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold uppercase tracking-tight text-[9px]">{exp.organization}</span>
+                      {isPromoted && (
+                        <span className="text-[6.5px] bg-[#C3E54E] text-[#15150F] px-1 font-bold">
+                          PROMOTED
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[7.5px] opacity-75 truncate max-w-[130px]">{exp.role}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1256,113 +1282,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
-        {/* Experience Timeline Nodes - Draggable */}
-        <g id="experience-history-nodes">
-          {activeExperience.map((exp, idx) => {
-            const isSelected = selectedExperienceId === exp.id;
-            const isThisDragging = draggingNode?.type === 'experience' && draggingNode.id === exp.id;
-            const isDimmed = isHoverFocus;
-            const expPos = getExpPos(exp);
-            const posIso = project3DToIso(expPos.x, expPos.y, 0);
 
-            const nextExp = activeExperience[idx + 1];
-            const nextPos = nextExp ? getExpPos(nextExp) : null;
-            const nextIso = nextPos ? project3DToIso(nextPos.x, nextPos.y, 0) : null;
-
-            return (
-              <g
-                key={exp.id}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                  setDraggingNode({
-                    type: 'experience',
-                    id: exp.id,
-                    startClientX: e.clientX,
-                    startClientY: e.clientY,
-                    startNodePos: { ...expPos },
-                    currentPos: { ...expPos },
-                    hasMoved: false,
-                  });
-                }}
-                onTouchStart={(e) => {
-                  e.stopPropagation();
-                  if (e.touches.length === 1) {
-                    setDraggingNode({
-                      type: 'experience',
-                      id: exp.id,
-                      startClientX: e.touches[0].clientX,
-                      startClientY: e.touches[0].clientY,
-                      startNodePos: { ...expPos },
-                      currentPos: { ...expPos },
-                      hasMoved: false,
-                    });
-                  }
-                }}
-                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
-                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : 'opacity-100'
-                }`}
-              >
-                {/* Timeline connector line to next node */}
-                {nextIso && (
-                  <line
-                    x1={posIso.x}
-                    y1={posIso.y}
-                    x2={nextIso.x}
-                    y2={nextIso.y}
-                    stroke="#15150F"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 3"
-                  />
-                )}
-
-                {/* Stepper square */}
-                <rect
-                  x={posIso.x - 12}
-                  y={posIso.y - 12}
-                  width="24"
-                  height="24"
-                  fill={isThisDragging ? '#C3E54E' : isSelected ? '#15150F' : '#D4CDA4'}
-                  stroke="#15150F"
-                  strokeWidth={isSelected || isThisDragging ? '2' : '1'}
-                />
-                <text
-                  x={posIso.x}
-                  y={posIso.y + 3}
-                  textAnchor="middle"
-                  fontSize="8"
-                  fontWeight="bold"
-                  fill={isSelected ? '#C3E54E' : '#15150F'}
-                  fontFamily="monospace"
-                >
-                  {exp.code.replace('BUILD-', 'B')}
-                </text>
-
-                {/* Role and Year Annotation */}
-                <text
-                  x={posIso.x}
-                  y={posIso.y - 16}
-                  textAnchor="middle"
-                  fontSize="7.5"
-                  fontWeight="bold"
-                  fill="#15150F"
-                  fontFamily="monospace"
-                >
-                  {exp.yearRange.split(' ')[0]}
-                </text>
-                <text
-                  x={posIso.x}
-                  y={posIso.y + 24}
-                  textAnchor="middle"
-                  fontSize="7"
-                  fill="#5C5946"
-                  fontFamily="monospace"
-                >
-                  {exp.organization}
-                </text>
-              </g>
-            );
-          })}
-        </g>
 
         {/* Snap & Collision Landing Footprint Preview */}
         {draggingNode && draggingNode.hasMoved && dragResolution && (
@@ -1509,10 +1429,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const isHovered = hoveredProjectId === project.id;
             const isThisDragging = draggingNode?.type === 'project' && draggingNode.id === project.id;
             const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : false;
+            const selectedExp = selectedExperienceId ? activeExperience.find(e => e.id === selectedExperienceId) : null;
+            const isLinkedToSelectedExp = selectedExp ? isProjectLinkedToExperience(project, selectedExp) : false;
 
-            // Dim if hover focus is active and this project is NOT hovered and NOT connected to hovered skill
-            const isDimmed = isHoverFocus && !isHovered && !isProjectConnectedToHoveredSkill;
-            const isHighlighted = isHovered || isSelected || isProjectConnectedToHoveredSkill || isThisDragging;
+            // Dim if hover focus is active (and not connected) OR an experience entry is selected (and not linked)
+            const isDimmed = (isHoverFocus && !isHovered && !isProjectConnectedToHoveredSkill) ||
+                             (Boolean(selectedExperienceId) && !isLinkedToSelectedExp);
+            const isHighlighted = isHovered || isSelected || isProjectConnectedToHoveredSkill || isThisDragging ||
+                                  (Boolean(selectedExperienceId) && isLinkedToSelectedExp);
             
             const projectPos = getProjectPos(project);
             const originX = projectPos.x;

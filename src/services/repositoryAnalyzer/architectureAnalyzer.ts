@@ -63,29 +63,55 @@ export function analyzeArchitecture(
   const testFrameworks = dependencies.frameworks.testing;
   const devopsFrameworks = dependencies.frameworks.devops;
 
-  // Determine Category
-  let category: SystemCategory = 'tooling';
-  const hasFrontend = feFrameworks.length > 0 || (inspection.topics || []).some(t => ['react', 'vue', 'svelte', 'ui', 'frontend'].includes(t.toLowerCase()));
-  const hasBackend = beFrameworks.length > 0 || (inspection.topics || []).some(t => ['api', 'backend', 'server', 'fastify', 'express', 'nestjs'].includes(t.toLowerCase()));
-  const hasDatabase = dbFrameworks.length > 0 || (inspection.topics || []).some(t => ['prisma', 'postgres', 'sqlite', 'redis', 'db'].includes(t.toLowerCase()));
-  const hasInfra = devopsFrameworks.includes('Docker') || (inspection.topics || []).some(t => ['k8s', 'docker', 'infrastructure'].includes(t.toLowerCase()));
+  // Determine Category and multi-classifications from semantic purpose, documentation, topics, and frameworks
+  const allDocText = `${repoName} ${inspection.readmeContent || ''} ${documentation.challenge?.text || ''} ${documentation.solution?.text || ''} ${(inspection.topics || []).join(' ')}`.toLowerCase();
 
-  if (hasFrontend && (hasBackend || hasDatabase)) {
+  const isToolingPurpose = [
+    'workbench', 'resilience', 'testing', 'test runner', 'perturbation',
+    'cli', 'linter', 'compiler', 'inspector', 'scraper', 'parser',
+    'analyzer', 'generator', 'sdk', 'devtools', 'utility', 'bot', 'crawler',
+    'simulation', 'fuzzer'
+  ].some(k => allDocText.includes(k) || (inspection.topics || []).some(t => t.toLowerCase().includes(k)));
+
+  const isInfraPurpose = [
+    'k8s', 'kubernetes', 'docker', 'terraform', 'ansible', 'helm',
+    'infrastructure', 'cluster', 'mesh', 'cloud-native', 'sysadmin'
+  ].some(k => allDocText.includes(k) || (inspection.topics || []).some(t => t.toLowerCase().includes(k)));
+
+  const hasFrontend = feFrameworks.length > 0 || (inspection.topics || []).some(t => ['react', 'vue', 'svelte', 'ui', 'frontend'].includes(t.toLowerCase())) || allDocText.includes('dashboard') || allDocText.includes('frontend');
+  const hasBackend = beFrameworks.length > 0 || (inspection.topics || []).some(t => ['api', 'backend', 'server', 'fastify', 'express', 'nestjs'].includes(t.toLowerCase())) || allDocText.includes('backend') || allDocText.includes('server');
+  const hasDatabase = dbFrameworks.length > 0 || (inspection.topics || []).some(t => ['prisma', 'postgres', 'sqlite', 'redis', 'db', 'mysql'].includes(t.toLowerCase()));
+  const hasInfra = isInfraPurpose || devopsFrameworks.includes('Docker') || (inspection.topics || []).some(t => ['k8s', 'docker', 'infrastructure'].includes(t.toLowerCase()));
+
+  const matchingClassifications: SystemCategory[] = [];
+  if (isToolingPurpose || testFrameworks.length > 0) matchingClassifications.push('tooling');
+  if (hasInfra) matchingClassifications.push('infrastructure');
+  if (hasFrontend) matchingClassifications.push('frontend');
+  if (hasBackend || hasDatabase) matchingClassifications.push('backend');
+  if (hasFrontend && (hasBackend || hasDatabase)) matchingClassifications.push('fullstack');
+
+  // Determine Primary Category
+  let category: SystemCategory = 'tooling';
+  if (isToolingPurpose) {
+    category = 'tooling';
+  } else if (isInfraPurpose) {
+    category = 'infrastructure';
+  } else if (hasFrontend && (hasBackend || hasDatabase)) {
     category = 'fullstack';
   } else if (hasFrontend) {
     category = 'frontend';
   } else if (hasBackend || hasDatabase) {
     category = 'backend';
-  } else if (hasInfra) {
-    category = 'infrastructure';
   } else {
-    // Rely on language
+    // Weak language fallback
     const lang = (inspection.language || '').toLowerCase();
-    if (['typescript', 'javascript'].includes(lang)) category = 'fullstack';
-    else if (['go', 'rust', 'python', 'java', 'c#'].includes(lang)) category = 'backend';
-    else if (['html', 'css'].includes(lang)) category = 'frontend';
-    else category = 'tooling';
+    if (['go', 'rust', 'python', 'java', 'c#', 'php'].includes(lang)) category = 'backend';
+    else if (['html', 'css', 'vue', 'svelte', 'dart'].includes(lang)) category = 'frontend';
+    else if (['shell', 'bash', 'makefile', 'nix', 'lua', 'powershell', 'dockerfile'].includes(lang)) category = 'tooling';
+    else category = 'fullstack';
   }
+
+  const classifications: SystemCategory[] = Array.from(new Set([category, ...matchingClassifications]));
 
   // --- STRATEGY 1: EXPLICIT DOCUMENTATION COMPONENTS (Highest Fidelity) ---
   if (documentation.explicitComponents.length > 0) {
@@ -130,6 +156,7 @@ export function analyzeArchitecture(
       return {
         subsystems: discoveredSubsystems,
         category,
+        classifications,
         detectedLayers: discoveredSubsystems.map(s => s.name),
         provenance: 'VERIFIED',
         architectureSummary: documentation.solution?.text || `${discoveredSubsystems.length} modular subsystems discovered from repository structure and documentation.`
@@ -212,6 +239,7 @@ export function analyzeArchitecture(
       return {
         subsystems: discoveredSubsystems,
         category: 'fullstack',
+        classifications: Array.from(new Set(['fullstack', ...classifications])),
         detectedLayers: discoveredSubsystems.map(s => s.name),
         provenance: 'VERIFIED',
         architectureSummary: `${discoveredSubsystems.length} monorepo workspaces and shared packages detected across apps/ and packages/.`
@@ -287,6 +315,7 @@ export function analyzeArchitecture(
     return {
       subsystems: discoveredSubsystems,
       category,
+      classifications,
       detectedLayers: discoveredSubsystems.map(s => s.name),
       provenance: 'DERIVED',
       architectureSummary: `Layered architecture decomposed into ${discoveredSubsystems.map(s => s.name).join(', ')}.`
@@ -315,6 +344,7 @@ export function analyzeArchitecture(
     return {
       subsystems: discoveredSubsystems,
       category,
+      classifications,
       detectedLayers: [`${primaryLang} Implementation`],
       provenance: 'VERIFIED',
       architectureSummary: `Single-tier ${primaryLang} codebase without distributed microservice boundaries.`
@@ -324,6 +354,7 @@ export function analyzeArchitecture(
   return {
     subsystems: [],
     category,
+    classifications,
     detectedLayers: [],
     provenance: 'UNAVAILABLE',
     architectureSummary: 'Architecture not established from available repository evidence.'
