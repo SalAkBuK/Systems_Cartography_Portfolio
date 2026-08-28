@@ -171,19 +171,94 @@ function parseCargoToml(content: string, result: AnalyzedDependencies): void {
   result.primaryEcosystem = 'Rust';
 
   const lines = content.split('\n');
+  let inDependenciesSection = false;
+
   for (const rawLine of lines) {
-    const line = rawLine.trim().toLowerCase();
-    if (line.startsWith('axum') || line.includes('"axum"')) addFramework(result, 'backend', 'Axum');
-    if (line.startsWith('actix-web') || line.includes('"actix-web"')) addFramework(result, 'backend', 'Actix Web');
-    if (line.startsWith('tokio') || line.includes('"tokio"')) addFramework(result, 'backend', 'Tokio');
-    if (line.startsWith('sqlx') || line.includes('"sqlx"')) addFramework(result, 'database', 'SQLx');
-    if (line.startsWith('diesel') || line.includes('"diesel"')) addFramework(result, 'database', 'Diesel');
-    if (line.startsWith('tonic') || line.includes('"tonic"')) addFramework(result, 'backend', 'Tonic (gRPC)');
-    if (line.startsWith('serde') || line.includes('"serde"')) addFramework(result, 'tools', 'Serde');
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    // Check for section header [section] or [[section]]
+    const sectionMatch = line.match(/^\[+([a-zA-Z0-9_.\-'"]+)\]+/);
+    if (sectionMatch) {
+      const sectionName = sectionMatch[1].toLowerCase().replace(/['"]/g, '');
+      inDependenciesSection = /^(workspace\.)?(dev-|build-)?dependencies$/i.test(sectionName) ||
+        /^target\..*\.(dev-|build-)?dependencies$/i.test(sectionName);
+      continue;
+    }
+
+    if (!inDependenciesSection) continue;
+
+    const eqIdx = line.indexOf('=');
+    const depKey = (eqIdx >= 0 ? line.slice(0, eqIdx) : line).trim().toLowerCase().replace(/['"]/g, '');
+
+    if (depKey === 'axum') addFramework(result, 'backend', 'Axum');
+    else if (depKey === 'actix-web' || depKey === 'actix_web') addFramework(result, 'backend', 'Actix Web');
+    else if (depKey === 'tokio') addFramework(result, 'backend', 'Tokio');
+    else if (depKey === 'sqlx') addFramework(result, 'database', 'SQLx');
+    else if (depKey === 'diesel') addFramework(result, 'database', 'Diesel');
+    else if (depKey === 'tonic') addFramework(result, 'backend', 'Tonic (gRPC)');
+    else if (depKey === 'serde') addFramework(result, 'tools', 'Serde');
   }
 }
 
-function parsePythonManifest(content: string, result: AnalyzedDependencies): void {
+function parsePyprojectToml(content: string, result: AnalyzedDependencies): void {
+  addFramework(result, 'backend', 'Python');
+  if (result.primaryEcosystem === 'General') {
+    result.primaryEcosystem = 'Python';
+  }
+
+  const lines = content.split('\n');
+  let currentSection = '';
+  let inArrayDependencies = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const sectionMatch = line.match(/^\[+([a-zA-Z0-9_.\-'"]+)\]+/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1].toLowerCase().replace(/['"]/g, '');
+      inArrayDependencies = false;
+      continue;
+    }
+
+    const isPoetryOrPdmOrFlitDepSection = 
+      /^(tool\.poetry\.dependencies|tool\.poetry\.dev-dependencies|tool\.poetry\.group\..*\.dependencies)$/i.test(currentSection) ||
+      /^(tool\.pdm\.(dev-)?dependencies|tool\.flit\.metadata\.requires)$/i.test(currentSection) ||
+      /^(project\.dependencies|project\.optional-dependencies(\..*)?)$/i.test(currentSection);
+
+    if (currentSection === 'project') {
+      if (/^dependencies\s*=\s*\[/i.test(line)) {
+        inArrayDependencies = true;
+      }
+      if (inArrayDependencies && line.includes(']')) {
+        inArrayDependencies = false;
+      }
+    }
+
+    if (!isPoetryOrPdmOrFlitDepSection && !inArrayDependencies && !currentSection.includes('dependencies')) {
+      continue;
+    }
+
+    const cleanedLine = line.replace(/['",]/g, '').trim();
+    const eqIdx = cleanedLine.indexOf('=');
+    const rawPkg = eqIdx >= 0 && isPoetryOrPdmOrFlitDepSection ? cleanedLine.slice(0, eqIdx).trim() : cleanedLine;
+    const pkgName = rawPkg.split(/[=><!~;]/)[0].trim().toLowerCase();
+
+    if (pkgName === 'fastapi') addFramework(result, 'backend', 'FastAPI');
+    else if (pkgName === 'django') addFramework(result, 'backend', 'Django');
+    else if (pkgName === 'flask') addFramework(result, 'backend', 'Flask');
+    else if (pkgName === 'sqlalchemy') addFramework(result, 'database', 'SQLAlchemy');
+    else if (pkgName === 'psycopg' || pkgName === 'psycopg2' || pkgName === 'psycopg2-binary') addFramework(result, 'database', 'Psycopg');
+    else if (pkgName === 'pytest') addFramework(result, 'testing', 'pytest');
+    else if (pkgName === 'playwright') addFramework(result, 'testing', 'Playwright');
+    else if (pkgName === 'requests') addFramework(result, 'tools', 'Requests');
+    else if (pkgName === 'pydantic') addFramework(result, 'tools', 'Pydantic');
+    else if (pkgName === 'celery') addFramework(result, 'backend', 'Celery');
+  }
+}
+
+function parseRequirementsTxt(content: string, result: AnalyzedDependencies): void {
   addFramework(result, 'backend', 'Python');
   if (result.primaryEcosystem === 'General') {
     result.primaryEcosystem = 'Python';
@@ -191,17 +266,23 @@ function parsePythonManifest(content: string, result: AnalyzedDependencies): voi
 
   const lines = content.split('\n');
   for (const rawLine of lines) {
-    const line = rawLine.trim().toLowerCase();
-    if (line.includes('fastapi')) addFramework(result, 'backend', 'FastAPI');
-    if (line.includes('django')) addFramework(result, 'backend', 'Django');
-    if (line.includes('flask')) addFramework(result, 'backend', 'Flask');
-    if (line.includes('sqlalchemy')) addFramework(result, 'database', 'SQLAlchemy');
-    if (line.includes('psycopg')) addFramework(result, 'database', 'Psycopg');
-    if (line.includes('pytest')) addFramework(result, 'testing', 'pytest');
-    if (line.includes('playwright')) addFramework(result, 'testing', 'Playwright');
-    if (line.includes('requests')) addFramework(result, 'tools', 'Requests');
-    if (line.includes('pydantic')) addFramework(result, 'tools', 'Pydantic');
-    if (line.includes('celery')) addFramework(result, 'backend', 'Celery');
+    let line = rawLine.trim();
+    if (!line || line.startsWith('#') || line.startsWith('-r ') || line.startsWith('-i ')) continue;
+    const hashIdx = line.indexOf('#');
+    if (hashIdx >= 0) line = line.slice(0, hashIdx).trim();
+
+    const pkgName = line.split(/[=><!~;\[]/)[0].trim().toLowerCase();
+
+    if (pkgName === 'fastapi') addFramework(result, 'backend', 'FastAPI');
+    else if (pkgName === 'django') addFramework(result, 'backend', 'Django');
+    else if (pkgName === 'flask') addFramework(result, 'backend', 'Flask');
+    else if (pkgName === 'sqlalchemy') addFramework(result, 'database', 'SQLAlchemy');
+    else if (pkgName === 'psycopg' || pkgName === 'psycopg2' || pkgName === 'psycopg2-binary') addFramework(result, 'database', 'Psycopg');
+    else if (pkgName === 'pytest') addFramework(result, 'testing', 'pytest');
+    else if (pkgName === 'playwright') addFramework(result, 'testing', 'Playwright');
+    else if (pkgName === 'requests') addFramework(result, 'tools', 'Requests');
+    else if (pkgName === 'pydantic') addFramework(result, 'tools', 'Pydantic');
+    else if (pkgName === 'celery') addFramework(result, 'backend', 'Celery');
   }
 }
 
@@ -240,8 +321,10 @@ export function analyzeDependencies(inspection: RawRepositoryInspection): Analyz
         parseGoMod(content, result);
       } else if (fileName === 'cargo.toml') {
         parseCargoToml(content, result);
-      } else if (fileName === 'requirements.txt' || fileName === 'pyproject.toml') {
-        parsePythonManifest(content, result);
+      } else if (fileName === 'pyproject.toml') {
+        parsePyprojectToml(content, result);
+      } else if (fileName === 'requirements.txt') {
+        parseRequirementsTxt(content, result);
       } else if (fileName === 'turbo.json' || fileName === 'pnpm-workspace.yaml') {
         result.isMonorepo = true;
         if (fileName === 'turbo.json') addFramework(result, 'devops', 'Turborepo');

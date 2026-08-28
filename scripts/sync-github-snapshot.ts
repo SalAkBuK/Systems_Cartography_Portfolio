@@ -1,6 +1,6 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile, rename, unlink } from 'node:fs/promises';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig';
-import { connectGitHubTarget, GitHubSyncResult } from '../src/services/githubService';
+import { connectGitHubTarget, GitHubSyncResult, GitHubFetchOptions, DEFAULT_INSPECTION_CONCURRENCY } from '../src/services/githubService';
 import type { GitHubSnapshotMetadata } from '../src/types';
 
 function readArg(flag: string): string | undefined {
@@ -9,7 +9,6 @@ function readArg(flag: string): string | undefined {
 }
 
 export function serializeGitHubSnapshot(metadata: GitHubSnapshotMetadata, snapshot: GitHubSyncResult): string {
-  // Ensure no sensitive tokens or local file paths are present
   const metadataJson = JSON.stringify(metadata, null, 2);
   const snapshotJson = JSON.stringify(snapshot, null, 2);
 
@@ -25,27 +24,15 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = ${snapshotJson};
 `;
 }
 
-async function main() {
-  const target = readArg('--target') || readArg('--github') || PORTFOLIO_CONFIG.githubTarget;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const strictInspection = process.argv.includes('--strict');
-
-  console.log(`[sync:github] Fetching public repository snapshot for target: ${target}`);
-  if (token) {
-    console.log(`[sync:github] Using authenticated GitHub API token.`);
-  } else {
-    console.log(`[sync:github] No GITHUB_TOKEN detected. Requests will run unauthenticated.`);
-  }
-
-  const startTime = Date.now();
+export async function generateGitHubSnapshot(
+  target: string,
+  options?: GitHubFetchOptions
+): Promise<{ metadata: GitHubSnapshotMetadata; snapshot: GitHubSyncResult; outputContent: string }> {
   const result = await connectGitHubTarget(target, {
-    token,
-    inspectionConcurrency: 3,
-    strictInspection,
-    allowPartial: true
+    inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
+    allowPartial: false,
+    ...options
   });
-
-  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
   const metadata: GitHubSnapshotMetadata = {
     schemaVersion: 1,
@@ -53,33 +40,87 @@ async function main() {
     githubTarget: target,
     sourceIdentifier: result.sourceIdentifier,
     rawRepositoryCount: result.rawCount ?? result.projects.length,
-    canonicalRepositoryCount: result.projects.length,
-    inspectedRepositoryCount: result.projects.length,
-    inspectionWarnings: []
+    canonicalRepositoryCount: result.inspectionSummary?.canonicalRepositoryCount ?? result.projects.length,
+    inspectedRepositoryCount: result.inspectionSummary?.inspectedRepositoryCount ?? result.projects.length,
+    inspectionWarnings: result.inspectionSummary?.warnings ?? []
   };
 
   const outputContent = serializeGitHubSnapshot(metadata, result);
 
-  // Safety audit
-  if (token && outputContent.includes(token)) {
-    throw new Error('FATAL: GitHub token detected in serialized snapshot output!');
+  // Safety audit: Check for token leaks or local machine paths
+  if (options?.token && outputContent.includes(options.token)) {
+    throw new Error('FATAL: Injected GitHub token detected in serialized snapshot output!');
+  }
+  if (outputContent.includes('Authorization: Bearer') || outputContent.includes('ghp_')) {
+    throw new Error('FATAL: Authorization header or GitHub PAT detected in serialized snapshot output!');
   }
   if (outputContent.includes('C:\\\\') || outputContent.includes('/Users/')) {
     throw new Error('FATAL: Absolute local file path detected in serialized snapshot output!');
   }
 
-  await writeFile('src/data/githubSnapshot.generated.ts', outputContent, 'utf8');
+  return { metadata, snapshot: result, outputContent };
+}
+
+export async function syncGitHubSnapshotToFile(
+  target: string,
+  options?: GitHubFetchOptions,
+  outputPath = 'src/data/githubSnapshot.generated.ts'
+): Promise<{ metadata: GitHubSnapshotMetadata; snapshot: GitHubSyncResult }> {
+  const { metadata, snapshot, outputContent } = await generateGitHubSnapshot(target, options);
+
+  // Transactional file write: write to .tmp file first, then atomically rename
+  const tmpPath = `${outputPath}.tmp`;
+  try {
+    await writeFile(tmpPath, outputContent, 'utf8');
+    await rename(tmpPath, outputPath);
+  } catch (err) {
+    try {
+      await unlink(tmpPath);
+    } catch {
+      // Ignore cleanup error
+    }
+    throw err;
+  }
+
+  return { metadata, snapshot };
+}
+
+async function main() {
+  const target = readArg('--target') || readArg('--github') || PORTFOLIO_CONFIG.githubTarget;
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const allowPartial = process.argv.includes('--allow-partial');
+
+  console.log(`[sync:github] Fetching public repository snapshot for target: ${target}`);
+  if (token) {
+    console.log(`[sync:github] Using authenticated GitHub API token.`);
+  } else {
+    console.log(`[sync:github] No GITHUB_TOKEN detected. Requests will run unauthenticated.`);
+  }
+  if (allowPartial) {
+    console.log(`[sync:github] WARN: Running with --allow-partial flag.`);
+  }
+
+  const startTime = Date.now();
+  const { metadata, snapshot } = await syncGitHubSnapshotToFile(target, {
+    token,
+    inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
+    allowPartial
+  });
+
+  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
   console.log(`\n======================================================`);
   console.log(`GITHUB SNAPSHOT GENERATION COMPLETE (${durationSec}s)`);
   console.log(`======================================================`);
-  console.log(`Target:               ${target}`);
-  console.log(`Source Identifier:    ${result.sourceIdentifier}`);
-  console.log(`Total Repositories:   ${result.rawCount ?? result.projects.length}`);
-  console.log(`Canonical Projects:   ${result.projects.length}`);
-  console.log(`Synthesized Skills:   ${result.skills.length}`);
-  console.log(`Primary Stack:        ${result.operator.primaryStack.slice(0, 6).join(', ')}`);
-  console.log(`Committed Output:     src/data/githubSnapshot.generated.ts`);
+  console.log(`Target:                     ${target}`);
+  console.log(`Source Identifier:          ${snapshot.sourceIdentifier}`);
+  console.log(`Total Repositories:         ${metadata.rawRepositoryCount}`);
+  console.log(`Canonical Projects:         ${metadata.canonicalRepositoryCount}`);
+  console.log(`Inspected Repositories:     ${metadata.inspectedRepositoryCount}`);
+  console.log(`Inspection Warnings:        ${metadata.inspectionWarnings.length}`);
+  console.log(`Synthesized Skills:         ${snapshot.skills.length}`);
+  console.log(`Primary Stack:              ${snapshot.operator.primaryStack.slice(0, 6).join(', ')}`);
+  console.log(`Committed Output:           src/data/githubSnapshot.generated.ts`);
   console.log(`======================================================\n`);
 }
 
@@ -90,4 +131,5 @@ if (process.argv[1]?.endsWith('sync-github-snapshot.ts')) {
     process.exit(1);
   });
 }
+
 

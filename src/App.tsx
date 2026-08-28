@@ -23,7 +23,7 @@ import { CaseStudyModal } from './components/CaseStudyModal';
 import { ContactPage } from './components/ContactPage';
 import { ResumeModal } from './components/ResumeModal';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from './data/githubSnapshot.generated';
-import { resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
+import { applyProjectLinkOverrides, resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
 import { Menu, X } from 'lucide-react';
 
 export default function App() {
@@ -36,14 +36,17 @@ export default function App() {
     document.querySelector('meta[property="og:description"]')?.setAttribute('content', PORTFOLIO_CONFIG.metaDescription);
   }, []);
 
-  // Committed owner-scoped GitHub snapshot (network-independent at runtime)
+  // Pure snapshot resolution: owner-scoped
   const configuredSnapshot = resolveGitHubSnapshotForTarget(
     PORTFOLIO_CONFIG.githubTarget,
     GITHUB_SNAPSHOT_METADATA,
     GITHUB_SNAPSHOT
   );
 
-  const [projects] = useState<ProjectData[]>(() => configuredSnapshot?.projects || []);
+  const [projects] = useState<ProjectData[]>(() => {
+    if (!configuredSnapshot?.projects) return [];
+    return applyProjectLinkOverrides(configuredSnapshot.projects, PORTFOLIO_CONFIG.projectLinks);
+  });
   const [skills] = useState<InfrastructureSkill[]>(() => configuredSnapshot?.skills || []);
   const [experience] = useState<ExperienceNode[]>(() => 
     resolveExperience(PORTFOLIO_CONFIG.experience, configuredSnapshot?.experience)
