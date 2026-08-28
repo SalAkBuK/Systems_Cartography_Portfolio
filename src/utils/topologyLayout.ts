@@ -1,5 +1,7 @@
-import { ProjectData, InfrastructureSkill } from '../types';
+import { ProjectData, InfrastructureSkill, TopologyViewMode } from '../types';
 import { GRID_SNAP_STEP } from './collision';
+
+export type { TopologyViewMode };
 
 export type ConduitPresentationState = 'hidden' | 'background' | 'focused' | 'dragging';
 
@@ -16,7 +18,7 @@ export interface ConduitStateParams {
   isAnyProjectSelected: boolean;
   isAnySkillSelected: boolean;
   isAnyDragging: boolean;
-  traceModeActive: boolean;
+  showBackgroundRelationships: boolean;
 }
 
 /**
@@ -27,11 +29,11 @@ export interface ConduitStateParams {
  * - Active drag on this node -> 'dragging'
  * - Directly hovered or selected -> 'focused' (prominent, animated)
  * - Focused target active elsewhere:
- *     - If TRACE is ON -> 'background' (subdued, static)
- *     - If TRACE is OFF -> 'hidden' (no distraction)
+ *     - If showBackgroundRelationships is TRUE (RELATIONSHIPS mode) -> 'background' (subdued, static)
+ *     - If showBackgroundRelationships is FALSE (SYSTEMS/CAPABILITIES) -> 'hidden' (no distraction)
  * - No focus anywhere:
- *     - If TRACE is ON -> 'background' (subdued, static)
- *     - If TRACE is OFF -> 'hidden'
+ *     - If showBackgroundRelationships is TRUE (RELATIONSHIPS mode) -> 'background' (subdued, static)
+ *     - If showBackgroundRelationships is FALSE (SYSTEMS/CAPABILITIES) -> 'hidden'
  */
 export function getConduitPresentationState(params: ConduitStateParams): ConduitPresentationState {
   const {
@@ -47,7 +49,7 @@ export function getConduitPresentationState(params: ConduitStateParams): Conduit
     isAnyProjectSelected,
     isAnySkillSelected,
     isAnyDragging,
-    traceModeActive
+    showBackgroundRelationships
   } = params;
 
   if (!isConnected) return 'hidden';
@@ -67,11 +69,98 @@ export function getConduitPresentationState(params: ConduitStateParams): Conduit
 
   // Edge is not directly related to the active focus target
   if (isFocusActive) {
-    return traceModeActive ? 'background' : 'hidden';
+    return showBackgroundRelationships ? 'background' : 'hidden';
   }
 
   // At rest (no hover, no selection, no drag)
-  return traceModeActive ? 'background' : 'hidden';
+  return showBackgroundRelationships ? 'background' : 'hidden';
+}
+
+export type TopologyNodeVisualLevel = 
+  | 'primary'      // Full strength (100% opacity, active ink)
+  | 'highlighted'  // Active focus target / direct interaction / linked to active selection
+  | 'contextual'   // Visible subordinate (~55% opacity, readable, no grayscale)
+  | 'dimmed';      // Filtered out / unrelated to active focus / unlinked during experience selection (20% opacity, grayscale)
+
+export interface NodeEmphasisParams {
+  nodeType: 'project' | 'skill';
+  mode: TopologyViewMode;
+  isHovered: boolean;
+  isSelected: boolean;
+  isDragging: boolean;
+  isConnectedToFocus: boolean;
+  isAnyFocusActive: boolean;
+  isSelectedExpActive: boolean;
+  isLinkedToSelectedExp: boolean;
+}
+
+/**
+ * Pure helper determining visual emphasis level for topology nodes based on view mode and interaction state.
+ */
+export function getTopologyNodeEmphasis(params: NodeEmphasisParams): TopologyNodeVisualLevel {
+  const {
+    nodeType,
+    mode,
+    isHovered,
+    isSelected,
+    isDragging,
+    isConnectedToFocus,
+    isAnyFocusActive,
+    isSelectedExpActive,
+    isLinkedToSelectedExp
+  } = params;
+
+  // 1. Direct Interaction / Focus Target (highest priority)
+  if (isHovered || isSelected || isDragging) {
+    return 'highlighted';
+  }
+
+  // 2. Connected to Active Focus Target (e.g. connected skill when project is hovered, or connected project when skill is hovered)
+  if (isConnectedToFocus) {
+    return 'highlighted';
+  }
+
+  // 3. Experience Selection Precedence
+  // When an experience record is selected, experience-link filtering is authoritative for projects.
+  if (isSelectedExpActive) {
+    if (nodeType === 'project') {
+      return isLinkedToSelectedExp ? 'highlighted' : 'dimmed';
+    }
+    // Skills during experience selection: dim if focus active on an unrelated item, otherwise follow mode
+    if (isAnyFocusActive) {
+      return 'dimmed';
+    }
+    return mode === 'systems' ? 'contextual' : 'primary';
+  }
+
+  // 4. If any focus target is active on the canvas (hover/select/drag) and this node is unrelated:
+  if (isAnyFocusActive) {
+    return 'dimmed';
+  }
+
+  // 5. At Rest (no focus active, no experience selected):
+  if (mode === 'systems') {
+    return nodeType === 'project' ? 'primary' : 'contextual';
+  }
+
+  if (mode === 'capabilities') {
+    return nodeType === 'skill' ? 'primary' : 'contextual';
+  }
+
+  // mode === 'relationships'
+  return 'primary';
+}
+
+export function getNodeEmphasisClassName(level: TopologyNodeVisualLevel): string {
+  switch (level) {
+    case 'highlighted':
+    case 'primary':
+      return 'opacity-100';
+    case 'contextual':
+      return 'opacity-55 transition-opacity duration-200';
+    case 'dimmed':
+      return 'opacity-20 grayscale pointer-events-auto transition-opacity duration-200';
+  }
 }
 
 /**

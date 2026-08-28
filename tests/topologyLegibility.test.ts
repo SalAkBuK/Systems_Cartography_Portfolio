@@ -7,15 +7,19 @@ import {
   wrapCalloutTitle, 
   assembleTopologyLayout,
   getNodeBounds,
-  checkAABBOverlap
+  checkAABBOverlap,
+  getTopologyNodeEmphasis,
+  getNodeEmphasisClassName,
+  type TopologyViewMode
 } from '../src/utils/topologyLayout.ts';
 import { getCapabilityCoreTechnology } from '../src/utils/capabilityAssociations.ts';
+import { matchesProjectClassification } from '../src/utils/portfolioUtils.ts';
 import { VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 import { GRID_SNAP_STEP } from '../src/utils/collision.ts';
 import { ProjectData, InfrastructureSkill } from '../src/types.ts';
 
 // ---------------------------------------------------------------------------
-// PART 1: Progressive Conduit Disclosure State Machine
+// PART 1: Progressive Conduit Disclosure & Topology View Modes State Machine
 // ---------------------------------------------------------------------------
 
 test('1. getConduitPresentationState: Returns hidden when nodes are not connected', () => {
@@ -32,12 +36,12 @@ test('1. getConduitPresentationState: Returns hidden when nodes are not connecte
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: true
+    showBackgroundRelationships: true
   });
   assert.equal(state, 'hidden', 'Unconnected conduit must always be hidden');
 });
 
-test('2. getConduitPresentationState: At rest with TRACE OFF returns hidden', () => {
+test('2. getConduitPresentationState: At rest in SYSTEMS/CAPABILITIES mode (showBackgroundRelationships=false) returns hidden', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: false,
@@ -51,12 +55,12 @@ test('2. getConduitPresentationState: At rest with TRACE OFF returns hidden', ()
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: false
+    showBackgroundRelationships: false
   });
-  assert.equal(state, 'hidden', 'Connected conduit at rest with TRACE OFF must be hidden');
+  assert.equal(state, 'hidden', 'Connected conduit at rest in SYSTEMS/CAPABILITIES mode must be hidden');
 });
 
-test('3. getConduitPresentationState: At rest with TRACE ON returns background', () => {
+test('3. getConduitPresentationState: At rest in RELATIONSHIPS mode (showBackgroundRelationships=true) returns background', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: false,
@@ -70,12 +74,12 @@ test('3. getConduitPresentationState: At rest with TRACE ON returns background',
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: true
+    showBackgroundRelationships: true
   });
-  assert.equal(state, 'background', 'Connected conduit at rest with TRACE ON must be background');
+  assert.equal(state, 'background', 'Connected conduit at rest in RELATIONSHIPS mode must be background');
 });
 
-test('4. getConduitPresentationState: Returns focused when project is hovered (even with TRACE OFF)', () => {
+test('4. getConduitPresentationState: Returns focused when project is hovered (in any mode)', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: true,
@@ -89,12 +93,12 @@ test('4. getConduitPresentationState: Returns focused when project is hovered (e
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: false
+    showBackgroundRelationships: false
   });
   assert.equal(state, 'focused', 'Connected conduit of hovered project must be focused');
 });
 
-test('5. getConduitPresentationState: Returns focused when skill is selected (even with TRACE OFF)', () => {
+test('5. getConduitPresentationState: Returns focused when skill is selected (in any mode)', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: false,
@@ -108,7 +112,7 @@ test('5. getConduitPresentationState: Returns focused when skill is selected (ev
     isAnyProjectSelected: false,
     isAnySkillSelected: true,
     isAnyDragging: false,
-    traceModeActive: false
+    showBackgroundRelationships: false
   });
   assert.equal(state, 'focused', 'Connected conduit of selected skill must be focused');
 });
@@ -127,12 +131,12 @@ test('6. getConduitPresentationState: Returns dragging when connected node is dr
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: true,
-    traceModeActive: false
+    showBackgroundRelationships: false
   });
   assert.equal(state, 'dragging', 'Connected conduit of dragged project must be dragging');
 });
 
-test('7. getConduitPresentationState: Unrelated conduit when another node is hovered and TRACE OFF returns hidden', () => {
+test('7. getConduitPresentationState: Unrelated conduit during focus in SYSTEMS/CAPABILITIES mode returns hidden', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: false,
@@ -146,12 +150,12 @@ test('7. getConduitPresentationState: Unrelated conduit when another node is hov
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: false
+    showBackgroundRelationships: false
   });
-  assert.equal(state, 'hidden', 'Unrelated conduit during focus with TRACE OFF must be hidden');
+  assert.equal(state, 'hidden', 'Unrelated conduit during focus in SYSTEMS/CAPABILITIES mode must be hidden');
 });
 
-test('8. getConduitPresentationState: Unrelated conduit when another node is hovered and TRACE ON returns background', () => {
+test('8. getConduitPresentationState: Unrelated conduit during focus in RELATIONSHIPS mode returns background', () => {
   const state = getConduitPresentationState({
     isConnected: true,
     isProjectHovered: false,
@@ -165,9 +169,160 @@ test('8. getConduitPresentationState: Unrelated conduit when another node is hov
     isAnyProjectSelected: false,
     isAnySkillSelected: false,
     isAnyDragging: false,
-    traceModeActive: true
+    showBackgroundRelationships: true
   });
-  assert.equal(state, 'background', 'Unrelated conduit during focus with TRACE ON must be background');
+  assert.equal(state, 'background', 'Unrelated conduit during focus in RELATIONSHIPS mode must be background');
+});
+
+// ---------------------------------------------------------------------------
+// Node Emphasis Presentation Tests
+// ---------------------------------------------------------------------------
+
+test('8a. getTopologyNodeEmphasis: SYSTEMS mode at rest presents projects as primary and skills as contextual', () => {
+  const projEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(projEmphasis, 'primary');
+  assert.equal(getNodeEmphasisClassName(projEmphasis), 'opacity-100');
+
+  const skillEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'systems',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(skillEmphasis, 'contextual');
+  assert.ok(getNodeEmphasisClassName(skillEmphasis).includes('opacity-55'));
+});
+
+test('8b. getTopologyNodeEmphasis: CAPABILITIES mode at rest presents skills as primary and projects as contextual', () => {
+  const skillEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'capabilities',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(skillEmphasis, 'primary');
+  assert.equal(getNodeEmphasisClassName(skillEmphasis), 'opacity-100');
+
+  const projEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'capabilities',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(projEmphasis, 'contextual');
+  assert.ok(getNodeEmphasisClassName(projEmphasis).includes('opacity-55'));
+});
+
+test('8c. getTopologyNodeEmphasis: RELATIONSHIPS mode at rest presents both node types as primary', () => {
+  const projEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'relationships',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(projEmphasis, 'primary');
+
+  const skillEmphasis = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'relationships',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(skillEmphasis, 'primary');
+});
+
+test('8d. getTopologyNodeEmphasis: Hover/selection overrides contextual de-emphasis in all modes', () => {
+  // Skill hovered in SYSTEMS mode becomes highlighted
+  const skillHovered = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'systems',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(skillHovered, 'highlighted');
+
+  // Connected project in CAPABILITIES mode becomes highlighted
+  const connectedProj = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'capabilities',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: true,
+    isAnyFocusActive: true,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(connectedProj, 'highlighted');
+});
+
+test('8e. getTopologyNodeEmphasis: Selected Professional Experience highlights linked projects and dims unlinked projects', () => {
+  const linkedProj = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: true
+  });
+  assert.equal(linkedProj, 'highlighted');
+
+  const unlinkedProj = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: false,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(unlinkedProj, 'dimmed');
+  assert.ok(getNodeEmphasisClassName(unlinkedProj).includes('opacity-20'));
 });
 
 // ---------------------------------------------------------------------------
@@ -530,18 +685,120 @@ test('20. assembleTopologyLayout: Pathological dataset with large variable proje
 });
 
 // ---------------------------------------------------------------------------
-// PART 4: Experience Dock & Stale Code Deletion Invariants
+// PART 4: Navigation Order, Topology Controls & Deletion Invariants
 // ---------------------------------------------------------------------------
 
-test('21. App.tsx: traceModeActive specifically initialized to false', () => {
-  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
-  assert.ok(
-    appContent.includes("const [traceModeActive, setTraceModeActive] = useState(false);"),
-    'traceModeActive state hook must specifically initialize to false in App.tsx'
-  );
+test('21. LeftNavigationRail.tsx: Navigation order is strictly 00 OVERVIEW -> 01 PROFILE -> 02 EXPERIENCE -> 03 TOPOLOGY -> 04 CAPABILITIES -> 05 CONTACT', () => {
+  const railContent = fs.readFileSync(path.resolve('src/components/LeftNavigationRail.tsx'), 'utf8');
+  
+  // Verify order in navItems
+  const overviewIdx = railContent.indexOf("id: 'system_overview', num: '00'");
+  const identityIdx = railContent.indexOf("id: 'identity', num: '01'");
+  const experienceIdx = railContent.indexOf("id: 'experience', num: '02'");
+  const projectsIdx = railContent.indexOf("id: 'projects', num: '03'");
+  const infraIdx = railContent.indexOf("id: 'infrastructure', num: '04'");
+  const contactIdx = railContent.indexOf("id: 'contact', num: '05'");
+
+  assert.ok(overviewIdx !== -1, '00 SYSTEM OVERVIEW must exist');
+  assert.ok(identityIdx !== -1, '01 OPERATOR PROFILE must exist');
+  assert.ok(experienceIdx !== -1, '02 PROFESSIONAL EXPERIENCE must exist');
+  assert.ok(projectsIdx !== -1, '03 PROJECT TOPOLOGY must exist');
+  assert.ok(infraIdx !== -1, '04 TECHNICAL CAPABILITIES must exist');
+  assert.ok(contactIdx !== -1, '05 EXTERNAL INTERFACE must exist');
+
+  assert.ok(overviewIdx < identityIdx, '00 OVERVIEW before 01 PROFILE');
+  assert.ok(identityIdx < experienceIdx, '01 PROFILE before 02 EXPERIENCE');
+  assert.ok(experienceIdx < projectsIdx, '02 EXPERIENCE before 03 TOPOLOGY');
+  assert.ok(projectsIdx < infraIdx, '03 TOPOLOGY before 04 CAPABILITIES');
+  assert.ok(infraIdx < contactIdx, '04 CAPABILITIES before 05 CONTACT');
 });
 
-test('22. TopologyCanvas.tsx: Floating Experience Dock and drag handlers are completely removed', () => {
+test('22. App.tsx: topologyViewMode specifically initialized to "systems"', () => {
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  assert.ok(
+    appContent.includes("const [topologyViewMode, setTopologyViewMode] = useState<TopologyViewMode>('systems');"),
+    'topologyViewMode state hook must specifically initialize to "systems" in App.tsx'
+  );
+  assert.ok(!appContent.includes("traceModeActive"), 'traceModeActive state hook must be removed from App.tsx');
+});
+
+test('23. App.tsx: Explicit navigation establishes topology view mode while node selection preserves it', () => {
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8').replace(/\r\n/g, '\n');
+  
+  // Navigation changes establish default perspective
+  assert.ok(appContent.includes("view === 'projects') {\n      setTopologyViewMode('systems');"), 'Explicit navigation to projects establishes systems mode');
+  assert.ok(appContent.includes("view === 'infrastructure') {\n      setTopologyViewMode('capabilities');"), 'Explicit navigation to capabilities establishes capabilities mode');
+  
+  // Node selection handlers do NOT overwrite topologyViewMode
+  const handleSelectProj = appContent.slice(appContent.indexOf('handleSelectProject ='), appContent.indexOf('handleSelectSkill ='));
+  assert.ok(!handleSelectProj.includes('setTopologyViewMode'), 'handleSelectProject must not overwrite topologyViewMode');
+  
+  const handleSelectSk = appContent.slice(appContent.indexOf('handleSelectSkill ='), appContent.indexOf('handleSelectExperience ='));
+  assert.ok(!handleSelectSk.includes('setTopologyViewMode'), 'handleSelectSkill must not overwrite topologyViewMode');
+});
+
+test('24. LeftNavigationRail.tsx: CLASSIFICATION FILTER and category buttons are replaced by TOPOLOGY VIEW mode switch', () => {
+  const railContent = fs.readFileSync(path.resolve('src/components/LeftNavigationRail.tsx'), 'utf8');
+  
+  assert.ok(!railContent.includes("CLASSIFICATION // FILTER"), 'CLASSIFICATION // FILTER header must be removed');
+  assert.ok(!railContent.includes("selectedCategory"), 'selectedCategory prop must be removed');
+  assert.ok(!railContent.includes("setSelectedCategory"), 'setSelectedCategory prop must be removed');
+  assert.ok(!railContent.includes("{ id: 'all', label: 'ALL' }"), 'Category pills array must be removed');
+  
+  assert.ok(railContent.includes("TOPOLOGY // VIEW"), 'TOPOLOGY // VIEW header must exist');
+  assert.ok(railContent.includes("id: 'systems', label: 'SYSTEMS'"), 'SYSTEMS mode button must exist');
+  assert.ok(railContent.includes("id: 'capabilities', label: 'CAPABILITIES'"), 'CAPABILITIES mode button must exist');
+  assert.ok(railContent.includes("id: 'relationships', label: 'RELATIONSHIPS'"), 'RELATIONSHIPS mode button must exist');
+});
+
+test('25. portfolioUtils.ts: Project classification model and matcher utility remain intact internally', () => {
+  const mockProject: ProjectData = {
+    id: 'mock-proj',
+    code: 'SYS-01',
+    title: 'Mock Infrastructure Project',
+    tagline: 'Mock tagline',
+    category: 'infrastructure',
+    status: 'ACTIVE',
+    year: '2025',
+    dimensions: { width: 100, height: 80, levels: 2 },
+    gridPosition: { x: 0, y: 0 },
+    accentColor: '#C3E54E',
+    summary: 'Testing classification matching',
+    problem: 'Problem statement',
+    solution: 'Solution statement',
+    architectureNotes: 'Architecture notes',
+    techStack: ['TypeScript', 'Docker'],
+    infrastructureDeps: ['docker'],
+    subsystems: [],
+    metrics: [],
+    keyDecisions: [],
+    resilienceTesting: 'Tested',
+    links: { github: 'https://github.com/example/mock' }
+  };
+
+  assert.equal(mockProject.category, 'infrastructure', 'Project category metadata remains on ProjectData');
+  assert.equal(matchesProjectClassification(mockProject, 'all'), true);
+  assert.equal(matchesProjectClassification(mockProject, 'infrastructure'), true);
+  assert.equal(matchesProjectClassification(mockProject, 'tooling'), false);
+});
+
+test('26. TopTelemetryBar.tsx & BottomCommandStrip.tsx: TRACE controls and shortcuts are removed', () => {
+  const topContent = fs.readFileSync(path.resolve('src/components/TopTelemetryBar.tsx'), 'utf8');
+  assert.ok(!topContent.includes("onToggleTraceMode"), 'No onToggleTraceMode in TopTelemetryBar');
+  assert.ok(!topContent.includes("traceModeActive"), 'No traceModeActive in TopTelemetryBar');
+  assert.ok(!topContent.includes("TRACE"), 'No TRACE button in TopTelemetryBar');
+
+  const bottomContent = fs.readFileSync(path.resolve('src/components/BottomCommandStrip.tsx'), 'utf8');
+  assert.ok(!bottomContent.includes("onToggleTraceMode"), 'No onToggleTraceMode in BottomCommandStrip');
+  assert.ok(!bottomContent.includes("traceModeActive"), 'No traceModeActive in BottomCommandStrip');
+  assert.ok(!bottomContent.includes("[T] TRACE SIGNAL"), 'No [T] TRACE SIGNAL in BottomCommandStrip actions');
+  assert.ok(bottomContent.includes("VIEW:"), 'Passive VIEW mode indicator exists in BottomCommandStrip');
+
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
+  assert.ok(!appContent.includes("e.key === 't' || e.key === 'T'"), 'T keyboard shortcut for trace toggle is removed');
+});
+
+test('27. TopologyCanvas.tsx: Floating Experience Dock and drag handlers are completely removed', () => {
   const canvasContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   
   assert.ok(!canvasContent.includes("sys_cartography_experience_dock_position"), 'No dock localStorage key');
@@ -551,7 +808,7 @@ test('22. TopologyCanvas.tsx: Floating Experience Dock and drag handlers are com
   assert.ok(!canvasContent.includes("onSelectExperience:"), 'onSelectExperience prop removed from TopologyCanvasProps');
 });
 
-test('23. forceLayout.ts: Dead force-graph scaffolding and simulation methods are deleted', async () => {
+test('28. forceLayout.ts: Dead force-graph scaffolding and simulation methods are deleted', async () => {
   const forceLayoutModule = await import('../src/utils/forceLayout.ts');
   const forceLayoutContent = fs.readFileSync(path.resolve('src/utils/forceLayout.ts'), 'utf8');
   
@@ -563,7 +820,7 @@ test('23. forceLayout.ts: Dead force-graph scaffolding and simulation methods ar
   assert.ok(!forceLayoutContent.includes("computeEquilibriumLayout"), 'computeEquilibriumLayout must be removed');
 });
 
-test('24. TopologyCanvas.tsx: Hover card reads from runtime projects array and uses getCapabilityCoreTechnology', () => {
+test('29. TopologyCanvas.tsx: Hover card reads from runtime projects array and uses getCapabilityCoreTechnology', () => {
   const canvasContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   
   assert.ok(canvasContent.includes("projects.find(item => item.id === hoveredProjectId)"), 'Hover card must look up hovered project in runtime projects array');
@@ -571,7 +828,7 @@ test('24. TopologyCanvas.tsx: Hover card reads from runtime projects array and u
   assert.ok(canvasContent.includes("getCapabilityCoreTechnology(skill)"), 'Midpoint and skill labels must use getCapabilityCoreTechnology');
 });
 
-test('25. RightInspectorPanel.tsx: Stale dock repositioning tip is removed', () => {
+test('30. RightInspectorPanel.tsx: Stale dock repositioning tip is removed', () => {
   const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
   assert.ok(!panelContent.includes("EXPERIENCE DOCK CAN ALSO BE REPOSITIONED"), 'Stale dock repositioning tip must be removed');
 });
