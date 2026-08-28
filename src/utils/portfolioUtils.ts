@@ -1,5 +1,129 @@
-import { ExperienceNode, EvidenceProvenance, SystemCategory } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
+import type { GitHubSyncResult } from '../services/githubService';
+
+export interface ParsedGitHubTarget {
+  type: 'user' | 'repo';
+  owner: string;
+  repo?: string;
+  canonicalIdentifier: string;
+}
+
+/**
+ * Deterministically parses a GitHub target (URL, shorthand, or handle).
+ * Rejects invalid protocols, unrelated hosts, and query/hash injections.
+ */
+export function parseGitHubTarget(input?: string | null): ParsedGitHubTarget {
+  if (!input || typeof input !== 'string') {
+    throw new Error('Please enter a GitHub username, org, or repository link.');
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error('Please enter a GitHub username, org, or repository link.');
+  }
+
+  let path = trimmed;
+
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed)) {
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      throw new Error(`Invalid URL format: "${trimmed}".`);
+    }
+
+    const host = url.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') {
+      throw new Error(`Invalid GitHub host "${url.hostname}". Expected "github.com".`);
+    }
+
+    path = url.pathname;
+  } else if (/^(www\.)?github\.com(\/|$)/i.test(trimmed)) {
+    path = trimmed.replace(/^(www\.)?github\.com\/?/i, '');
+    const qIdx = path.search(/[?#]/);
+    if (qIdx >= 0) path = path.slice(0, qIdx);
+  } else {
+    // If shorthand target contains URL scheme or query/hash or hostile chars
+    if (path.includes('://') || path.includes('?') || path.includes('#')) {
+      throw new Error(`Invalid GitHub target: "${trimmed}".`);
+    }
+  }
+
+  const segments = path
+    .split('/')
+    .map(s => s.trim().replace(/^@/, ''))
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    throw new Error(`Invalid GitHub target: "${trimmed}". Expected a username or repository.`);
+  }
+
+  const validSegmentRegex = /^[a-zA-Z0-9_.-]+$/;
+  for (const seg of segments) {
+    if (!validSegmentRegex.test(seg)) {
+      throw new Error(`Invalid GitHub identifier segment: "${seg}".`);
+    }
+  }
+
+  if (segments.length === 1) {
+    const owner = segments[0];
+    return {
+      type: 'user',
+      owner,
+      canonicalIdentifier: owner.toLowerCase()
+    };
+  }
+
+  const owner = segments[0];
+  const repo = segments[1].replace(/\.git$/i, '');
+  return {
+    type: 'repo',
+    owner,
+    repo,
+    canonicalIdentifier: `${owner.toLowerCase()}/${repo.toLowerCase()}`
+  };
+}
+
+/**
+ * Normalizes a GitHub target string (URL, handle, or path) to a canonical lowercased identity.
+ * e.g. "https://github.com/SalAkBuK/" -> "salakbuk"
+ *      "github.com/SalAkBuK" -> "salakbuk"
+ *      "SalAkBuK" -> "salakbuk"
+ */
+export function normalizeGitHubTarget(target?: string | null): string {
+  if (!target || typeof target !== 'string' || !target.trim()) return '';
+  try {
+    const parsed = parseGitHubTarget(target);
+    return parsed.canonicalIdentifier;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Owner-scopes the generated GitHub snapshot.
+ * Returns the snapshot if the configured target matches the snapshot metadata target,
+ * otherwise returns null to prevent data leakage in forks.
+ */
+export function resolveGitHubSnapshotForTarget(
+  configuredTarget: string,
+  metadata?: GitHubSnapshotMetadata | null,
+  snapshot?: GitHubSyncResult | null
+): GitHubSyncResult | null {
+  if (!configuredTarget || !metadata || !snapshot) {
+    return null;
+  }
+
+  const normalizedConfigured = normalizeGitHubTarget(configuredTarget);
+  const normalizedSnapshot = normalizeGitHubTarget(metadata.githubTarget || metadata.sourceIdentifier);
+
+  if (normalizedConfigured && normalizedSnapshot && normalizedConfigured === normalizedSnapshot) {
+    return snapshot;
+  }
+
+  return null;
+}
 
 /**
  * Resolves professional experience with clean source precedence and provenance tracking.
@@ -202,3 +326,24 @@ export function groupExperienceByProgression(experience: ExperienceNode[]): Grou
     };
   });
 }
+
+/**
+ * Pure helper to clone and apply deployment/demo links from local configuration to projects.
+ * Preserves the underlying GitHub snapshot and fallback repository homepage.
+ */
+export function applyProjectLinkOverrides(
+  projects: ProjectData[],
+  projectLinks: Record<string, string> = {}
+): ProjectData[] {
+  return projects.map(p => {
+    const overriddenDemo = resolveDeploymentLink(p.title, p.links.demo, projectLinks);
+    return {
+      ...p,
+      links: {
+        ...p.links,
+        demo: overriddenDemo
+      }
+    };
+  });
+}
+
