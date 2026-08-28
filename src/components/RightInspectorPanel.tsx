@@ -113,7 +113,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
     new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean).length;
 
-  // Shared generic progression grouping (used across Experience Dock and Experience Index)
+  // Shared generic progression grouping used by Professional Experience index/detail views
   const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
 
   return (
@@ -1139,7 +1139,8 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     <div>› CLICK NODE: Inspect architectural evidence</div>
                     <div>› DBL-CLICK NODE: Enter subsystem decomposition</div>
                     <div>› DRAG NODE: Spatial repositioning</div>
-                    <div>› NAVIGATION FILTER: Filter by architectural layer</div>
+                    <div>› TOPOLOGY VIEW: Systems / Capabilities / Relationships</div>
+                    <div>› SEARCH: Filter repository nodes by title / code / stack</div>
                   </div>
                 </div>
               </>

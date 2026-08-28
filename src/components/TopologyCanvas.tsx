@@ -27,8 +27,8 @@ import {
   ProjectData, 
   InfrastructureSkill, 
   ExperienceNode, 
-  SystemCategory, 
-  ViewportState 
+  ViewportState,
+  TopologyViewMode
 } from '../types';
 import { VERIFIED_TOPOLOGY_ZONES as TOPOLOGY_ZONES } from '../data/verifiedPortfolioData';
 import {
@@ -41,7 +41,6 @@ import {
   GRID_SNAP_STEP
 } from '../utils/collision';
 import {
-  matchesProjectClassification,
   isProjectLinkedToExperience
 } from '../utils/portfolioUtils';
 import { 
@@ -55,7 +54,9 @@ import {
 import {
   assembleTopologyLayout,
   wrapCalloutTitle,
-  getConduitPresentationState
+  getConduitPresentationState,
+  getTopologyNodeEmphasis,
+  getNodeEmphasisClassName
 } from '../utils/topologyLayout';
 
 interface TopologyCanvasProps {
@@ -65,9 +66,8 @@ interface TopologyCanvasProps {
   selectedSkillId: string | null;
   onSelectSkill: (id: string) => void;
   selectedExperienceId: string | null;
-  selectedCategory: SystemCategory | 'all';
   searchQuery: string;
-  traceModeActive: boolean;
+  topologyViewMode: TopologyViewMode;
   viewport: ViewportState;
   setViewport: React.Dispatch<React.SetStateAction<ViewportState>>;
   projects: ProjectData[];
@@ -103,9 +103,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedSkillId,
   onSelectSkill,
   selectedExperienceId,
-  selectedCategory,
   searchQuery,
-  traceModeActive,
+  topologyViewMode,
   viewport,
   setViewport,
   projects,
@@ -310,17 +309,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [fitAll, resetAllPositions, setViewport]);
 
-  // Filter projects using centralized classification matcher
+  // Filter projects using search query
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
-      const matchesCategory = matchesProjectClassification(p, selectedCategory);
-      const matchesSearch = searchQuery === '' || 
+      return searchQuery === '' || 
         p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.techStack.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesCategory && matchesSearch;
     });
-  }, [projects, selectedCategory, searchQuery]);
+  }, [projects, searchQuery]);
 
   // Global window mousemove & mouseup listeners for buttery smooth dragging with snap collision resolution
   useEffect(() => {
@@ -580,7 +577,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const isAnySkillSelected = Boolean(selectedSkillId);
     const isAnyDragging = Boolean(draggingNode);
 
-    projects.forEach(project => {
+    filteredProjects.forEach(project => {
       const isProjectSelected = selectedProjectId === project.id;
       const isProjectHovered = hoveredProjectId === project.id;
       const isDraggingThisProj = draggingNode?.type === 'project' && draggingNode.id === project.id;
@@ -615,7 +612,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           isAnyProjectSelected,
           isAnySkillSelected,
           isAnyDragging,
-          traceModeActive
+          showBackgroundRelationships: topologyViewMode === 'relationships'
         });
 
         if (presentationState === 'hidden') return;
@@ -780,8 +777,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     hoveredProjectId, 
     selectedSkillId, 
     hoveredSkillId, 
-    traceModeActive,
-    projects,
+    topologyViewMode,
+    filteredProjects,
     activeSkills,
     getProjectPos,
     getSkillPos,
@@ -1049,10 +1046,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const isHovered = hoveredSkillId === skill.id;
             const isSkillConnected = focusedConnectedSkillIds.has(skill.id);
             const isThisDragging = draggingNode?.type === 'skill' && draggingNode.id === skill.id;
-            
-            // Dim if hover focus is active and this skill is NOT hovered and NOT connected to hovered project
-            const isDimmed = isHoverFocus && !isHovered && !isSkillConnected;
-            const isHighlighted = isHovered || isSelected || isSkillConnected || isThisDragging;
+            const isAnyFocus = isHoverFocus || Boolean(selectedProjectId) || Boolean(selectedSkillId) || Boolean(draggingNode);
+            const emphasis = getTopologyNodeEmphasis({
+              nodeType: 'skill',
+              mode: topologyViewMode,
+              isHovered,
+              isSelected,
+              isDragging: isThisDragging,
+              isConnectedToFocus: isSkillConnected,
+              isAnyFocusActive: isAnyFocus,
+              isSelectedExpActive: Boolean(selectedExperienceId),
+              isLinkedToSelectedExp: false
+            });
+            const isHighlighted = emphasis === 'highlighted';
+            const emphasisClass = getNodeEmphasisClassName(emphasis);
 
             const skillPos = getSkillPos(skill);
             const posIso = project3DToIso(skillPos.x, skillPos.y, 0);
@@ -1097,9 +1104,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onMouseEnter={() => setHoveredSkillId(skill.id)}
                 onMouseLeave={() => setHoveredSkillId(null)}
-                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
-                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : 'opacity-100'
-                }`}
+                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${emphasisClass}`}
               >
                 {/* Active Connected Radar Halo when connected to hovered project */}
                 {isSkillConnected && hoveredProjectId && (
@@ -1320,15 +1325,24 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const isSelected = selectedProjectId === project.id;
             const isHovered = hoveredProjectId === project.id;
             const isThisDragging = draggingNode?.type === 'project' && draggingNode.id === project.id;
-            const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : false;
+            const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : (selectedSkillId ? focusedConnectedProjectIds.has(project.id) : false);
             const selectedExp = selectedExperienceId ? activeExperience.find(e => e.id === selectedExperienceId) : null;
             const isLinkedToSelectedExp = selectedExp ? isProjectLinkedToExperience(project, selectedExp) : false;
 
-            // Dim if hover focus is active (and not connected) OR an experience entry is selected (and not linked)
-            const isDimmed = (isHoverFocus && !isHovered && !isProjectConnectedToHoveredSkill) ||
-                             (Boolean(selectedExperienceId) && !isLinkedToSelectedExp);
-            const isHighlighted = isHovered || isSelected || isProjectConnectedToHoveredSkill || isThisDragging ||
-                                  (Boolean(selectedExperienceId) && isLinkedToSelectedExp);
+            const isAnyFocus = isHoverFocus || Boolean(selectedProjectId) || Boolean(selectedSkillId) || Boolean(draggingNode);
+            const emphasis = getTopologyNodeEmphasis({
+              nodeType: 'project',
+              mode: topologyViewMode,
+              isHovered,
+              isSelected,
+              isDragging: isThisDragging,
+              isConnectedToFocus: isProjectConnectedToHoveredSkill,
+              isAnyFocusActive: isAnyFocus,
+              isSelectedExpActive: Boolean(selectedExperienceId),
+              isLinkedToSelectedExp
+            });
+            const isHighlighted = emphasis === 'highlighted';
+            const emphasisClass = getNodeEmphasisClassName(emphasis);
             
             const projectPos = getProjectPos(project);
             const originX = projectPos.x;
@@ -1432,9 +1446,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onMouseEnter={() => setHoveredProjectId(project.id)}
                 onMouseLeave={() => setHoveredProjectId(null)}
-                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${
-                  isDimmed ? 'opacity-20 grayscale pointer-events-auto' : isThisDragging ? 'opacity-90' : 'opacity-100'
-                }`}
+                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${emphasisClass}`}
               >
                 {/* Structure Shadow on the Drafting Plane */}
                 <polygon
