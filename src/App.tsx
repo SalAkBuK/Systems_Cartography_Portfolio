@@ -22,37 +22,11 @@ import { BottomCommandStrip } from './components/BottomCommandStrip';
 import { CaseStudyModal } from './components/CaseStudyModal';
 import { ContactPage } from './components/ContactPage';
 import { ResumeModal } from './components/ResumeModal';
-import { connectGitHubTarget, GitHubSyncResult } from './services/githubService';
-import { resolveExperience } from './utils/portfolioUtils';
+import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from './data/githubSnapshot.generated';
+import { resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
 import { Menu, X } from 'lucide-react';
 
-const STORAGE_KEY_PROJECTS = 'sys_cartography_custom_projects';
-const STORAGE_KEY_GITHUB_SOURCE = 'sys_cartography_github_source';
-const STORAGE_KEY_SKILLS = 'sys_cartography_skills';
-const STORAGE_KEY_EXPERIENCE = 'sys_cartography_experience';
-const STORAGE_KEY_OPERATOR = 'sys_cartography_operator';
-const STORAGE_KEY_SCHEMA_VERSION = 'sys_cartography_schema_version';
-const CURRENT_STORAGE_SCHEMA_VERSION = `4:${PORTFOLIO_CONFIG.githubTarget.toLowerCase()}:${PORTFOLIO_CONFIG.siteId.toLowerCase()}`;
-
-function migrateStoredPortfolio(): void {
-  try {
-    if (localStorage.getItem(STORAGE_KEY_SCHEMA_VERSION) === CURRENT_STORAGE_SCHEMA_VERSION) return;
-    [
-      STORAGE_KEY_PROJECTS,
-      STORAGE_KEY_GITHUB_SOURCE,
-      STORAGE_KEY_SKILLS,
-      STORAGE_KEY_EXPERIENCE,
-      STORAGE_KEY_OPERATOR,
-      'sys_cartography_cv_source'
-    ].forEach(key => localStorage.removeItem(key));
-    localStorage.setItem(STORAGE_KEY_SCHEMA_VERSION, CURRENT_STORAGE_SCHEMA_VERSION);
-  } catch {
-    // Storage can be unavailable in private browsing contexts.
-  }
-}
-
 export default function App() {
-  migrateStoredPortfolio();
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
 
   useEffect(() => {
@@ -62,79 +36,38 @@ export default function App() {
     document.querySelector('meta[property="og:description"]')?.setAttribute('content', PORTFOLIO_CONFIG.metaDescription);
   }, []);
 
-  // Public GitHub snapshot, cached locally for graceful read-only fallback.
-  const [projects, setProjects] = useState<ProjectData[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
+  // Committed owner-scoped GitHub snapshot (network-independent at runtime)
+  const configuredSnapshot = resolveGitHubSnapshotForTarget(
+    PORTFOLIO_CONFIG.githubTarget,
+    GITHUB_SNAPSHOT_METADATA,
+    GITHUB_SNAPSHOT
+  );
+
+  const [projects] = useState<ProjectData[]>(() => configuredSnapshot?.projects || []);
+  const [skills] = useState<InfrastructureSkill[]>(() => configuredSnapshot?.skills || []);
+  const [experience] = useState<ExperienceNode[]>(() => 
+    resolveExperience(PORTFOLIO_CONFIG.experience, configuredSnapshot?.experience)
+  );
+
+  const [operator] = useState<OperatorMetadata>(() => {
+    const configuredOperator = PORTFOLIO_CONFIG.operator;
+    if (!configuredSnapshot) return configuredOperator;
+    return {
+      ...configuredSnapshot.operator,
+      ...configuredOperator,
+      primaryStack: configuredSnapshot.operator.primaryStack.length > 0 ? configuredSnapshot.operator.primaryStack : configuredOperator.primaryStack,
+      commitsIndexed: 'Not indexed',
+      productionUptime: 'Not claimed',
+      contact: {
+        ...configuredSnapshot.operator.contact,
+        ...configuredOperator.contact,
+        github: configuredOperator.contact.github || configuredSnapshot.operator.contact.github
       }
-    } catch {
-      // fallback
-    }
-    return [];
+    };
   });
 
-  const [skills, setSkills] = useState<InfrastructureSkill[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SKILLS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return [];
-  });
-
-  const [experience, setExperience] = useState<ExperienceNode[]>(() => {
-    if (PORTFOLIO_CONFIG.experience && PORTFOLIO_CONFIG.experience.length > 0) {
-      return resolveExperience(PORTFOLIO_CONFIG.experience);
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_EXPERIENCE);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return resolveExperience(undefined, parsed);
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return [];
-  });
-
-  const [operator, setOperator] = useState<OperatorMetadata>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_OPERATOR);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.name) {
-          return parsed;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return OPERATOR_METADATA;
-  });
-
-  const [gitHubSource, setGitHubSource] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY_GITHUB_SOURCE) || null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [gitHubSyncState, setGitHubSyncState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const gitHubSource = configuredSnapshot?.sourceIdentifier || null;
+  const gitHubSyncState = configuredSnapshot ? 'ready' : 'mismatch';
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [drilledProjectId, setDrilledProjectId] = useState<string | null>(null);
@@ -156,55 +89,6 @@ export default function App() {
   const drilledProject = drilledProjectId ? projects.find(p => p.id === drilledProjectId) || null : null;
   const selectedSkill = selectedSkillId ? skills.find(s => s.id === selectedSkillId) || null : null;
   const selectedExperience = selectedExperienceId ? experience.find(e => e.id === selectedExperienceId) || null : null;
-
-  // Public data is synchronized automatically from the configured GitHub target.
-  const handleApplyGitHubSync = useCallback((result: GitHubSyncResult) => {
-    const configuredOperator = PORTFOLIO_CONFIG.operator;
-    const mergedOperator: OperatorMetadata = {
-      ...result.operator,
-      ...configuredOperator,
-      primaryStack: result.operator.primaryStack.length > 0 ? result.operator.primaryStack : configuredOperator.primaryStack,
-      commitsIndexed: 'Not indexed',
-      productionUptime: 'Not claimed',
-      contact: {
-        ...result.operator.contact,
-        ...configuredOperator.contact,
-        github: configuredOperator.contact.github || result.operator.contact.github
-      }
-    };
-    const resolvedExperience = resolveExperience(PORTFOLIO_CONFIG.experience, result.experience);
-    setProjects(result.projects);
-    setSkills(result.skills);
-    setExperience(resolvedExperience);
-    setGitHubSource(result.sourceIdentifier);
-    setOperator(mergedOperator);
-    try {
-      localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(result.projects));
-      localStorage.setItem(STORAGE_KEY_SKILLS, JSON.stringify(result.skills));
-      localStorage.setItem(STORAGE_KEY_EXPERIENCE, JSON.stringify(resolvedExperience));
-      localStorage.setItem(STORAGE_KEY_GITHUB_SOURCE, result.sourceIdentifier);
-      localStorage.setItem(STORAGE_KEY_OPERATOR, JSON.stringify(mergedOperator));
-    } catch {
-      // Storage quota or private mode
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setGitHubSyncState('loading');
-    connectGitHubTarget(PORTFOLIO_CONFIG.githubTarget)
-      .then(result => {
-        if (cancelled) return;
-        handleApplyGitHubSync(result);
-        setGitHubSyncState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setGitHubSyncState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [handleApplyGitHubSync]);
 
   // Handle Project Selection
   const handleSelectProject = useCallback((id: string) => {

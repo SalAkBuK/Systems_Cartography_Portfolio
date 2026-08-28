@@ -25,6 +25,7 @@ export interface RawRepositoryInspection {
   treeFiles?: string[];
   readmeContent?: string | null;
   packageJsonContent?: string | null;
+  manifestContents?: Record<string, string>;
   pnpmWorkspaceYaml?: string | null;
   turboJson?: string | null;
   dockerFiles?: string[];

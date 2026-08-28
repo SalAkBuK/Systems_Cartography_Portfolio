@@ -12,7 +12,7 @@ interface TopTelemetryBarProps {
   gitHubUrl: string;
   siteId: string;
   templateRepositoryUrl: string;
-  syncState: 'loading' | 'ready' | 'error';
+  syncState?: 'ready' | 'mismatch' | 'missing' | 'loading' | 'error';
 }
 
 export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
@@ -23,7 +23,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
   activeProjectsCount = 0,
   gitHubSource,
   siteId,
-  syncState
+  syncState = 'ready'
 }) => (
   <header className="h-12 bg-[#D4CDA4] border-b border-[#15150F] flex items-center px-3 sm:px-4 justify-between text-[10px] uppercase tracking-widest font-bold select-none z-30 shrink-0">
     <div className="flex items-center gap-4 sm:gap-6 overflow-hidden">
@@ -50,8 +50,8 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
       <div className="hidden md:flex flex-col">
         <span className="text-[8px] opacity-50 tracking-tighter">OWNER SOURCE</span>
         <span className="flex items-center gap-1">
-          <span className={`w-1.5 h-1.5 ${syncState === 'ready' ? 'bg-[#C3E54E]' : syncState === 'error' ? 'bg-[#CA885C]' : 'bg-[#8EA9DA] animate-pulse'}`} />
-          {syncState === 'ready' ? `GITHUB // ${gitHubSource || 'READY'}` : syncState === 'error' ? 'CACHED // GITHUB UNAVAILABLE' : 'GITHUB // LOADING'}
+          <span className={`w-1.5 h-1.5 ${syncState === 'ready' ? 'bg-[#C3E54E]' : 'bg-[#CA885C]'}`} />
+          {syncState === 'ready' ? `GITHUB SNAPSHOT // ${gitHubSource || 'READY'}` : 'SNAPSHOT // REFRESH REQUIRED'}
         </span>
       </div>
     </div>
