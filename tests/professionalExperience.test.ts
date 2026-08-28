@@ -3,6 +3,7 @@ import test from 'node:test';
 import { resolveProfessionalExperience } from '../src/services/experienceResolver';
 import { OWNER_PROFILE } from '../src/data/ownerProfile.generated';
 import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
+import { ADDITIONAL_OWNER_EXPERIENCE } from '../src/data/ownerAdditionalExperience';
 import { getRepositoryEvidence } from '../src/data/repositoryEvidence';
 import { ExperienceNode, GeneratedOwnerProfile, OwnerExperienceEvidence } from '../src/types';
 import { parseLinkedInProfileText, buildGeneratedOwnerProfile } from '../scripts/linkedinProfileParser';
@@ -14,7 +15,7 @@ test('1. Reconstructing importer output is compatible with experienceResolver', 
   });
 
   assert.ok(Array.isArray(resolved));
-  assert.equal(resolved.length, 3, 'All 3 imported LinkedIn roles must survive');
+  assert.equal(resolved.length, 4, 'All 3 imported LinkedIn roles and 1 additional curated freelance role must resolve');
 });
 
 test('2. LinkedIn re-import does not modify or delete ownerExperienceEvidence', () => {
@@ -84,6 +85,7 @@ test('2. LinkedIn re-import does not modify or delete ownerExperienceEvidence', 
 
   const resolved = resolveProfessionalExperience({
     importedExperience: reimportedProfile.experience,
+    additionalExperience: [],
     curatedEvidence: OWNER_EXPERIENCE_EVIDENCE
   });
 
@@ -107,19 +109,22 @@ test('2. LinkedIn re-import does not modify or delete ownerExperienceEvidence', 
 test('3. All three imported Salih employment records survive resolution', () => {
   const resolved = resolveProfessionalExperience();
 
-  assert.equal(resolved.length, 3, 'All 3 records must survive');
+  assert.equal(resolved.length, 4, 'All 4 records (3 imported + 1 freelance) must survive');
 
   const codefierFullStack = resolved.find(e => e.id === 'exp-01-codefier-full-stack-engineer');
   const codefierReact = resolved.find(e => e.id === 'exp-02-codefier-react-native-js-developer');
   const devinity = resolved.find(e => e.id === 'exp-03-devinity-solutions-web-development-intern-mern-stack');
+  const freelance = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions');
 
   assert.ok(codefierFullStack, 'CodeFier Full Stack Engineer must exist');
   assert.ok(codefierReact, 'CodeFier React Developer must exist');
   assert.ok(devinity, 'Devinity Solutions Intern must exist');
+  assert.ok(freelance, 'Freelance Web Developer must exist');
 
   assert.equal(codefierFullStack.organization, 'CodeFier');
   assert.equal(codefierReact.organization, 'CodeFier');
   assert.equal(devinity.organization, 'Devinity Solutions');
+  assert.equal(freelance.organization, 'Independent / Freelance');
 });
 
 test('4. CodeFier roles group visually as progression on the primary role', () => {
@@ -229,6 +234,7 @@ test('8. Freelance work cannot accidentally inherit CodeFier evidence', () => {
 
   const resolved = resolveProfessionalExperience({
     importedExperience: profileWithFreelance,
+    additionalExperience: [],
     curatedEvidence: OWNER_EXPERIENCE_EVIDENCE
   });
 
@@ -380,10 +386,11 @@ test('17. Freshly generated ownerProfile.generated.ts from actual importer compi
 
   const resolved = resolveProfessionalExperience({
     importedExperience: generatedProfile.experience,
+    additionalExperience: [],
     curatedEvidence: OWNER_EXPERIENCE_EVIDENCE
   });
 
-  assert.equal(resolved.length, 3);
+  assert.equal(resolved.length, 3, 'Raw LinkedIn import alone resolves to 3 roles');
   assert.equal(resolved[0].organization, 'CodeFier');
   assert.equal(resolved[0].role, 'Full Stack Engineer');
   assert.ok(resolved[0].systemsDelivered && resolved[0].systemsDelivered.length >= 3);
@@ -552,14 +559,14 @@ test('26. CAREER ORGANIZATIONS calculates unique organizations rather than role 
   const { PORTFOLIO_CONFIG } = await import('../src/config/portfolioConfig');
   const resolved = PORTFOLIO_CONFIG.experience || [];
   
-  // Current owner has 3 employment records (CodeFier Full Stack, CodeFier React Dev, Devinity Solutions Intern)
-  assert.equal(resolved.length, 3, 'Total employment records is 3');
+  // Current owner has 4 employment records (CodeFier Full Stack, CodeFier React Dev, Devinity Solutions Intern, Independent / Freelance Web Developer)
+  assert.equal(resolved.length, 4, 'Total employment records is 4');
 
   const uniqueOrgs = Array.from(
     new Set(resolved.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean);
 
-  assert.equal(uniqueOrgs.length, 2, 'Unique career organizations must be 2 (CodeFier and Devinity Solutions)');
+  assert.equal(uniqueOrgs.length, 3, 'Unique career organizations must be 3 (CodeFier, Devinity Solutions, and Independent / Freelance)');
 });
 
 test('27. groupExperienceByProgression centralizes grouping with organization tenure and exact linked systems count', async () => {
@@ -569,8 +576,8 @@ test('27. groupExperienceByProgression centralizes grouping with organization te
   
   const grouped = groupExperienceByProgression(resolved);
 
-  // Current owner verified experience must produce exactly 2 grouped cards
-  assert.equal(grouped.length, 2, 'Must produce 2 grouped employer cards');
+  // Current owner verified experience must produce exactly 3 grouped cards
+  assert.equal(grouped.length, 3, 'Must produce 3 grouped employer cards');
   
   // Card 1: CodeFier (Full Stack Engineer, PROMOTED, SEP 2025 → PRESENT, exactly 3 delivered systems)
   assert.equal(grouped[0].organization, 'CodeFier');
@@ -587,6 +594,14 @@ test('27. groupExperienceByProgression centralizes grouping with organization te
   assert.equal(grouped[1].roleCount, 1);
   assert.equal(grouped[1].organizationTenure, 'JUL 2024 → SEP 2024');
   assert.equal(grouped[1].linkedSystemsCount, 0);
+
+  // Card 3: Independent / Freelance (Freelance Web Developer, 2025, 1 delivered system)
+  assert.equal(grouped[2].organization, 'Independent / Freelance');
+  assert.equal(grouped[2].role, 'Freelance Web Developer');
+  assert.equal(grouped[2].isPromoted, false);
+  assert.equal(grouped[2].roleCount, 1);
+  assert.equal(grouped[2].organizationTenure, '2025');
+  assert.equal(grouped[2].linkedSystemsCount, 1, 'Independent / Freelance linked systems count must be 1 (AOK Health Solutions Website)');
 });
 
 test('28. RightInspectorPanel consumes groupExperienceByProgression helper while TopologyCanvas keeps clean canvas', async () => {
@@ -694,4 +709,285 @@ test('32. groupExperienceByProgression normalizes progressionGroup casing withou
   assert.equal(grouped[0].role, 'Full Stack Engineer');
   assert.equal(grouped[0].roleCount, 2);
   assert.equal(grouped[0].organizationTenure, 'SEP 2025 → PRESENT');
+});
+
+// ---------------------------------------------------------------------------
+// PART 5: Persistent Freelance Experience & AOK Client Evidence Invariants
+// ---------------------------------------------------------------------------
+
+test('33. ownerProfile.generated.ts is NOT modified to contain AOK or freelance experience', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const generatedContent = fs.readFileSync(path.resolve('src/data/ownerProfile.generated.ts'), 'utf8');
+
+  assert.ok(!generatedContent.includes('AOK'), 'ownerProfile.generated.ts must not contain AOK');
+  assert.ok(!generatedContent.includes('Freelance'), 'ownerProfile.generated.ts must not contain Freelance');
+  assert.ok(!generatedContent.includes('independent-freelance'), 'ownerProfile.generated.ts must not contain independent-freelance');
+});
+
+test('34. ADDITIONAL_OWNER_EXPERIENCE contains the persistent AOK freelance record', async () => {
+  const { ADDITIONAL_OWNER_EXPERIENCE } = await import('../src/data/ownerAdditionalExperience');
+
+  assert.ok(Array.isArray(ADDITIONAL_OWNER_EXPERIENCE), 'ADDITIONAL_OWNER_EXPERIENCE must be an array');
+  assert.equal(ADDITIONAL_OWNER_EXPERIENCE.length, 1, 'Contains exactly 1 persistent freelance record');
+
+  const aok = ADDITIONAL_OWNER_EXPERIENCE[0];
+  assert.equal(aok.id, 'exp-freelance-aok-health-solutions');
+  assert.equal(aok.code, 'EXP-FL-01');
+  assert.equal(aok.organization, 'Independent / Freelance');
+  assert.equal(aok.role, 'Freelance Web Developer');
+  assert.equal(aok.yearRange, '2025');
+  assert.equal(aok.location, 'Client Engagement');
+  assert.equal(aok.systemDomain, 'Client Web Delivery');
+  assert.equal(aok.provenance, 'CURATED');
+  assert.equal(aok.progressionGroup, 'independent-freelance');
+  assert.equal(aok.progressionOrder, 1);
+  assert.equal(aok.startDate, undefined, 'startDate must be omitted without contract date evidence');
+  assert.equal(aok.endDate, undefined, 'endDate must be undefined and NOT null (not current/present)');
+  assert.ok(aok.keyOutputs && aok.keyOutputs.length >= 2);
+  assert.ok(aok.keyOutputs.some(k => k.includes('AOK Health Solutions')));
+  assert.ok(aok.keyOutputs.some(k => k.includes('Hostinger')));
+});
+
+test('35. resolveProfessionalExperience() includes AOK even though it is absent from imported LinkedIn experience', () => {
+  const resolved = resolveProfessionalExperience();
+
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions');
+  assert.ok(aok, 'AOK freelance experience must be present in resolved experience');
+  assert.equal(aok.organization, 'Independent / Freelance');
+  assert.equal(aok.role, 'Freelance Web Developer');
+});
+
+test('36. Additional experience survives a simulated LinkedIn re-import', () => {
+  const simulatedReimported: ExperienceNode[] = [
+    {
+      id: 'exp-simulated-01',
+      code: 'EXP-SIM-01',
+      organization: 'Future Company',
+      role: 'Staff Engineer',
+      yearRange: '2026 - Present',
+      location: 'Remote',
+      systemDomain: 'Core Systems',
+      keyOutputs: ['Leading platform teams.'],
+      systemsArchitected: [],
+      technologies: ['TypeScript'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED',
+      startDate: '2026-01',
+      endDate: null
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: simulatedReimported,
+    additionalExperience: ADDITIONAL_OWNER_EXPERIENCE
+  });
+
+  assert.equal(resolved.length, 2, 'Must contain 1 simulated imported role + 1 additional freelance role');
+  assert.ok(resolved.some(e => e.id === 'exp-simulated-01'));
+  assert.ok(resolved.some(e => e.id === 'exp-freelance-aok-health-solutions'));
+});
+
+test('37. Resolver returns additionalExperience even when importedExperience is empty (early-return bug fix)', () => {
+  const resolved = resolveProfessionalExperience({
+    importedExperience: [],
+    additionalExperience: ADDITIONAL_OWNER_EXPERIENCE
+  });
+
+  assert.equal(resolved.length, 1, 'Empty importedExperience must still resolve additionalExperience');
+  assert.equal(resolved[0].id, 'exp-freelance-aok-health-solutions');
+});
+
+test('38. mergeExperienceSources does not mutate input arrays', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+
+  const imported: ExperienceNode[] = [
+    {
+      id: 'exp-imp-1',
+      code: 'EXP-01',
+      organization: 'Org A',
+      role: 'Role A',
+      yearRange: '2024',
+      location: 'Loc A',
+      systemDomain: 'Domain A',
+      keyOutputs: ['Output A'],
+      systemsArchitected: [],
+      technologies: ['TypeScript'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const additional: ExperienceNode[] = [
+    {
+      id: 'exp-add-1',
+      code: 'EXP-02',
+      organization: 'Org B',
+      role: 'Role B',
+      yearRange: '2025',
+      location: 'Loc B',
+      systemDomain: 'Domain B',
+      keyOutputs: ['Output B'],
+      systemsArchitected: [],
+      technologies: ['React'],
+      gridPosition: { x: 100, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const importedCopy = JSON.parse(JSON.stringify(imported));
+  const additionalCopy = JSON.parse(JSON.stringify(additional));
+
+  const merged = mergeExperienceSources(imported, additional);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(imported, importedCopy, 'imported array was not mutated');
+  assert.deepEqual(additional, additionalCopy, 'additional array was not mutated');
+});
+
+test('39. mergeExperienceSources deduplicates identical experience and preserves imported base identity', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+
+  const imported: ExperienceNode[] = [
+    {
+      id: 'exp-duplicate',
+      code: 'EXP-01',
+      organization: 'Independent / Freelance',
+      role: 'Freelance Web Developer',
+      yearRange: '2025',
+      location: 'Islamabad, Pakistan',
+      systemDomain: 'Web Development',
+      keyOutputs: ['Imported LinkedIn version of freelance role.'],
+      systemsArchitected: [],
+      technologies: ['TypeScript'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const additional: ExperienceNode[] = [
+    {
+      id: 'exp-duplicate',
+      code: 'EXP-FL-01',
+      organization: 'Independent / Freelance',
+      role: 'Freelance Web Developer',
+      yearRange: '2025',
+      location: 'Client Engagement',
+      systemDomain: 'Client Web Delivery',
+      keyOutputs: ['Additional curated version.'],
+      systemsArchitected: [],
+      technologies: ['Next.js'],
+      gridPosition: { x: 100, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const merged = mergeExperienceSources(imported, additional);
+  assert.equal(merged.length, 1, 'Duplicate record must not be emitted twice');
+  assert.equal(merged[0].location, 'Islamabad, Pakistan', 'Imported LinkedIn base identity wins for duplicates');
+  assert.equal(merged[0].keyOutputs[0], 'Imported LinkedIn version of freelance role.');
+});
+
+test('40. CodeFier resolves 2 roles and 3 delivered systems while Independent / Freelance resolves 1 role and 1 delivered system', () => {
+  const resolved = resolveProfessionalExperience();
+
+  const codefier = resolved.filter(e => e.organization === 'CodeFier');
+  assert.equal(codefier.length, 2, 'CodeFier has 2 role records');
+  assert.equal(codefier[0].systemsDelivered?.length, 3, 'CodeFier primary role has 3 delivered systems');
+
+  const freelance = resolved.filter(e => e.organization === 'Independent / Freelance');
+  assert.equal(freelance.length, 1, 'Independent / Freelance has 1 role record');
+  assert.equal(freelance[0].systemsDelivered?.length, 1, 'Independent / Freelance has 1 delivered system');
+  assert.equal(freelance[0].systemsDelivered?.[0].name, 'AOK Health Solutions Website');
+});
+
+test('41. AOK evidence links target exact repository subdirectory and live showcase site', () => {
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  assert.ok(aok.evidenceLinks && aok.evidenceLinks.length === 2, 'AOK must have exactly 2 evidence links');
+
+  const repoLink = aok.evidenceLinks.find(l => l.type === 'repository');
+  assert.ok(repoLink);
+  assert.equal(repoLink.url, 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3');
+  assert.equal(repoLink.projectId, undefined, 'Must NOT contain projectId');
+
+  const liveLink = aok.evidenceLinks.find(l => l.type === 'showcase');
+  assert.ok(liveLink);
+  assert.equal(liveLink.url, 'https://aokhealthsolutions.com/');
+  assert.equal(liveLink.projectId, undefined, 'Must NOT contain projectId');
+});
+
+test('42. AOK has NO generic topology project linkage and getLinkedProjectIdsForExperience returns empty set', async () => {
+  const { getLinkedProjectIdsForExperience, isProjectLinkedToExperience } = await import('../src/utils/portfolioUtils');
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  assert.equal(aok.systemsDelivered?.[0].linkedProjectIds, undefined, 'AOK systemsDelivered must not have linkedProjectIds');
+
+  const linkedIds = getLinkedProjectIdsForExperience(aok);
+  assert.equal(linkedIds.size, 0, 'AOK must not link to any topology project IDs');
+  assert.equal(linkedIds.has('psych-websites'), false, 'AOK must NOT link to psych-websites topology project');
+
+  const genericPsychWebsitesProject = {
+    id: 'psych-websites',
+    title: 'psych-websites'
+  };
+  assert.equal(
+    isProjectLinkedToExperience(genericPsychWebsitesProject, aok),
+    false,
+    'psych-websites topology project must NOT be linked to AOK experience'
+  );
+});
+
+test('43. Evidence isolation: CodeFier and AOK evidence do not leak into other organizations', () => {
+  const resolved = resolveProfessionalExperience();
+
+  const devinity = resolved.find(e => e.organization === 'Devinity Solutions')!;
+  assert.equal(devinity.systemsDelivered?.length || 0, 0, 'Devinity must not inherit any delivered systems');
+  assert.equal(devinity.architectedSystemsDetails?.length || 0, 0, 'Devinity must not inherit architected systems');
+
+  const freelance = resolved.find(e => e.organization === 'Independent / Freelance')!;
+  assert.equal(freelance.architectedSystemsDetails?.length || 0, 0, 'Freelance must not inherit CodeFier architecture');
+  assert.ok(freelance.systemsDelivered?.every(s => !s.name.includes('TowerDesk')), 'Freelance must not have TowerDesk systems');
+
+  const codefier = resolved.find(e => e.organization === 'CodeFier')!;
+  assert.ok(codefier.systemsDelivered?.every(s => !s.name.includes('AOK')), 'CodeFier must not have AOK systems');
+});
+
+test('44. AOK date semantics: omitted startDate and undefined endDate do not synthesize CURRENT or PRESENT', async () => {
+  const { computeGroupedTenure, formatIsoYearMonth } = await import('../src/utils/portfolioUtils');
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  assert.equal(aok.startDate, undefined, 'AOK startDate must be undefined');
+  assert.equal(aok.endDate, undefined, 'AOK endDate must be undefined');
+  assert.notEqual(aok.endDate, null, 'AOK endDate must NOT be null');
+
+  const tenure = computeGroupedTenure([aok], aok.yearRange);
+  assert.equal(tenure, '2025', 'Tenure must fall back to conservative 2025 yearRange without PRESENT');
+  assert.ok(!tenure.includes('PRESENT'), 'Tenure must not include PRESENT');
+  assert.ok(!tenure.includes('CURRENT'), 'Tenure must not include CURRENT');
+});
+
+test('45. AOK infrastructureOperations contains Hostinger as CURATED and no AWS current hosting claims exist', () => {
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  assert.ok(aok.infrastructureOperations && aok.infrastructureOperations.length >= 1);
+
+  const hosting = aok.infrastructureOperations.find(op => op.area.includes('Hosting'))!;
+  assert.ok(hosting, 'Client Hosting operation must exist');
+  assert.ok(hosting.details.includes('Hostinger'), 'Must specify Hostinger');
+  assert.equal(hosting.provenance, 'CURATED', 'Hostinger operations must have CURATED provenance');
+
+  // Verify no AWS claims exist for AOK
+  assert.ok(!hosting.details.includes('AWS'), 'No AWS claim in AOK hosting');
+  assert.ok(!hosting.details.includes('Amplify'), 'No Amplify claim in AOK hosting');
+  assert.ok(!hosting.details.includes('EC2'), 'No EC2 claim in AOK hosting');
+  assert.ok(!hosting.details.includes('CloudFront'), 'No CloudFront claim in AOK hosting');
+  assert.ok(!hosting.details.includes('Vercel'), 'No Vercel claim in AOK hosting');
 });
