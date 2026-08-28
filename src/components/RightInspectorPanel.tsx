@@ -37,6 +37,11 @@ import {
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
 import { groupExperienceByProgression } from '../utils/portfolioUtils';
+import { 
+  projectUsesCapability, 
+  getCapabilityProfessionalHistory, 
+  getCapabilityCoreTechnology 
+} from '../utils/capabilityAssociations';
 
 export const ProvenanceBadge: React.FC<{ provenance?: EvidenceProvenance }> = ({ provenance = 'VERIFIED' }) => {
   if (provenance === 'CURATED') {
@@ -288,7 +293,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                           className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-semibold bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors cursor-pointer"
                         >
                           <span className="w-1.5 h-1.5 bg-[#8EA9DA]"></span>
-                          <span>{skill.name.split(' ')[0]}</span>
+                          <span>{getCapabilityCoreTechnology(skill)}</span>
                         </button>
                       );
                     })}
@@ -534,55 +539,72 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               <span>← TECHNICAL CAPABILITIES</span>
             </button>
 
+            {/* Capability Header */}
             <div className="border-b border-[#15150F] pb-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#15150F]">{selectedSkill.code} // {selectedSkill.name}</span>
-                <span className="text-[8.5px] bg-[#15150F] text-[#8EA9DA] px-1.5 py-0.5 font-bold">
-                  {selectedSkill.yearsActive > 0 ? `${selectedSkill.yearsActive} YRS ACTIVE` : 'YEARS NOT CLAIMED'}
-                </span>
-              </div>
-              <div className="text-[9px] text-[#5C5946] mt-1">
-                PROFICIENCY: {selectedSkill.proficiencyScore > 0 ? `${selectedSkill.proficiencyScore}/100` : 'NOT CLAIMED'} · {selectedSkill.systemCount} SYSTEMS MAPPED
-              </div>
+              {(() => {
+                const profHistory = getCapabilityProfessionalHistory(selectedSkill, experience);
+                const matchedProjects = projects.filter(p => projectUsesCapability(p, selectedSkill));
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-bold text-[#15150F]">{selectedSkill.code} // {selectedSkill.name}</span>
+                      <span className={`text-[8.5px] px-1.5 py-0.5 font-bold ${
+                        profHistory.hasEvidence 
+                          ? 'bg-[#15150F] text-[#8EA9DA]' 
+                          : 'bg-[#15150F]/70 text-[#D4CDA4]'
+                      }`}>
+                        {profHistory.hasEvidence 
+                          ? `PROFESSIONAL EVIDENCE // ${profHistory.timeSpan}` 
+                          : 'PROFESSIONAL HISTORY // UNAVAILABLE'}
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-[#5C5946] mt-1">
+                      CHRONOLOGY: {profHistory.hasEvidence 
+                        ? `${profHistory.timeSpan} (${profHistory.roleCount} ${profHistory.roleCount === 1 ? 'ROLE RECORD' : 'ROLE RECORDS'})` 
+                        : 'NO DATED ROLE RECORDS'} · {matchedProjects.length} {matchedProjects.length === 1 ? 'SYSTEM MAPPED' : 'SYSTEMS MAPPED'}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
-            {/* Connected Systems */}
+            {/* Associated Systems */}
             <div>
-              <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5">
-                DEPLOYED IN PRODUCTION SYSTEMS
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {(() => {
-                  const matchedProjects = projects.filter(p => 
-                    selectedSkill.usedInProjects.includes(p.id) || 
-                    p.infrastructureDeps.includes(selectedSkill.id) ||
-                    p.techStack.some(t => t.toLowerCase().includes(selectedSkill.name.toLowerCase().split(' ')[0]))
-                  );
+              {(() => {
+                const matchedProjects = projects.filter(p => projectUsesCapability(p, selectedSkill));
 
-                  if (matchedProjects.length === 0) {
-                    return (
-                      <div className="text-[9px] text-[#5C5946] italic p-2 bg-[#E2DCB9]/40 border border-[#15150F]/40">
-                        Capability available across repository cluster.
-                      </div>
-                    );
-                  }
-
-                  return matchedProjects.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => onSelectProject(p.id)}
-                      className="flex items-center justify-between p-2 bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors text-left group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5" style={{ backgroundColor: p.accentColor }}></span>
-                        <span className="font-bold text-[10px]">{p.code}</span>
-                        <span className="text-[9.5px] truncate max-w-[170px]">{p.title}</span>
-                      </div>
-                      <span className="text-[8px] opacity-60 group-hover:text-[#C3E54E]">INSPECT →</span>
-                    </button>
-                  ));
-                })()}
-              </div>
+                return (
+                  <>
+                    <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>ASSOCIATED SYSTEMS ({matchedProjects.length})</span>
+                      <span className="text-[7.5px] font-mono opacity-80 font-normal">REPOSITORIES VERIFYING THIS CAPABILITY</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {matchedProjects.length === 0 ? (
+                        <div className="text-[9px] text-[#5C5946] italic p-2 bg-[#E2DCB9]/40 border border-[#15150F]/40">
+                          No associated repositories in current repository cluster.
+                        </div>
+                      ) : (
+                        matchedProjects.map(p => (
+                          <button
+                            key={p.id}
+                            onClick={() => onSelectProject(p.id)}
+                            className="flex items-center justify-between p-2 bg-[#E2DCB9] border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors text-left group cursor-pointer"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5" style={{ backgroundColor: p.accentColor }}></span>
+                              <span className="font-bold text-[10px]">{p.code}</span>
+                              <span className="text-[9.5px] truncate max-w-[170px]">{p.title}</span>
+                            </div>
+                            <span className="text-[8px] opacity-60 group-hover:text-[#C3E54E]">INSPECT →</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Primary Use Cases */}
@@ -1202,7 +1224,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
                 <div className="flex flex-col gap-2">
                   {skills.map((skill) => {
-                    const associatedProjectsCount = skill.systemCount || skill.usedInProjects.length;
+                    const associatedProjectsCount = projects.filter(p => projectUsesCapability(p, skill)).length;
                     return (
                       <button
                         key={skill.id}
