@@ -110,35 +110,37 @@ export function getTopologyNodeEmphasis(params: NodeEmphasisParams): TopologyNod
     isLinkedToSelectedExp
   } = params;
 
-  // 1. Direct Interaction / Focus Target (highest priority)
+  // 1. Authoritative Experience Selection Precedence for Projects
+  // When an experience record is selected, experience-link filtering is authoritative for all project nodes.
+  // Unlinked projects remain strictly dimmed regardless of hover or connected focus.
+  if (isSelectedExpActive && nodeType === 'project') {
+    return isLinkedToSelectedExp ? 'highlighted' : 'dimmed';
+  }
+
+  // 2. Direct Interaction / Focus Target (highest priority for skills, and projects when experience is inactive)
   if (isHovered || isSelected || isDragging) {
     return 'highlighted';
   }
 
-  // 2. Connected to Active Focus Target (e.g. connected skill when project is hovered, or connected project when skill is hovered)
+  // 3. Connected to Active Focus Target
   if (isConnectedToFocus) {
     return 'highlighted';
   }
 
-  // 3. Experience Selection Precedence
-  // When an experience record is selected, experience-link filtering is authoritative for projects.
-  if (isSelectedExpActive) {
-    if (nodeType === 'project') {
-      return isLinkedToSelectedExp ? 'highlighted' : 'dimmed';
-    }
-    // Skills during experience selection: dim if focus active on an unrelated item, otherwise follow mode
+  // 4. Skills during Experience Selection:
+  if (isSelectedExpActive && nodeType === 'skill') {
     if (isAnyFocusActive) {
       return 'dimmed';
     }
     return mode === 'systems' ? 'contextual' : 'primary';
   }
 
-  // 4. If any focus target is active on the canvas (hover/select/drag) and this node is unrelated:
+  // 5. Unrelated node during active canvas focus
   if (isAnyFocusActive) {
     return 'dimmed';
   }
 
-  // 5. At Rest (no focus active, no experience selected):
+  // 6. At Rest (no focus active, no experience selected):
   if (mode === 'systems') {
     return nodeType === 'project' ? 'primary' : 'contextual';
   }

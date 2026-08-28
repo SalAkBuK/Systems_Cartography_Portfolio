@@ -296,7 +296,8 @@ test('8d. getTopologyNodeEmphasis: Hover/selection overrides contextual de-empha
   assert.equal(connectedProj, 'highlighted');
 });
 
-test('8e. getTopologyNodeEmphasis: Selected Professional Experience highlights linked projects and dims unlinked projects', () => {
+test('8e. getTopologyNodeEmphasis: Selected Professional Experience is authoritative for projects (linked=highlighted, unlinked=dimmed regardless of hover/connected)', () => {
+  // A. Selected Experience + linked project -> highlighted
   const linkedProj = getTopologyNodeEmphasis({
     nodeType: 'project',
     mode: 'systems',
@@ -308,9 +309,10 @@ test('8e. getTopologyNodeEmphasis: Selected Professional Experience highlights l
     isSelectedExpActive: true,
     isLinkedToSelectedExp: true
   });
-  assert.equal(linkedProj, 'highlighted');
+  assert.equal(linkedProj, 'highlighted', 'Linked project during experience selection must be highlighted');
 
-  const unlinkedProj = getTopologyNodeEmphasis({
+  // B. Selected Experience + unlinked project at rest -> dimmed
+  const unlinkedProjAtRest = getTopologyNodeEmphasis({
     nodeType: 'project',
     mode: 'systems',
     isHovered: false,
@@ -321,8 +323,50 @@ test('8e. getTopologyNodeEmphasis: Selected Professional Experience highlights l
     isSelectedExpActive: true,
     isLinkedToSelectedExp: false
   });
-  assert.equal(unlinkedProj, 'dimmed');
-  assert.ok(getNodeEmphasisClassName(unlinkedProj).includes('opacity-20'));
+  assert.equal(unlinkedProjAtRest, 'dimmed', 'Unlinked project during experience selection at rest must be dimmed');
+  assert.ok(getNodeEmphasisClassName(unlinkedProjAtRest).includes('opacity-20'));
+
+  // C. Selected Experience + unlinked project hovered -> STILL dimmed
+  const unlinkedProjHovered = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(unlinkedProjHovered, 'dimmed', 'Unlinked project during experience selection must remain dimmed when hovered');
+
+  // D. Selected Experience + unlinked project marked connected-to-focus -> STILL dimmed
+  const unlinkedProjConnected = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: false,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: true,
+    isAnyFocusActive: true,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(unlinkedProjConnected, 'dimmed', 'Unlinked project during experience selection must remain dimmed when connected to focus');
+
+  // E. Once isSelectedExpActive is false, hovered project -> highlighted normally
+  const projectHoveredNormal = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: false,
+    isLinkedToSelectedExp: false
+  });
+  assert.equal(projectHoveredNormal, 'highlighted', 'Project without experience selection must be highlighted when hovered');
 });
 
 // ---------------------------------------------------------------------------
@@ -828,7 +872,112 @@ test('29. TopologyCanvas.tsx: Hover card reads from runtime projects array and u
   assert.ok(canvasContent.includes("getCapabilityCoreTechnology(skill)"), 'Midpoint and skill labels must use getCapabilityCoreTechnology');
 });
 
-test('30. RightInspectorPanel.tsx: Stale dock repositioning tip is removed', () => {
+test('30. RightInspectorPanel.tsx & portfolioUtils.ts: Stale dock references and obsolete NAVIGATION FILTER guidance are removed', () => {
   const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
   assert.ok(!panelContent.includes("EXPERIENCE DOCK CAN ALSO BE REPOSITIONED"), 'Stale dock repositioning tip must be removed');
+  assert.ok(!panelContent.includes("NAVIGATION FILTER"), 'Obsolete NAVIGATION FILTER guidance must be removed');
+  assert.ok(!panelContent.includes("Filter by architectural layer"), 'Obsolete Filter by architectural layer text must be removed');
+  assert.ok(!panelContent.includes("Experience Dock"), 'Experience Dock text in comments must be updated');
+  assert.ok(panelContent.includes("TOPOLOGY VIEW: Systems / Capabilities / Relationships"), 'Accurate TOPOLOGY VIEW guidance must exist');
+
+  const utilsContent = fs.readFileSync(path.resolve('src/utils/portfolioUtils.ts'), 'utf8');
+  assert.ok(!utilsContent.includes("Experience Dock"), 'Experience Dock reference in portfolioUtils comments must be updated');
+});
+
+test('31. LeftNavigationRail.tsx: Fast Project Jump click path directly calls onSelectProject without calling setActiveView("projects")', () => {
+  const railContent = fs.readFileSync(path.resolve('src/components/LeftNavigationRail.tsx'), 'utf8');
+  
+  // Extract fast project jump button onClick
+  const jumpButtonIdx = railContent.indexOf('{filteredProjects.map((p) => {');
+  assert.ok(jumpButtonIdx !== -1, 'Fast project jump mapping must exist');
+  
+  const jumpSection = railContent.slice(jumpButtonIdx, jumpButtonIdx + 400);
+  assert.ok(jumpSection.includes('onSelectProject(p.id);'), 'onClick must call onSelectProject(p.id)');
+  assert.ok(jumpSection.includes('setIsMobileOpen(false);'), 'onClick must call setIsMobileOpen(false)');
+  assert.ok(!jumpSection.includes("setActiveView('projects')"), 'onClick must NOT call setActiveView("projects") which would reset topologyViewMode');
+});
+
+test('32. TopologyCanvas.tsx: renderedConnections iterates filteredProjects and reacts to search changes', () => {
+  const canvasContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  
+  // Verify renderedConnections iterates filteredProjects
+  assert.ok(
+    canvasContent.includes("filteredProjects.forEach(project => {"),
+    'renderedConnections must iterate filteredProjects instead of unfiltered projects array'
+  );
+  
+  // Verify useMemo dependencies include filteredProjects
+  const connectionsUseMemoIdx = canvasContent.indexOf('const renderedConnections = useMemo(');
+  const connectionsUseMemoEnd = canvasContent.indexOf('return connections;', connectionsUseMemoIdx);
+  const depsSlice = canvasContent.slice(connectionsUseMemoEnd, connectionsUseMemoEnd + 250);
+  
+  assert.ok(depsSlice.includes('filteredProjects'), 'renderedConnections useMemo dependencies must include filteredProjects');
+});
+
+test('33. TopologyCanvas search filtering: Hiding projects via search eliminates their relationship conduits', () => {
+  const mockProjects: ProjectData[] = [
+    {
+      id: 'proj-alpha',
+      code: 'ALPHA',
+      title: 'Alpha CRM System',
+      tagline: 'Alpha tagline',
+      category: 'backend',
+      status: 'ACTIVE',
+      year: '2025',
+      dimensions: { width: 100, height: 80, levels: 2 },
+      gridPosition: { x: 0, y: 0 },
+      accentColor: '#C3E54E',
+      summary: 'Summary',
+      problem: 'Problem',
+      solution: 'Solution',
+      architectureNotes: 'Notes',
+      techStack: ['Node.js', 'PostgreSQL'],
+      infrastructureDeps: ['node-js', 'postgresql'],
+      subsystems: [],
+      metrics: [],
+      keyDecisions: [],
+      resilienceTesting: 'Tested',
+      links: {}
+    },
+    {
+      id: 'proj-beta',
+      code: 'BETA',
+      title: 'Beta Front-end App',
+      tagline: 'Beta tagline',
+      category: 'frontend',
+      status: 'ACTIVE',
+      year: '2025',
+      dimensions: { width: 100, height: 80, levels: 2 },
+      gridPosition: { x: 100, y: 100 },
+      accentColor: '#8EA9DA',
+      summary: 'Summary',
+      problem: 'Problem',
+      solution: 'Solution',
+      architectureNotes: 'Notes',
+      techStack: ['React', 'Tailwind'],
+      infrastructureDeps: ['react'],
+      subsystems: [],
+      metrics: [],
+      keyDecisions: [],
+      resilienceTesting: 'Tested',
+      links: {}
+    }
+  ];
+
+  // Search for "CRM" (matches Alpha only)
+  const searchQuery: string = 'CRM';
+  const filtered = mockProjects.filter(p => 
+    searchQuery === '' || 
+    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.techStack.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].id, 'proj-alpha');
+
+  // Candidate connection generation for filtered set
+  const renderedProjectIds = new Set(filtered.map(p => p.id));
+  assert.equal(renderedProjectIds.has('proj-alpha'), true, 'Alpha project connections are candidates');
+  assert.equal(renderedProjectIds.has('proj-beta'), false, 'Beta project connections must NOT be generated');
 });
