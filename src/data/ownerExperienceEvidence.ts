@@ -241,6 +241,87 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         note: 'Direct Remapp API ingestion worker with retry backoff, incremental cache, and gateway API'
       }
     ]
+  },
+  {
+    organizationId: 'salakbuk-independent-freelance',
+    provenance: 'CURATED',
+    technologies: [
+      'Next.js',
+      'React',
+      'TypeScript',
+      'Tailwind CSS',
+      'Nodemailer',
+      'GSAP'
+    ],
+    systemsDelivered: [
+      {
+        id: 'aok-health-solutions-website',
+        name: 'AOK Health Solutions Website',
+        tagline: 'Public-facing responsive informational and consultation web application.',
+        status: 'DELIVERED',
+        description: 'Public-facing client website for AOK Health Solutions with responsive informational content, consultation/contact workflows, and server-side email submission handling.',
+        surfaces: [
+          {
+            name: 'Public Web Experience',
+            role: 'Public-facing informational and consultation interface with responsive UI animations.',
+            tech: ['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'GSAP'],
+            status: 'IMPLEMENTED',
+            repositoryUrl: 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3',
+            provenance: 'VERIFIED'
+          },
+          {
+            name: 'Contact / Consultation Email Flow',
+            role: 'Server-side form submission and SMTP email delivery.',
+            tech: ['Next.js Route Handlers', 'Nodemailer', 'TypeScript'],
+            status: 'IMPLEMENTED',
+            repositoryUrl: 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3',
+            provenance: 'VERIFIED'
+          }
+        ],
+        technologies: [
+          'Next.js',
+          'React',
+          'TypeScript',
+          'Tailwind CSS',
+          'Nodemailer',
+          'GSAP'
+        ],
+        provenance: 'CURATED'
+      }
+    ],
+    engineeringContributions: [
+      {
+        title: 'Responsive Client Web Application Implementation',
+        description: 'Implemented a responsive Next.js web application with structured informational sections, responsive navigation, and custom UI transitions.',
+        provenance: 'VERIFIED'
+      },
+      {
+        title: 'Contact and Consultation Workflow Implementation',
+        description: 'Implemented server-side contact and consultation API route handlers utilizing Nodemailer for SMTP email dispatch.',
+        provenance: 'VERIFIED'
+      }
+    ],
+    infrastructureOperations: [
+      {
+        area: 'Client Hosting',
+        details: 'Hosted the delivered AOK Health Solutions client site on Hostinger.',
+        provenance: 'CURATED'
+      }
+    ],
+    evidenceLinks: [
+      {
+        label: 'AOK Website Repository Subdirectory',
+        type: 'repository',
+        url: 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3',
+        note: 'Source code for AOK Health Solutions client application'
+      },
+      {
+        label: 'AOK Health Solutions Live Site',
+        type: 'showcase',
+        url: 'https://aokhealthsolutions.com/',
+        note: 'Live client website hosted on Hostinger'
+      }
+    ]
   }
 ];
 
