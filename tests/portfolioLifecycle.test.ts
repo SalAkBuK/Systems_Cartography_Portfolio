@@ -77,24 +77,24 @@ test('GitHub-derived experience is used as fallback when configured experience i
   assert.equal(merged[0].provenance, 'DERIVED');
 });
 
-test('current configured career with synthetic GitHub snapshot resolves to 3 roles, 2 orgs, 2 dock cards', () => {
+test('current configured career with synthetic GitHub snapshot resolves to 4 roles, 3 orgs, 3 progression cards', () => {
   const configuredRoles = PORTFOLIO_CONFIG.experience || [];
-  assert.equal(configuredRoles.length, 3, 'Owner has 3 configured career roles');
+  assert.equal(configuredRoles.length, 4, 'Owner has 4 configured career roles (3 LinkedIn + 1 Freelance)');
 
   const resolved = resolveExperience(configuredRoles, sampleGitHubDerivedExperience);
   
-  // 1. Must resolve to exactly 3 professional role records (NOT 4)
-  assert.equal(resolved.length, 3, 'Must retain 3 roles and not append 4th snapshot record');
+  // 1. Must resolve to exactly 4 professional role records (NOT 5)
+  assert.equal(resolved.length, 4, 'Must retain 4 roles and not append 5th snapshot record');
   assert.ok(resolved.every(r => r.provenance === 'CURATED'), 'All resolved roles have CURATED provenance');
   assert.ok(!resolved.some(r => r.organization === 'GitHub Snapshot' || r.yearRange === 'PUBLIC GITHUB SNAPSHOT'), 'No synthetic GitHub employer record is present');
 
-  // 2. Unique organizations must be 2 (CodeFier and Devinity Solutions)
+  // 2. Unique organizations must be 3 (CodeFier, Devinity Solutions, Independent / Freelance)
   const uniqueOrgs = Array.from(
     new Set(resolved.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean);
-  assert.equal(uniqueOrgs.length, 2, 'Unique organizations must be 2');
+  assert.equal(uniqueOrgs.length, 3, 'Unique organizations must be 3');
 
-  // 3. Grouped dock cards must be 2
+  // 3. Grouped organization cards must be 3
   const groups: Record<string, any[]> = {};
   const order: string[] = [];
   for (const exp of resolved) {
@@ -105,7 +105,7 @@ test('current configured career with synthetic GitHub snapshot resolves to 3 rol
     }
     groups[groupKey].push(exp);
   }
-  assert.equal(order.length, 2, 'Grouped dock cards must be exactly 2');
+  assert.equal(order.length, 3, 'Grouped organization cards must be exactly 3');
 });
 
 test('manual projectLinks override wins over GitHub homepage', () => {
