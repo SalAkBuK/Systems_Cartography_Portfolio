@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Activity, 
   RotateCcw,
   ShieldCheck,
   Radio,
   Linkedin
 } from 'lucide-react';
-import { ViewportState } from '../types';
+import { ViewportState, TopologyViewMode } from '../types';
 
 interface BottomCommandStripProps {
   viewport: ViewportState;
-  traceModeActive: boolean;
-  onToggleTraceMode: () => void;
+  topologyViewMode: TopologyViewMode;
   selectedProjectId: string | null;
   onResetView: () => void;
   onOpenResume: () => void;
@@ -23,8 +21,7 @@ interface BottomCommandStripProps {
 
 export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
   viewport,
-  traceModeActive,
-  onToggleTraceMode,
+  topologyViewMode,
   selectedProjectId,
   onResetView,
   onOpenResume,
@@ -56,8 +53,6 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
             <span className="opacity-40">·</span>
             <span>[DBL-CLICK] DECOMPOSE</span>
             <span className="opacity-40">·</span>
-            <span>[T] TRACE SIGNAL</span>
-            <span className="opacity-40">·</span>
             <span>[0] RESET</span>
           </div>
         </div>
@@ -81,17 +76,10 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
             <span>X:{Math.round(viewport.x)} Y:{Math.round(viewport.y)} Z:{viewport.zoom.toFixed(2)}x</span>
           </div>
 
-          <button
-            onClick={onToggleTraceMode}
-            className={`flex items-center gap-1 px-1.5 py-0.5 border border-[#15150F] transition-colors ${
-              traceModeActive 
-                ? 'bg-[#15150F] text-[#C3E54E]' 
-                : 'bg-[#D4CDA4] hover:bg-[#15150F] hover:text-[#D4CDA4]'
-            }`}
-          >
-            <Activity size={10} />
-            <span>TRACE: {traceModeActive ? 'ON' : 'OFF'}</span>
-          </button>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 border border-[#15150F] bg-[#D4CDA4] text-[8px] font-bold">
+            <span className="opacity-50">VIEW:</span>
+            <span>{topologyViewMode.toUpperCase()}</span>
+          </div>
         </div>
       </footer>
 

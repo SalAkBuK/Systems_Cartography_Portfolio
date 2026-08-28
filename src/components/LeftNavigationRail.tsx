@@ -6,22 +6,20 @@ import {
   History, 
   Layers, 
   Share2, 
-  Filter,
   Search,
   Github
 } from 'lucide-react';
-import { ActiveView, ProjectData, SystemCategory, InfrastructureSkill, ExperienceNode } from '../types';
+import { ActiveView, ProjectData, InfrastructureSkill, ExperienceNode, TopologyViewMode } from '../types';
 import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
-import { matchesProjectClassification } from '../utils/portfolioUtils';
 
 interface LeftNavigationRailProps {
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
-  selectedCategory: SystemCategory | 'all';
-  setSelectedCategory: (cat: SystemCategory | 'all') => void;
+  topologyViewMode: TopologyViewMode;
+  setTopologyViewMode: (mode: TopologyViewMode) => void;
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
   searchQuery: string;
@@ -37,8 +35,8 @@ interface LeftNavigationRailProps {
 export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   activeView,
   setActiveView,
-  selectedCategory,
-  setSelectedCategory,
+  topologyViewMode,
+  setTopologyViewMode,
   selectedProjectId,
   onSelectProject,
   searchQuery,
@@ -60,28 +58,23 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
   const navItems: { id: ActiveView; num: string; label: string; count?: number; icon: React.ComponentType<{ size: number }> }[] = [
     { id: 'system_overview', num: '00', label: 'SYSTEM OVERVIEW', icon: Compass },
     { id: 'identity', num: '01', label: 'OPERATOR PROFILE', icon: User },
-    { id: 'projects', num: '02', label: 'PROJECT TOPOLOGY', count: (projects || []).length, icon: Cpu },
-    { id: 'experience', num: '03', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
+    { id: 'experience', num: '02', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
+    { id: 'projects', num: '03', label: 'PROJECT TOPOLOGY', count: (projects || []).length, icon: Cpu },
     { id: 'infrastructure', num: '04', label: 'TECHNICAL CAPABILITIES', count: (skills || []).length, icon: Layers },
     { id: 'contact', num: '05', label: 'EXTERNAL INTERFACE', icon: Share2 },
   ];
 
-  const categories: { id: SystemCategory | 'all'; label: string; color?: string }[] = [
-    { id: 'all', label: 'ALL' },
-    { id: 'infrastructure', label: 'INFRA' },
-    { id: 'fullstack', label: 'FULL' },
-    { id: 'backend', label: 'BACK' },
-    { id: 'frontend', label: 'FRONT' },
-    { id: 'tooling', label: 'TOOL' },
+  const topologyModes: { id: TopologyViewMode; label: string; sub: string }[] = [
+    { id: 'systems', label: 'SYSTEMS', sub: 'PROJECT-CENTRIC' },
+    { id: 'capabilities', label: 'CAPABILITIES', sub: 'STACK-CENTRIC' },
+    { id: 'relationships', label: 'RELATIONSHIPS', sub: 'FULL WIRING' }
   ];
 
   const filteredProjects = projects.filter(p => {
-    const matchesCategory = matchesProjectClassification(p, selectedCategory);
-    const matchesSearch = searchQuery === '' || 
+    return searchQuery === '' || 
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.techStack.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
   });
 
   return (
@@ -148,11 +141,37 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         <span>FORK →</span>
       </a>
 
-      {/* Search & Filter Toolbar */}
+      {/* Topology View Mode & Search Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">
         <div className="flex items-center justify-between text-[8.5px] font-bold tracking-widest opacity-60">
-          <span>CLASSIFICATION // FILTER</span>
-          <Filter size={10} />
+          <span>TOPOLOGY // VIEW</span>
+          <Layers size={10} />
+        </div>
+
+        {/* 3-Way Mode Switch (Brutalist Precision) */}
+        <div className="grid grid-cols-3 gap-1">
+          {topologyModes.map((mode) => {
+            const isSelected = topologyViewMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                onClick={() => setTopologyViewMode(mode.id)}
+                className={`
+                  py-1 px-1 text-center border transition-colors flex flex-col items-center justify-center
+                  ${isSelected
+                    ? 'bg-[#15150F] text-[#D4CDA4] border-[#15150F] font-bold'
+                    : 'bg-[#D4CDA4] text-[#15150F] border-[#15150F]/40 hover:border-[#15150F]'
+                  }
+                `}
+                title={`${mode.label} // ${mode.sub}`}
+              >
+                <span className="text-[8px] font-bold uppercase tracking-tight">{mode.label}</span>
+                <span className={`text-[6.5px] tracking-tighter uppercase ${isSelected ? 'text-[#C3E54E]' : 'opacity-60'}`}>
+                  {mode.sub}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search input */}
@@ -165,25 +184,6 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
             placeholder="SEARCH NODE / STACK..."
             className="w-full bg-[#E2DCB9] border border-[#15150F] pl-6 pr-2 py-1 text-[9.5px] placeholder:opacity-40 text-[#15150F] focus:outline-none focus:bg-[#EFEAD0]"
           />
-        </div>
-
-        {/* Category Pills */}
-        <div className="grid grid-cols-6 gap-1">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`
-                py-1 text-[8px] font-bold tracking-tighter uppercase text-center border transition-colors
-                ${selectedCategory === cat.id
-                  ? 'bg-[#15150F] text-[#D4CDA4] border-[#15150F]'
-                  : 'bg-[#D4CDA4] text-[#15150F] border-[#15150F]/40 hover:border-[#15150F]'
-                }
-              `}
-            >
-              {cat.label}
-            </button>
-          ))}
         </div>
       </div>
 

@@ -289,6 +289,8 @@ export type ActiveView =
   | 'infrastructure'
   | 'contact';
 
+export type TopologyViewMode = 'systems' | 'capabilities' | 'relationships';
+
 export interface ViewportState {
   x: number;
   y: number;
