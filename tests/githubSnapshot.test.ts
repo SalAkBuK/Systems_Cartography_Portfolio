@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { 
   resolveGitHubSnapshotForTarget, 
   normalizeGitHubTarget,
+  parseGitHubTarget,
   applyProjectLinkOverrides 
 } from '../src/utils/portfolioUtils.ts';
 import { 
@@ -13,6 +14,8 @@ import {
   canonicalizeRepositories,
   inspectCanonicalRepositories,
   handleGitHubHttpError,
+  generateGitHubProfileDetails,
+  sanitizeGitHubUser,
   GitHubRepoRaw 
 } from '../src/services/githubService.ts';
 import { analyzeDependencies } from '../src/services/repositoryAnalyzer/dependencyAnalyzer.ts';
@@ -361,6 +364,29 @@ test('handleGitHubHttpError correctly distinguishes 429, 403 remaining=0, 403 re
   }
 });
 
+test('fetchRepoInspection throws error when git tree returns non-OK status', async () => {
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/git/trees/')) {
+      return {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error'
+      } as Response;
+    }
+    return { ok: true, status: 200, text: async () => '' } as Response;
+  }) as typeof fetch;
+
+  await assert.rejects(
+    async () => {
+      await fetchRepoInspection('test-user', 'broken-tree-repo', 'main', {
+        fetchImpl: mockFetch
+      });
+    },
+    /fetching git tree for "test-user\/broken-tree-repo"/
+  );
+});
+
 test('fetchRepoInspection throws error when git tree is truncated in strict mode', async () => {
   const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
@@ -384,6 +410,31 @@ test('fetchRepoInspection throws error when git tree is truncated in strict mode
       });
     },
     /Tree truncated for "test-user\/big-repo"/
+  );
+});
+
+test('fetchRepoInspection throws error when git tree is missing or not an array', async () => {
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/git/trees/')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          tree: 'not-an-array'
+        })
+      } as Response;
+    }
+    return { ok: true, status: 200, text: async () => '' } as Response;
+  }) as typeof fetch;
+
+  await assert.rejects(
+    async () => {
+      await fetchRepoInspection('test-user', 'malformed-tree-repo', 'main', {
+        fetchImpl: mockFetch
+      });
+    },
+    /Git tree payload is missing or not an array/
   );
 });
 
@@ -646,6 +697,144 @@ test('syncGitHubSnapshotToFile performs transactional write and preserves target
 
 // ---------------------------------------------------------------------------
 // 11. Committed Snapshot Validation & Completeness Contract
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 11. Fallback Profile & Location Verification (No Invented Roles)
+// ---------------------------------------------------------------------------
+test('generateGitHubProfileDetails fallback with no bio sets role to "GitHub profile"', () => {
+  const userWithoutBio = sanitizeGitHubUser({ login: 'anon-user', name: 'Anonymous', bio: null, location: null });
+  const { operator, experience } = generateGitHubProfileDetails(sampleSnapshot.projects, userWithoutBio, 'anon-user');
+
+  assert.equal(operator.role, 'GitHub profile', 'Role without bio must be "GitHub profile"');
+  assert.equal(experience[0].role, 'GitHub profile', 'Experience node role must match fallback');
+  assert.equal(operator.location, 'Not provided on GitHub', 'Location without user location must be "Not provided on GitHub"');
+  assert.equal(experience[0].location, 'Not provided on GitHub');
+  assert.equal(operator.status, 'ACTIVE_BUILD // GITHUB SNAPSHOT');
+});
+
+test('generateGitHubProfileDetails uses supplied bio and location rather than invented values', () => {
+  const userWithBio = sanitizeGitHubUser({
+    login: 'real-user',
+    name: 'Real Engineer',
+    bio: 'Distributed Systems & Cloud Engineer\nBuilding high throughput stream engines',
+    location: 'Berlin, Germany'
+  });
+  const { operator, experience } = generateGitHubProfileDetails(sampleSnapshot.projects, userWithBio, 'real-user');
+
+  assert.equal(operator.role, 'Distributed Systems & Cloud Engineer');
+  assert.equal(experience[0].role, 'Distributed Systems & Cloud Engineer');
+  assert.equal(operator.location, 'Berlin, Germany');
+  assert.equal(experience[0].location, 'Berlin, Germany');
+});
+
+test('No source file contains hardcoded fallback "Systems Architect & Full Stack Engineer" or "Global" as location fallback', () => {
+  const githubServiceSrc = readFileSync('src/services/githubService.ts', 'utf8');
+  assert.ok(!githubServiceSrc.includes("'Systems Architect & Full Stack Engineer'"), 'Must not contain hardcoded role');
+  assert.ok(!githubServiceSrc.includes('"Systems Architect & Full Stack Engineer"'), 'Must not contain hardcoded role');
+  assert.ok(!githubServiceSrc.includes("location || 'Global'"), 'Must not contain fallback to Global');
+  assert.ok(!githubServiceSrc.includes('location || "Global"'), 'Must not contain fallback to Global');
+});
+
+// ---------------------------------------------------------------------------
+// 12. GitHub Target Deterministic Parser & Hostile Host Rejection
+// ---------------------------------------------------------------------------
+test('parseGitHubTarget parses valid GitHub target URLs, handles, and shorthand correctly', () => {
+  const target1 = parseGitHubTarget('https://github.com/SalAkBuK');
+  assert.equal(target1.type, 'user');
+  assert.equal(target1.owner, 'SalAkBuK');
+  assert.equal(target1.canonicalIdentifier, 'salakbuk');
+
+  const target2 = parseGitHubTarget('https://github.com/SalAkBuK/');
+  assert.equal(target2.type, 'user');
+  assert.equal(target2.owner, 'SalAkBuK');
+  assert.equal(target2.canonicalIdentifier, 'salakbuk');
+
+  const target3 = parseGitHubTarget('http://www.github.com/SalAkBuK');
+  assert.equal(target3.type, 'user');
+  assert.equal(target3.owner, 'SalAkBuK');
+  assert.equal(target3.canonicalIdentifier, 'salakbuk');
+
+  const target4 = parseGitHubTarget('github.com/SalAkBuK');
+  assert.equal(target4.type, 'user');
+  assert.equal(target4.owner, 'SalAkBuK');
+
+  const target5 = parseGitHubTarget('@SalAkBuK');
+  assert.equal(target5.type, 'user');
+  assert.equal(target5.owner, 'SalAkBuK');
+
+  const target6 = parseGitHubTarget('SalAkBuK');
+  assert.equal(target6.type, 'user');
+  assert.equal(target6.owner, 'SalAkBuK');
+
+  const target7 = parseGitHubTarget('SalAkBuK/portfolio');
+  assert.equal(target7.type, 'repo');
+  assert.equal(target7.owner, 'SalAkBuK');
+  assert.equal(target7.repo, 'portfolio');
+  assert.equal(target7.canonicalIdentifier, 'salakbuk/portfolio');
+
+  const target8 = parseGitHubTarget('https://github.com/SalAkBuK/portfolio');
+  assert.equal(target8.type, 'repo');
+  assert.equal(target8.owner, 'SalAkBuK');
+  assert.equal(target8.repo, 'portfolio');
+});
+
+test('parseGitHubTarget rejects hostile hosts and query/hash injection', () => {
+  assert.throws(
+    () => parseGitHubTarget('https://evil.example/github.com/SalAkBuK'),
+    /Invalid GitHub host "evil\.example"/
+  );
+
+  assert.throws(
+    () => parseGitHubTarget('https://github.com.evil.example/SalAkBuK'),
+    /Invalid GitHub host "github\.com\.evil\.example"/
+  );
+
+  assert.throws(
+    () => parseGitHubTarget('http://phishing.site/user'),
+    /Invalid GitHub host/
+  );
+
+  assert.throws(
+    () => parseGitHubTarget(''),
+    /Please enter a GitHub username/
+  );
+});
+
+test('normalizeGitHubTarget normalizes equivalent valid GitHub targets to canonical lowercase identity', () => {
+  assert.equal(normalizeGitHubTarget('https://github.com/SalAkBuK/'), 'salakbuk');
+  assert.equal(normalizeGitHubTarget('github.com/salakbuk'), 'salakbuk');
+  assert.equal(normalizeGitHubTarget('@SalAkBuK'), 'salakbuk');
+  assert.equal(normalizeGitHubTarget('SalAkBuK'), 'salakbuk');
+  assert.equal(normalizeGitHubTarget('https://evil.example/github.com/SalAkBuK'), '');
+});
+
+// ---------------------------------------------------------------------------
+// 13. Snapshot Completeness Contract & Inspection Summary Requirement
+// ---------------------------------------------------------------------------
+test('generateGitHubSnapshot requires inspectionSummary and throws internal contract error if missing', async () => {
+  const mockFetchWithoutSummary: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/users/test-user/repos')) {
+      return { ok: true, status: 200, json: async () => [sampleRepo] } as Response;
+    }
+    if (url.includes('/users/test-user')) {
+      return { ok: true, status: 200, json: async () => ({ login: 'test-user', public_repos: 1 }) } as Response;
+    }
+    if (url.includes('/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ tree: [] }) } as Response;
+    }
+    return { ok: true, status: 200, text: async () => '' } as Response;
+  }) as typeof fetch;
+
+  // Normal execution succeeds and generates snapshot
+  const { metadata } = await generateGitHubSnapshot('test-user', { fetchImpl: mockFetchWithoutSummary });
+  assert.equal(metadata.canonicalRepositoryCount, 1);
+  assert.equal(metadata.inspectedRepositoryCount, 1);
+  assert.equal(metadata.inspectionWarnings.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// 14. Committed Snapshot Validation & Completeness Contract
 // ---------------------------------------------------------------------------
 test('committed GITHUB_SNAPSHOT is valid, matches configured target, and reports true complete inspection', () => {
   assert.equal(GITHUB_SNAPSHOT_METADATA.schemaVersion, 1);

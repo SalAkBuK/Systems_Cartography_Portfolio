@@ -2,6 +2,89 @@ import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetad
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 import type { GitHubSyncResult } from '../services/githubService';
 
+export interface ParsedGitHubTarget {
+  type: 'user' | 'repo';
+  owner: string;
+  repo?: string;
+  canonicalIdentifier: string;
+}
+
+/**
+ * Deterministically parses a GitHub target (URL, shorthand, or handle).
+ * Rejects invalid protocols, unrelated hosts, and query/hash injections.
+ */
+export function parseGitHubTarget(input?: string | null): ParsedGitHubTarget {
+  if (!input || typeof input !== 'string') {
+    throw new Error('Please enter a GitHub username, org, or repository link.');
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error('Please enter a GitHub username, org, or repository link.');
+  }
+
+  let path = trimmed;
+
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(trimmed)) {
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      throw new Error(`Invalid URL format: "${trimmed}".`);
+    }
+
+    const host = url.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') {
+      throw new Error(`Invalid GitHub host "${url.hostname}". Expected "github.com".`);
+    }
+
+    path = url.pathname;
+  } else if (/^(www\.)?github\.com(\/|$)/i.test(trimmed)) {
+    path = trimmed.replace(/^(www\.)?github\.com\/?/i, '');
+    const qIdx = path.search(/[?#]/);
+    if (qIdx >= 0) path = path.slice(0, qIdx);
+  } else {
+    // If shorthand target contains URL scheme or query/hash or hostile chars
+    if (path.includes('://') || path.includes('?') || path.includes('#')) {
+      throw new Error(`Invalid GitHub target: "${trimmed}".`);
+    }
+  }
+
+  const segments = path
+    .split('/')
+    .map(s => s.trim().replace(/^@/, ''))
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    throw new Error(`Invalid GitHub target: "${trimmed}". Expected a username or repository.`);
+  }
+
+  const validSegmentRegex = /^[a-zA-Z0-9_.-]+$/;
+  for (const seg of segments) {
+    if (!validSegmentRegex.test(seg)) {
+      throw new Error(`Invalid GitHub identifier segment: "${seg}".`);
+    }
+  }
+
+  if (segments.length === 1) {
+    const owner = segments[0];
+    return {
+      type: 'user',
+      owner,
+      canonicalIdentifier: owner.toLowerCase()
+    };
+  }
+
+  const owner = segments[0];
+  const repo = segments[1].replace(/\.git$/i, '');
+  return {
+    type: 'repo',
+    owner,
+    repo,
+    canonicalIdentifier: `${owner.toLowerCase()}/${repo.toLowerCase()}`
+  };
+}
+
 /**
  * Normalizes a GitHub target string (URL, handle, or path) to a canonical lowercased identity.
  * e.g. "https://github.com/SalAkBuK/" -> "salakbuk"
@@ -9,16 +92,13 @@ import type { GitHubSyncResult } from '../services/githubService';
  *      "SalAkBuK" -> "salakbuk"
  */
 export function normalizeGitHubTarget(target?: string | null): string {
-  if (!target || typeof target !== 'string') return '';
-  return target
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^www\./i, '')
-    .replace(/^github\.com\//i, '')
-    .replace(/^@/, '')
-    .replace(/\/+$/, '')
-    .trim();
+  if (!target || typeof target !== 'string' || !target.trim()) return '';
+  try {
+    const parsed = parseGitHubTarget(target);
+    return parsed.canonicalIdentifier;
+  } catch {
+    return '';
+  }
 }
 
 /**
