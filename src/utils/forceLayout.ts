@@ -46,11 +46,11 @@ export function calculateConduitGeometry(
   const tWidth = targetNode.width || 48;
   const tHeight = targetNode.height || 48;
 
-  // Compute centers
-  const sCenterX = sourceNode.x + sWidth / 2;
-  const sCenterY = sourceNode.y + sHeight / 2;
-  const tCenterX = targetNode.x + tWidth / 2;
-  const tCenterY = targetNode.y + tHeight / 2;
+  // Compute centers: skills are centered at (x, y), projects use top-left origin (x + w/2, y + h/2)
+  const sCenterX = sourceType === 'skill' ? sourceNode.x : sourceNode.x + sWidth / 2;
+  const sCenterY = sourceType === 'skill' ? sourceNode.y : sourceNode.y + sHeight / 2;
+  const tCenterX = targetType === 'skill' ? targetNode.x : targetNode.x + tWidth / 2;
+  const tCenterY = targetType === 'skill' ? targetNode.y : targetNode.y + tHeight / 2;
 
   // Determine smart exit port on the perimeter of the project box
   let startX = sCenterX;
