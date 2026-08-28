@@ -158,7 +158,6 @@ const TECHNOLOGY_FAMILY_MAP: Record<string, string[]> = {
   'Express': ['Node.js'],
   'Fastify': ['Node.js'],
   'Koa': ['Node.js'],
-  'Hono': ['Node.js'],
   'BullMQ': ['Node.js'],
 
   // React ecosystem
@@ -324,16 +323,53 @@ export function projectUsesCapability(
   return false;
 }
 
+export interface CapabilityRolePeriod {
+  roleId: string;
+  role: string;
+  organization: string;
+  startDate?: string;
+  endDate?: string | null;
+  formattedPeriod: string;
+}
+
 export interface CapabilityProfessionalHistory {
   hasEvidence: boolean;
-  timeSpan: string; // e.g. "JUL 2024 → PRESENT", "SEP 2025 → NOV 2025", or "UNAVAILABLE"
+  timeSpan: string; // e.g. "JUL 2024 → SEP 2024 · DEC 2025 → PRESENT", "JUL 2024 → SEP 2024", or "UNAVAILABLE"
   roleCount: number;
+  periodCount: number;
+  periods: CapabilityRolePeriod[];
   matchingRoles: ExperienceNode[];
   provenance: 'DERIVED' | 'UNAVAILABLE';
 }
 
 /**
+ * Formats a single role's chronology safely without ever synthesizing PRESENT for undefined end dates.
+ */
+export function formatRolePeriod(role: ExperienceNode): string {
+  const start = role.startDate ? formatIsoYearMonth(role.startDate) : null;
+  
+  if (role.endDate === null) {
+    // Explicitly current role
+    return start ? `${start} → PRESENT` : 'PRESENT';
+  }
+  
+  if (typeof role.endDate === 'string' && role.endDate.trim().length > 0) {
+    const end = formatIsoYearMonth(role.endDate);
+    return start ? `${start} → ${end}` : end;
+  }
+  
+  // endDate is undefined or empty: structured end date is UNKNOWN - NEVER synthesize PRESENT
+  if (role.yearRange) {
+    return role.yearRange.toUpperCase().replace(' - ', ' → ');
+  }
+  
+  return start || 'UNDATED';
+}
+
+/**
  * Derives chronological professional history evidence for a capability from dated role records.
+ * NEVER collapses separate/discontiguous role periods into a continuous duration.
+ * NEVER synthesizes "PRESENT" for undefined end dates.
  * NEVER fabricates years of continuous duration or proficiency claims.
  */
 export function getCapabilityProfessionalHistory(
@@ -346,6 +382,8 @@ export function getCapabilityProfessionalHistory(
       hasEvidence: false,
       timeSpan: 'UNAVAILABLE',
       roleCount: 0,
+      periodCount: 0,
+      periods: [],
       matchingRoles: [],
       provenance: 'UNAVAILABLE'
     };
@@ -367,51 +405,47 @@ export function getCapabilityProfessionalHistory(
       hasEvidence: false,
       timeSpan: 'UNAVAILABLE',
       roleCount: 0,
+      periodCount: 0,
+      periods: [],
       matchingRoles: [],
       provenance: 'UNAVAILABLE'
     };
   }
 
-  // Collect start dates and end dates
-  const startDates = matchingRoles
-    .map(r => r.startDate)
-    .filter((d): d is string => typeof d === 'string' && d.trim().length > 0);
-  const endDates = matchingRoles.map(r => r.endDate);
+  // Sort matching roles chronologically (earliest first)
+  const sortedRoles = [...matchingRoles].sort((a, b) => {
+    const dateA = a.startDate || a.yearRange || '';
+    const dateB = b.startDate || b.yearRange || '';
+    return dateA.localeCompare(dateB);
+  });
 
-  const isCurrent = endDates.some(d => d === null || d === undefined);
+  // Extract structured periods for each role
+  const periods: CapabilityRolePeriod[] = sortedRoles.map(role => ({
+    roleId: role.id,
+    role: role.role,
+    organization: role.organization,
+    startDate: role.startDate,
+    endDate: role.endDate,
+    formattedPeriod: formatRolePeriod(role)
+  }));
 
-  if (startDates.length === 0) {
-    // Fallback to yearRange if ISO dates are absent
-    const fallbackRanges = matchingRoles.map(r => r.yearRange).filter(Boolean);
-    return {
-      hasEvidence: true,
-      timeSpan: fallbackRanges[0] ? fallbackRanges[0].toUpperCase().replace(' - ', ' → ') : 'RECORDED IN CAREER HISTORY',
-      roleCount: matchingRoles.length,
-      matchingRoles,
-      provenance: 'DERIVED'
-    };
-  }
-
-  const earliestStart = [...startDates].sort()[0];
-  let formattedSpan: string;
-
-  if (isCurrent) {
-    formattedSpan = `${formatIsoYearMonth(earliestStart)} → PRESENT`;
-  } else {
-    const validEndDates = endDates.filter((d): d is string => typeof d === 'string' && d.trim().length > 0);
-    if (validEndDates.length > 0) {
-      const latestEnd = [...validEndDates].sort().reverse()[0];
-      formattedSpan = `${formatIsoYearMonth(earliestStart)} → ${formatIsoYearMonth(latestEnd)}`;
-    } else {
-      formattedSpan = formatIsoYearMonth(earliestStart);
+  // Collect distinct chronological period strings (preserving discontiguous gaps)
+  const uniquePeriodStrings: string[] = [];
+  periods.forEach(p => {
+    if (!uniquePeriodStrings.includes(p.formattedPeriod)) {
+      uniquePeriodStrings.push(p.formattedPeriod);
     }
-  }
+  });
+
+  const formattedTimeSpan = uniquePeriodStrings.join(' · ');
 
   return {
     hasEvidence: true,
-    timeSpan: formattedSpan,
-    roleCount: matchingRoles.length,
-    matchingRoles,
+    timeSpan: formattedTimeSpan,
+    roleCount: sortedRoles.length,
+    periodCount: uniquePeriodStrings.length,
+    periods,
+    matchingRoles: sortedRoles,
     provenance: 'DERIVED'
   };
 }
