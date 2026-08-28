@@ -201,7 +201,6 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
               key={p.id}
               onClick={() => {
                 onSelectProject(p.id);
-                setActiveView('projects');
                 setIsMobileOpen(false);
               }}
               className={`

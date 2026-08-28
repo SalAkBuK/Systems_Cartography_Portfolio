@@ -165,7 +165,7 @@ export interface GroupedExperienceEntry extends ExperienceNode {
 
 /**
  * Pure helper grouping experience nodes by progression group / organization.
- * Used by both TopologyCanvas (Experience Dock) and RightInspectorPanel (Experience Index).
+ * Used by RightInspectorPanel (Experience Index & Career History views).
  */
 export function groupExperienceByProgression(experience: ExperienceNode[]): GroupedExperienceEntry[] {
   const groups: Record<string, ExperienceNode[]> = {};

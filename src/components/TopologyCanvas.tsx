@@ -577,7 +577,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const isAnySkillSelected = Boolean(selectedSkillId);
     const isAnyDragging = Boolean(draggingNode);
 
-    projects.forEach(project => {
+    filteredProjects.forEach(project => {
       const isProjectSelected = selectedProjectId === project.id;
       const isProjectHovered = hoveredProjectId === project.id;
       const isDraggingThisProj = draggingNode?.type === 'project' && draggingNode.id === project.id;
@@ -778,7 +778,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     selectedSkillId, 
     hoveredSkillId, 
     topologyViewMode,
-    projects,
+    filteredProjects,
     activeSkills,
     getProjectPos,
     getSkillPos,
