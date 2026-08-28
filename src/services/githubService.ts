@@ -5,10 +5,17 @@ import {
   SystemStatus, 
   InfrastructureSkill, 
   ExperienceNode, 
-  OperatorMetadata 
+  OperatorMetadata
 } from '../types';
 import { getCanonicalRepositoryKey, getRepositoryEvidence } from '../data/repositoryEvidence';
 import { analyzeRepository, RawRepositoryInspection } from './repositoryAnalyzer';
+import { 
+  getProjectTechnologyEvidence, 
+  normalizeTechnologyName, 
+  getTechnologyFamilies, 
+  projectUsesCapability, 
+  RECOGNIZED_CAPABILITY_TAXONOMY 
+} from '../utils/capabilityAssociations';
 
 export interface GitHubUser {
   login: string;
@@ -625,37 +632,63 @@ export function generateGitHubProfileDetails(
   const role = user?.bio ? user.bio.split('\n')[0].slice(0, 60) : 'GitHub profile';
   const location = user?.location || 'Not provided on GitHub';
 
-  // 1. Synthesize Languages & Technologies across all projects
-  const langCountMap: Record<string, number> = {};
+  // 1. Synthesize recognized technologies across all projects using evidence & family mapping
+  const techProjectMap = new Map<string, Set<string>>();
 
   projects.forEach(p => {
-    p.techStack.forEach(t => {
-      langCountMap[t] = (langCountMap[t] || 0) + 1;
+    const evidence = getProjectTechnologyEvidence(p);
+    evidence.forEach(rawTech => {
+      const normalized = normalizeTechnologyName(rawTech);
+      if (!normalized) return;
+
+      const families = getTechnologyFamilies(normalized);
+      families.forEach(fam => {
+        if (!techProjectMap.has(fam)) {
+          techProjectMap.set(fam, new Set());
+        }
+        techProjectMap.get(fam)!.add(p.id);
+      });
     });
   });
 
-  const sortedTech = Object.keys(langCountMap).sort((a, b) => langCountMap[b] - langCountMap[a]);
-  const primaryStack = sortedTech.slice(0, 7);
+  // Filter to recognized technology families that have at least 1 matching project
+  const eligibleTechs = Array.from(techProjectMap.keys()).filter(tech => {
+    return Boolean(RECOGNIZED_CAPABILITY_TAXONOMY[tech]);
+  });
 
-  // 2. Generate 3D Infrastructure Plinths in Center Hexagonal Array
-  const skills: InfrastructureSkill[] = primaryStack.slice(0, 6).map((tech, idx) => {
-    const angle = (idx / Math.min(primaryStack.length, 6)) * Math.PI * 2;
-    const radius = 90;
+  // Sort by project count descending, then alphabetical
+  eligibleTechs.sort((a, b) => {
+    const countA = techProjectMap.get(a)?.size || 0;
+    const countB = techProjectMap.get(b)?.size || 0;
+    if (countB !== countA) return countB - countA;
+    return a.localeCompare(b);
+  });
+
+  const primaryStack = eligibleTechs.slice(0, 7);
+
+  // 2. Generate 3D Infrastructure Plinths in Center Hexagonal/Radial Array
+  const skills: InfrastructureSkill[] = eligibleTechs.map((tech, idx) => {
+    const totalSkills = Math.max(eligibleTechs.length, 1);
+    const angle = (idx / totalSkills) * Math.PI * 2;
+    const radius = 90 + Math.floor(idx / 8) * 35;
     const gridX = Math.round((Math.cos(angle) * radius) / 20) * 20;
     const gridY = Math.round((Math.sin(angle) * (radius * 0.7)) / 20) * 20;
-    const cat = inferCategory(tech, [], '');
 
-    const matchingProjects = projects.filter(p => p.techStack.includes(tech)).map(p => p.id);
+    const taxonomyMeta = RECOGNIZED_CAPABILITY_TAXONOMY[tech];
+    const cat = taxonomyMeta?.category || inferCategory(tech, [], '');
+    const titleSuffix = taxonomyMeta?.titleSuffix || 'Application Architecture';
+
+    const matchingProjects = projects.filter(p => projectUsesCapability(p, tech)).map(p => p.id);
 
     return {
       id: `gh-infra-${idx + 1}`,
       code: `INF-${(idx + 1).toString().padStart(2, '0')}`,
-      name: `${tech} & Application Architecture`,
+      name: `${tech} & ${titleSuffix}`,
       category: cat,
       yearsActive: 0,
       proficiencyScore: 0,
       gridPosition: { x: gridX, y: gridY },
-      systemCount: matchingProjects.length || 1,
+      systemCount: matchingProjects.length,
       usedInProjects: matchingProjects,
       primaryUseCases: [`Detected in ${matchingProjects.length} public GitHub ${matchingProjects.length === 1 ? 'repository' : 'repositories'}`],
       technicalHighlights: ['No proficiency score or years inferred from repository metadata'],
@@ -663,12 +696,9 @@ export function generateGitHubProfileDetails(
     };
   });
 
-  // Re-link projects to these skills
+  // Symmetrically re-link projects to these skills using the unified predicate
   projects.forEach((p) => {
-    if (skills.length > 0) {
-      const linked = skills.filter(s => p.techStack.some(t => s.name.includes(t))).map(s => s.id);
-      p.infrastructureDeps = linked;
-    }
+    p.infrastructureDeps = skills.filter(s => projectUsesCapability(p, s)).map(s => s.id);
   });
 
   // 3. Generate Experience Log Nodes

@@ -1,5 +1,6 @@
 import { ProjectData, InfrastructureSkill } from '../types';
 import { project3DToIso } from '../components/TopologyCanvas';
+import { projectUsesCapability } from './capabilityAssociations';
 
 export interface LayoutNode {
   id: string;
@@ -105,17 +106,11 @@ export function createTopologyGraph(
   // Build edges
   projects.forEach(project => {
     skills.forEach(skill => {
-      const isDep = project.infrastructureDeps.includes(skill.id);
-      const isUsed = skill.usedInProjects.includes(project.id);
-      const techMatch = project.techStack.some(t => {
-        const firstWord = skill.name.toLowerCase().split(' ')[0];
-        return t.toLowerCase().includes(firstWord) || firstWord.includes(t.toLowerCase());
-      });
-
-      if (isDep || isUsed || techMatch) {
+      if (projectUsesCapability(project, skill)) {
         const key = `${project.id}--${skill.id}`;
         if (!edgeSet.has(key)) {
           edgeSet.add(key);
+          const isDep = project.infrastructureDeps.includes(skill.id);
           edges.push({
             id: key,
             sourceId: project.id,

@@ -95,6 +95,16 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
 
   // Check optional curated override
   const curated = getRepositoryEvidence(repo.name);
+  if (curated?.subsystems) {
+    curated.subsystems.forEach(sub => {
+      sub.tech.forEach(t => {
+        if (!techStack.includes(t)) {
+          techStack.push(t);
+        }
+      });
+    });
+  }
+
   const hasInspectionEvidence = Boolean(inspection.readmeContent || inspection.packageJsonContent || (inspection.treeFiles && inspection.treeFiles.length > 0));
 
   // 1. Engineering Challenge

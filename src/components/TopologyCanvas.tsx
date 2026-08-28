@@ -47,6 +47,7 @@ import {
   isProjectLinkedToExperience,
   groupExperienceByProgression
 } from '../utils/portfolioUtils';
+import { projectUsesCapability } from '../utils/capabilityAssociations';
 import {
   createTopologyGraph,
   calculateConduitGeometry,
@@ -295,19 +296,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return customSkillPositions[skill.id] || skill.gridPosition;
   }, [draggingNode, customSkillPositions]);
 
-  // Check if a skill and project are connected through dependencies or tech stack matches
+  // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     const skill = activeSkills.find(s => s.id === skillId);
     if (!project || !skill) return false;
-
-    const isDep = project.infrastructureDeps.includes(skill.id);
-    const isUsed = skill.usedInProjects.includes(project.id);
-    const techMatch = project.techStack.some(t => {
-      const firstWord = skill.name.toLowerCase().split(' ')[0];
-      return t.toLowerCase().includes(firstWord) || firstWord.includes(t.toLowerCase());
-    });
-    return isDep || isUsed || techMatch;
+    return projectUsesCapability(project, skill);
   }, [projects, activeSkills]);
 
   // Active focus target (hovered node has top priority, followed by selected node)
@@ -773,15 +767,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const pDepth = 55;
 
       activeSkills.forEach(skill => {
-        // Check if project and skill are connected
-        const isDep = project.infrastructureDeps.includes(skill.id);
-        const isUsed = skill.usedInProjects.includes(project.id);
-        const techMatch = project.techStack.some(t => {
-          const firstWord = skill.name.toLowerCase().split(' ')[0];
-          return t.toLowerCase().includes(firstWord) || firstWord.includes(t.toLowerCase());
-        });
-
-        if (!isDep && !isUsed && !techMatch) return;
+        // Check if project and skill are connected using centralized predicate
+        if (!projectUsesCapability(project, skill)) return;
 
         const pairKey = `${project.id}-${skill.id}`;
         if (connectedPairs.has(pairKey)) return;
