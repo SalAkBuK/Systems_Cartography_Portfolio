@@ -6,7 +6,8 @@ import {
   getCapabilityCoreTechnology,
   getProjectTechnologyEvidence,
   projectUsesCapability,
-  getCapabilityProfessionalHistory
+  getCapabilityProfessionalHistory,
+  formatRolePeriod
 } from '../src/utils/capabilityAssociations.ts';
 import { generateGitHubProfileDetails, transformGitHubRepoToProject } from '../src/services/githubService.ts';
 import { ExperienceNode, InfrastructureSkill, ProjectData } from '../src/types.ts';
@@ -277,21 +278,137 @@ test('12. Full portfolio sync generates capabilities and associates Worthy CRM a
   assert.ok(worthyProj.infrastructureDeps.includes(phpSkill.id), 'Worthy CRM infrastructureDeps must contain PHP skill ID');
 });
 
-test('13. Professional-history display derives chronological evidence without fabricated duration or proficiency', () => {
-  const resolvedExperience = resolveProfessionalExperience();
+test('13. Hono + TypeScript alone does NOT imply Node.js runtime', () => {
+  const honoProject: Partial<ProjectData> = {
+    id: 'proj-hono',
+    title: 'Hono Edge Worker',
+    techStack: ['Hono', 'TypeScript']
+  };
 
-  // Test Node.js capability: evidenced in Devinity Solutions (2024-07 -> 2024-09) and CodeFier (2025-12 -> present)
+  assert.equal(projectUsesCapability(honoProject, 'Node.js'), false, 'Hono alone must not infer Node.js runtime');
+});
+
+test('14. Hono + explicit Node.js DOES associate with Node.js', () => {
+  const honoNodeProject: Partial<ProjectData> = {
+    id: 'proj-hono-node',
+    title: 'Hono Node Service',
+    techStack: ['Hono', 'Node.js', 'TypeScript']
+  };
+
+  assert.equal(projectUsesCapability(honoNodeProject, 'Node.js'), true, 'Explicit Node.js must associate normally');
+});
+
+test('15. null endDate means explicitly current / PRESENT', () => {
+  const currentRole: ExperienceNode = {
+    id: 'exp-current',
+    code: 'EXP-01',
+    role: 'Lead Engineer',
+    organization: 'Acme Corp',
+    location: 'Remote',
+    yearRange: 'December 2025 - Present',
+    startDate: '2025-12',
+    endDate: null,
+    systemDomain: 'Core Platform',
+    keyOutputs: [],
+    systemsArchitected: [],
+    technologies: ['Node.js'],
+    gridPosition: { x: 0, y: 0 }
+  };
+
+  const formatted = formatRolePeriod(currentRole);
+  assert.equal(formatted, 'DEC 2025 → PRESENT');
+});
+
+test('16. undefined endDate does NOT synthesize PRESENT', () => {
+  const undatedEndRole: ExperienceNode = {
+    id: 'exp-undated-end',
+    code: 'EXP-02',
+    role: 'Consultant',
+    organization: 'Past Org',
+    location: 'Remote',
+    yearRange: 'January 2024 - April 2024',
+    startDate: '2024-01',
+    endDate: undefined,
+    systemDomain: 'Consulting',
+    keyOutputs: [],
+    systemsArchitected: [],
+    technologies: ['Node.js'],
+    gridPosition: { x: 0, y: 0 }
+  };
+
+  const formatted = formatRolePeriod(undatedEndRole);
+  assert.equal(formatted, 'JANUARY 2024 → APRIL 2024');
+  assert.ok(!formatted.includes('PRESENT'), 'Undefined endDate must not synthesize PRESENT');
+
+  // Case with no yearRange fallback
+  const noYearRangeRole: ExperienceNode = {
+    ...undatedEndRole,
+    yearRange: ''
+  };
+  const formattedNoYearRange = formatRolePeriod(noYearRangeRole);
+  assert.equal(formattedNoYearRange, 'JAN 2024');
+  assert.ok(!formattedNoYearRange.includes('PRESENT'));
+});
+
+test('17. Discontinuous career periods remain separate and do NOT collapse into one span', () => {
+  const discontinuousRoles: ExperienceNode[] = [
+    {
+      id: 'exp-role-1',
+      code: 'EXP-01',
+      role: 'Web Development Intern (MERN Stack)',
+      organization: 'Devinity Solutions',
+      location: 'Islamabad, Pakistan',
+      yearRange: 'July 2024 - September 2024',
+      startDate: '2024-07',
+      endDate: '2024-09',
+      systemDomain: 'Full-Stack Systems',
+      keyOutputs: [],
+      systemsArchitected: [],
+      technologies: ['Node.js', 'Express.js', 'React', 'MongoDB'],
+      gridPosition: { x: 140, y: -40 }
+    },
+    {
+      id: 'exp-role-2',
+      code: 'EXP-02',
+      role: 'Full Stack Engineer',
+      organization: 'CodeFier',
+      location: 'Islāmābād, Pakistan',
+      yearRange: 'December 2025 - Present',
+      startDate: '2025-12',
+      endDate: null,
+      systemDomain: 'Full-Stack Systems',
+      keyOutputs: [],
+      systemsArchitected: [],
+      technologies: ['Next.js', 'React', 'PostgreSQL', 'Node.js'],
+      gridPosition: { x: -140, y: -40 }
+    }
+  ];
+
+  const nodeHistory = getCapabilityProfessionalHistory('Node.js & Application Architecture', discontinuousRoles);
+
+  assert.equal(nodeHistory.hasEvidence, true);
+  assert.equal(nodeHistory.roleCount, 2);
+  assert.equal(nodeHistory.periodCount, 2);
+
+  // Must NOT produce "JUL 2024 → PRESENT"
+  assert.notEqual(nodeHistory.timeSpan, 'JUL 2024 → PRESENT', 'Discontinuous periods must not collapse into continuous range');
+
+  // Must represent both distinct periods
+  assert.equal(nodeHistory.timeSpan, 'JUL 2024 → SEP 2024 · DEC 2025 → PRESENT');
+  assert.equal(nodeHistory.periods.length, 2);
+  assert.equal(nodeHistory.periods[0].formattedPeriod, 'JUL 2024 → SEP 2024');
+  assert.equal(nodeHistory.periods[1].formattedPeriod, 'DEC 2025 → PRESENT');
+});
+
+test('18. Resolved portfolio career produces separate periods for Node.js', () => {
+  const resolvedExperience = resolveProfessionalExperience();
   const nodeHistory = getCapabilityProfessionalHistory('Node.js & Application Architecture', resolvedExperience);
+
   assert.equal(nodeHistory.hasEvidence, true);
   assert.equal(nodeHistory.provenance, 'DERIVED');
-  assert.match(nodeHistory.timeSpan, /JUL 2024 → PRESENT/);
   assert.equal(nodeHistory.roleCount, 2);
-
-  // Test React capability: evidenced in Devinity Solutions and CodeFier
-  const reactHistory = getCapabilityProfessionalHistory('React & Component Architecture', resolvedExperience);
-  assert.equal(reactHistory.hasEvidence, true);
-  assert.match(reactHistory.timeSpan, /JUL 2024 → PRESENT/);
-  assert.equal(reactHistory.roleCount >= 2, true);
+  assert.equal(nodeHistory.periodCount, 2);
+  assert.equal(nodeHistory.timeSpan, 'JUL 2024 → SEP 2024 · DEC 2025 → PRESENT');
 
   // Test Go capability (not in career history)
   const goHistory = getCapabilityProfessionalHistory('Go & Systems Architecture', resolvedExperience);

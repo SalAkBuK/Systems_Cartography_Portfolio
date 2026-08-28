@@ -555,7 +555,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                           : 'bg-[#15150F]/70 text-[#D4CDA4]'
                       }`}>
                         {profHistory.hasEvidence 
-                          ? `PROFESSIONAL EVIDENCE // ${profHistory.timeSpan}` 
+                          ? (profHistory.periodCount > 1 
+                              ? `PROFESSIONAL EVIDENCE // ${profHistory.periodCount} ROLE PERIODS` 
+                              : `PROFESSIONAL EVIDENCE // ${profHistory.timeSpan}`)
                           : 'PROFESSIONAL HISTORY // UNAVAILABLE'}
                       </span>
                     </div>
@@ -578,7 +580,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   <>
                     <div className="text-[8.5px] font-bold opacity-60 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                       <span>ASSOCIATED SYSTEMS ({matchedProjects.length})</span>
-                      <span className="text-[7.5px] font-mono opacity-80 font-normal">REPOSITORIES VERIFYING THIS CAPABILITY</span>
+                      <span className="text-[7.5px] font-mono opacity-80 font-normal">REPOSITORY EVIDENCE ASSOCIATIONS</span>
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {matchedProjects.length === 0 ? (
