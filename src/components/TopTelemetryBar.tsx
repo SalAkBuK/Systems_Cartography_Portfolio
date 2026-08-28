@@ -1,12 +1,10 @@
 import React from 'react';
-import { Activity, FileText, Mail, RotateCcw } from 'lucide-react';
+import { FileText, Mail, RotateCcw } from 'lucide-react';
 import { ActiveView } from '../types';
 
 interface TopTelemetryBarProps {
   setActiveView: (view: ActiveView) => void;
   onResetView: () => void;
-  onToggleTraceMode: () => void;
-  traceModeActive: boolean;
   onOpenContact: () => void;
   onOpenResume: () => void;
   activeProjectsCount?: number;
@@ -20,8 +18,6 @@ interface TopTelemetryBarProps {
 export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
   setActiveView,
   onResetView,
-  onToggleTraceMode,
-  traceModeActive,
   onOpenContact,
   onOpenResume,
   activeProjectsCount = 0,
@@ -61,9 +57,6 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
     </div>
 
     <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <button onClick={onToggleTraceMode} className={`flex items-center gap-1 px-2 py-1 border border-[#15150F] ${traceModeActive ? 'bg-[#15150F] text-[#C3E54E]' : 'hover:bg-[#15150F] hover:text-[#D4CDA4]'}`} title="Toggle relationship traces">
-        <Activity size={11} /><span className="hidden lg:inline">TRACE</span>
-      </button>
       <button onClick={onResetView} className="p-1 border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4]" title="Reset viewport"><RotateCcw size={11} /></button>
       <button onClick={onOpenResume} className="hidden sm:flex items-center gap-1 px-2 py-1 border border-[#15150F] bg-[#8EA9DA]/30 hover:bg-[#8EA9DA]/60" title="Open portfolio brief">
         <FileText size={11} /><span className="hidden lg:inline">BRIEF</span>

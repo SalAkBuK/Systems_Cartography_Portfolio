@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ActiveView, 
-  SystemCategory, 
   ViewportState, 
   SubsystemNode,
   ProjectData,
   InfrastructureSkill,
   ExperienceNode,
-  OperatorMetadata
+  OperatorMetadata,
+  TopologyViewMode
 } from './types';
 import {
   VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA
@@ -142,9 +142,8 @@ export default function App() {
   const [selectedExperienceId, setSelectedExperienceId] = useState<string | null>(null);
   const [selectedSubsystem, setSelectedSubsystem] = useState<SubsystemNode | null>(null);
   
-  const [selectedCategory, setSelectedCategory] = useState<SystemCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [traceModeActive, setTraceModeActive] = useState(false);
+  const [topologyViewMode, setTopologyViewMode] = useState<TopologyViewMode>('systems');
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, zoom: 1 });
 
   // Modal States
@@ -284,15 +283,16 @@ export default function App() {
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'projects') {
-      if (!selectedProjectId && projects.length > 0) setSelectedProjectId(projects[0].id);
+      setTopologyViewMode('systems');
+      setSelectedProjectId(null);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'experience') {
-      // Neutral view: show Experience Dock without arbitrarily auto-selecting first employer
+      // Neutral view: show Professional Experience index without arbitrarily auto-selecting the first record
       setSelectedProjectId(null);
       setSelectedSkillId(null);
     } else if (view === 'infrastructure') {
-      // Neutral view: show Technical Capabilities without arbitrarily auto-selecting first capability
+      setTopologyViewMode('capabilities');
       setSelectedProjectId(null);
       setSelectedExperienceId(null);
     } else if (view === 'contact') {
@@ -326,8 +326,6 @@ export default function App() {
         setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom + 0.15, 2.5) }));
       } else if (e.key === '-' || e.key === '_') {
         setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom - 0.15, 0.45) }));
-      } else if (e.key === 't' || e.key === 'T') {
-        setTraceModeActive(prev => !prev);
       } else if (e.key === 'r' || e.key === 'R') {
         setIsResumeOpen(true);
       } else if (e.key === 'c' || e.key === 'C') {
@@ -351,8 +349,6 @@ export default function App() {
       <TopTelemetryBar
         setActiveView={handleNavViewChange}
         onResetView={handleResetView}
-        onToggleTraceMode={() => setTraceModeActive(prev => !prev)}
-        traceModeActive={traceModeActive}
         onOpenContact={() => handleNavViewChange('contact')}
         onOpenResume={() => setIsResumeOpen(true)}
         activeProjectsCount={projects.length}
@@ -381,8 +377,8 @@ export default function App() {
         <LeftNavigationRail
           activeView={activeView}
           setActiveView={handleNavViewChange}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
+          topologyViewMode={topologyViewMode}
+          setTopologyViewMode={setTopologyViewMode}
           selectedProjectId={selectedProjectId}
           onSelectProject={handleSelectProject}
           searchQuery={searchQuery}
@@ -415,9 +411,8 @@ export default function App() {
               selectedSkillId={selectedSkillId}
               onSelectSkill={handleSelectSkill}
               selectedExperienceId={selectedExperienceId}
-              selectedCategory={selectedCategory}
               searchQuery={searchQuery}
-              traceModeActive={traceModeActive}
+              topologyViewMode={topologyViewMode}
               viewport={viewport}
               setViewport={setViewport}
               projects={projects}
@@ -450,8 +445,7 @@ export default function App() {
       {/* 3. Bottom Command & Operating Strip */}
       <BottomCommandStrip
         viewport={viewport}
-        traceModeActive={traceModeActive}
-        onToggleTraceMode={() => setTraceModeActive(prev => !prev)}
+        topologyViewMode={topologyViewMode}
         selectedProjectId={selectedProjectId}
         onResetView={handleResetView}
         onOpenResume={() => setIsResumeOpen(true)}
