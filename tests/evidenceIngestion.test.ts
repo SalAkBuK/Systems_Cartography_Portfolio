@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   fetchGitHubUserData,
+  discoverGitHubInventory,
+  filterEligibleRepositories,
+  canonicalizeRepositories,
   generateGitHubProfileDetails,
   GitHubRepoRaw,
   transformGitHubRepoToProject
@@ -171,16 +174,16 @@ test('fetchGitHubUserData discovers all 21 public repositories on a single page'
   }) as typeof fetch;
 
   try {
-    const result = await fetchGitHubUserData('SalAkBuK');
+    const result = await discoverGitHubInventory('SalAkBuK');
     assert.equal(result.rawCount, 21, 'Must report rawCount of all 21 repos');
-    assert.equal(result.projects.length, 21, 'Must transform all 21 eligible repos');
+    assert.equal(result.repos.length, 21, 'Must discover all 21 repos');
     assert.ok(requestedUrls.some(u => u.includes('per_page=100')), 'Must request per_page=100');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('fetchGitHubUserData paginates across multiple pages (150 repos) and does not make extra page requests', async () => {
+test('discoverGitHubInventory paginates across multiple pages (150 repos) and does not make extra page requests', async () => {
   const originalFetch = globalThis.fetch;
   const page1Repos: GitHubRepoRaw[] = Array.from({ length: 100 }, (_, i) => ({
     ...repo,
@@ -242,16 +245,16 @@ test('fetchGitHubUserData paginates across multiple pages (150 repos) and does n
   }) as typeof fetch;
 
   try {
-    const result = await fetchGitHubUserData('SalAkBuK');
+    const result = await discoverGitHubInventory('SalAkBuK');
     assert.equal(result.rawCount, 150, 'Must record rawCount of 150');
-    assert.equal(result.projects.length, 150, 'Must include all 150 eligible projects');
+    assert.equal(result.repos.length, 150, 'Must include all 150 discovered repositories');
     assert.deepEqual(requestedPages, [1, 2], 'Must request exactly page 1 and page 2 without extra page 3');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('fetchGitHubUserData paginates cleanly across full boundary (200 repos)', async () => {
+test('discoverGitHubInventory paginates cleanly across full boundary (200 repos)', async () => {
   const originalFetch = globalThis.fetch;
   const page1Repos: GitHubRepoRaw[] = Array.from({ length: 100 }, (_, i) => ({
     ...repo,
@@ -299,15 +302,15 @@ test('fetchGitHubUserData paginates cleanly across full boundary (200 repos)', a
   }) as typeof fetch;
 
   try {
-    const result = await fetchGitHubUserData('SalAkBuK');
+    const result = await discoverGitHubInventory('SalAkBuK');
     assert.equal(result.rawCount, 200);
-    assert.equal(result.projects.length, 200);
+    assert.equal(result.repos.length, 200);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('fetchGitHubUserData rejects honestly on later-page failure without returning partial repos', async () => {
+test('discoverGitHubInventory rejects honestly on later-page failure without returning partial repos', async () => {
   const originalFetch = globalThis.fetch;
   const page1Repos: GitHubRepoRaw[] = Array.from({ length: 100 }, (_, i) => ({
     ...repo,
@@ -350,17 +353,16 @@ test('fetchGitHubUserData rejects honestly on later-page failure without returni
   try {
     await assert.rejects(
       async () => {
-        await fetchGitHubUserData('SalAkBuK');
+        await discoverGitHubInventory('SalAkBuK');
       },
-      /Failed to fetch all repositories for "SalAkBuK" while requesting page 2/
+      /fetching all repositories for "SalAkBuK" while requesting page 2/
     );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('canonical and sanitized TowerDesk repositories deduplicate to 3 logical projects', async () => {
-  const originalFetch = globalThis.fetch;
+test('canonical and sanitized TowerDesk repositories deduplicate to 3 logical projects', () => {
   const towerdeskClusterRepos: GitHubRepoRaw[] = [
     { ...repo, id: 101, name: 'towerdesk-backend', full_name: 'SalAkBuK/towerdesk-backend', html_url: 'https://github.com/SalAkBuK/towerdesk-backend', size: 500 },
     { ...repo, id: 102, name: 'towerdesk-backend-clean', full_name: 'SalAkBuK/towerdesk-backend-clean', html_url: 'https://github.com/SalAkBuK/towerdesk-backend-clean', size: 500 },
@@ -370,32 +372,12 @@ test('canonical and sanitized TowerDesk repositories deduplicate to 3 logical pr
     { ...repo, id: 106, name: 'towerdesk-mobile-showcase', full_name: 'SalAkBuK/towerdesk-mobile-showcase', html_url: 'https://github.com/SalAkBuK/towerdesk-mobile-showcase', size: 300 }
   ];
 
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    if (url.includes('/users/SalAkBuK/repos')) {
-      return { ok: true, status: 200, json: async () => towerdeskClusterRepos } as Response;
-    }
-    if (url.includes('/users/SalAkBuK')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ login: 'SalAkBuK', name: 'Salih Bukhari', avatar_url: 'https://example.com/avatar.png', public_repos: 6 })
-      } as Response;
-    }
-    return { ok: false, status: 404, text: async () => 'Not found' } as Response;
-  }) as typeof fetch;
-
-  try {
-    const result = await fetchGitHubUserData('SalAkBuK');
-    assert.equal(result.rawCount, 6, 'All 6 raw repos are retrieved from GitHub');
-    assert.equal(result.projects.length, 3, 'The 6 TowerDesk repos collapse into exactly 3 logical presentation surfaces');
-    const titles = result.projects.map(p => p.title);
-    assert.ok(titles.includes('towerdesk-backend-clean'));
-    assert.ok(titles.includes('tower-desk-clean'));
-    assert.ok(titles.includes('towerdesk-mobile-showcase'));
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const canonical = canonicalizeRepositories(filterEligibleRepositories(towerdeskClusterRepos));
+  assert.equal(canonical.length, 3, 'The 6 TowerDesk repos collapse into exactly 3 logical presentation surfaces');
+  const titles = canonical.map(p => p.name);
+  assert.ok(titles.includes('towerdesk-backend-clean'));
+  assert.ok(titles.includes('tower-desk-clean'));
+  assert.ok(titles.includes('towerdesk-mobile-showcase'));
 });
 
 test('FormCrash is multi-classified and discoverable under TOOL and FULL filters without duplication', () => {

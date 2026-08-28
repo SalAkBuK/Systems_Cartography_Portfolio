@@ -8,8 +8,6 @@ import {
   SystemStatus 
 } from '../../types';
 import { getRepositoryEvidence } from '../../data/repositoryEvidence';
-import { PORTFOLIO_CONFIG } from '../../config/portfolioConfig';
-import { resolveDeploymentLink } from '../../utils/portfolioUtils';
 import { 
   AnalyzedArchitecture, 
   AnalyzedDependencies, 
@@ -258,7 +256,7 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     performanceEvidence,
     links: {
       github: repo.html_url,
-      demo: resolveDeploymentLink(repo.name, repo.homepage, PORTFOLIO_CONFIG.projectLinks),
+      demo: typeof repo.homepage === 'string' && repo.homepage.trim() ? repo.homepage.trim() : undefined,
       caseStudy: false
     }
   };

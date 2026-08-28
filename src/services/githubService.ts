@@ -16,6 +16,11 @@ import {
   projectUsesCapability, 
   RECOGNIZED_CAPABILITY_TAXONOMY 
 } from '../utils/capabilityAssociations';
+import { parseGitHubTarget } from '../utils/portfolioUtils';
+
+export const DEFAULT_INSPECTION_CONCURRENCY = 3;
+export const MAX_MANIFEST_DEPTH = 4;
+export const MAX_MANIFEST_FILES_PER_REPO = 15;
 
 export interface GitHubUser {
   login: string;
@@ -29,6 +34,37 @@ export interface GitHubUser {
   company: string | null;
   location: string | null;
   blog: string | null;
+}
+
+export function sanitizeGitHubUser(raw: any): GitHubUser {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      login: '',
+      name: null,
+      avatar_url: '',
+      bio: null,
+      html_url: '',
+      public_repos: 0,
+      followers: 0,
+      following: 0,
+      company: null,
+      location: null,
+      blog: null
+    };
+  }
+  return {
+    login: typeof raw.login === 'string' ? raw.login : '',
+    name: typeof raw.name === 'string' ? raw.name : null,
+    avatar_url: typeof raw.avatar_url === 'string' ? raw.avatar_url : '',
+    bio: typeof raw.bio === 'string' ? raw.bio : null,
+    html_url: typeof raw.html_url === 'string' ? raw.html_url : '',
+    public_repos: typeof raw.public_repos === 'number' ? raw.public_repos : 0,
+    followers: typeof raw.followers === 'number' ? raw.followers : 0,
+    following: typeof raw.following === 'number' ? raw.following : 0,
+    company: typeof raw.company === 'string' ? raw.company : null,
+    location: typeof raw.location === 'string' ? raw.location : null,
+    blog: typeof raw.blog === 'string' ? raw.blog : null
+  };
 }
 
 export interface GitHubRepoRaw {
@@ -63,6 +99,12 @@ export interface GitHubRepoRaw {
   };
 }
 
+export interface RepositoryInspectionSummary {
+  canonicalRepositoryCount: number;
+  inspectedRepositoryCount: number;
+  warnings: string[];
+}
+
 export interface GitHubSyncResult {
   sourceType: 'user' | 'repo';
   sourceIdentifier: string;
@@ -72,6 +114,89 @@ export interface GitHubSyncResult {
   operator: OperatorMetadata;
   experience: ExperienceNode[];
   rawCount?: number;
+  inspectionSummary?: RepositoryInspectionSummary;
+}
+
+export interface GitHubFetchOptions {
+  token?: string;
+  inspectionConcurrency?: number;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Executes an array of async tasks with bounded concurrency, preserving input order.
+ */
+export async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const boundedLimit = Math.max(1, Math.min(limit, items.length));
+  const results: R[] = new Array(items.length);
+  let currentIndex = 0;
+
+  async function processNext(): Promise<void> {
+    while (currentIndex < items.length) {
+      const idx = currentIndex++;
+      results[idx] = await worker(items[idx], idx);
+    }
+  }
+
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < boundedLimit; i++) {
+    workers.push(processNext());
+  }
+
+  await Promise.all(workers);
+  return results;
+}
+
+function getGitHubHeaders(options?: GitHubFetchOptions, acceptHeader = 'application/vnd.github.v3+json'): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Accept': acceptHeader
+  };
+  if (options?.token && options.token.trim()) {
+    headers['Authorization'] = `Bearer ${options.token.trim()}`;
+  }
+  return headers;
+}
+
+export function handleGitHubHttpError(res: Response, contextMessage: string): never {
+  const status = res.status;
+  const remaining = res?.headers?.get ? res.headers.get('x-ratelimit-remaining') : null;
+  const reset = res?.headers?.get ? res.headers.get('x-ratelimit-reset') : null;
+  const retryAfter = res?.headers?.get ? res.headers.get('retry-after') : null;
+
+  let resetInfo = '';
+  if (reset) {
+    const resetDate = new Date(parseInt(reset, 10) * 1000);
+    resetInfo = ` (reset: ${resetDate.toISOString()})`;
+  } else if (retryAfter) {
+    resetInfo = ` (retry after: ${retryAfter}s)`;
+  }
+
+  // 1. Explicit 429 Too Many Requests
+  if (status === 429) {
+    throw new Error(`GitHub API rate limit exceeded while ${contextMessage}${resetInfo}. Provide GITHUB_TOKEN or retry later.`);
+  }
+
+  // 2. Primary rate-limit exhaustion (403 + x-ratelimit-remaining === "0")
+  if (status === 403 && remaining === '0') {
+    throw new Error(`GitHub API primary rate limit exhausted while ${contextMessage}${resetInfo}. Provide GITHUB_TOKEN or retry later.`);
+  }
+
+  // 3. Secondary rate-limit (403 + Retry-After)
+  if (status === 403 && retryAfter) {
+    throw new Error(`GitHub API secondary rate limit reached while ${contextMessage}${resetInfo}. Retry later.`);
+  }
+
+  // 4. Other 403 Forbidden / Rejected (e.g. repo restricted, auth mismatch)
+  if (status === 403) {
+    throw new Error(`GitHub API request forbidden/rejected while ${contextMessage}: ${res.statusText || 'Forbidden'}.`);
+  }
+
+  throw new Error(`Failed to fetch ${contextMessage}: ${res.statusText || res.status}`);
 }
 
 /**
@@ -545,57 +670,150 @@ export function getGridCoordinatesForIndex(index: number, total: number): { x: n
 }
 
 /**
- * Attempt to fetch repository inspection artifacts (README, git tree, package.json)
+ * Attempt to fetch repository inspection artifacts (README, git tree, bounded manifests)
  */
 export async function fetchRepoInspection(
   owner: string, 
   repo: string, 
-  defaultBranch = 'main'
+  defaultBranch = 'main',
+  options?: GitHubFetchOptions
 ): Promise<RawRepositoryInspection> {
+  const fetchImpl = options?.fetchImpl || globalThis.fetch;
+  const cleanOwner = owner.trim();
+  const cleanRepo = repo.trim();
+
   const inspection: RawRepositoryInspection = {
-    repoName: repo,
-    owner,
-    defaultBranch
+    repoName: cleanRepo,
+    owner: cleanOwner,
+    defaultBranch,
+    manifestContents: {},
+    dockerFiles: [],
+    workflowFiles: [],
+    docsFiles: [],
+    testFiles: [],
+    configFiles: []
   };
 
-  // 1. Fetch README
+  // 1. Fetch README (missing README / 404 remains non-fatal)
   try {
-    const readmeRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, {
-      headers: { 'Accept': 'application/vnd.github.v3.raw' }
+    const readmeRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/readme`, {
+      headers: getGitHubHeaders(options, 'application/vnd.github.v3.raw')
     });
     if (readmeRes.ok) {
       inspection.readmeContent = await readmeRes.text();
+    } else if (readmeRes.status !== 404) {
+      handleGitHubHttpError(readmeRes, `fetching README for "${cleanOwner}/${cleanRepo}"`);
     }
-  } catch {
-    // Non-fatal
+  } catch (err: any) {
+    if (err.message && (err.message.includes('rate limit') || err.message.includes('forbidden') || err.message.includes('Failed to fetch'))) {
+      throw err;
+    }
   }
 
   // 2. Fetch Git Tree
-  try {
-    const treeRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
-      headers: { 'Accept': 'application/vnd.github.v3+json' }
-    });
-    if (treeRes.ok) {
-      const treeData = await treeRes.json();
-      if (Array.isArray(treeData.tree)) {
-        inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
-      }
-    }
-  } catch {
-    // Non-fatal
+  const treeRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
+    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
+  });
+
+  if (!treeRes.ok) {
+    handleGitHubHttpError(treeRes, `fetching git tree for "${cleanOwner}/${cleanRepo}"`);
   }
 
-  // 3. Fetch package.json if present
-  if (inspection.treeFiles?.includes('package.json') || !inspection.treeFiles) {
-    try {
-      const pkgRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/package.json`, {
-        headers: { 'Accept': 'application/vnd.github.v3.raw' }
+  const treeData = await treeRes.json();
+  if (treeData.truncated === true) {
+    throw new Error(`Tree truncated for "${cleanOwner}/${cleanRepo}". Deep inspection incomplete.`);
+  }
+  if (!treeData || !Array.isArray(treeData.tree)) {
+    throw new Error(`Incomplete inspection for "${cleanOwner}/${cleanRepo}": Git tree payload is missing or not an array.`);
+  }
+  inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
+
+  // 3. Scan tree paths for categorized artifact collections and manifest candidates
+  if (inspection.treeFiles && inspection.treeFiles.length > 0) {
+    const files = inspection.treeFiles;
+
+    inspection.dockerFiles = files.filter(f => /dockerfile|docker-compose|compose\.ya?ml/i.test(f.split('/').pop() || ''));
+    inspection.workflowFiles = files.filter(f => f.startsWith('.github/workflows/'));
+    inspection.docsFiles = files.filter(f => (f.startsWith('docs/') || f.startsWith('doc/') || f.endsWith('.md')) && f.toLowerCase() !== 'readme.md');
+    inspection.testFiles = files.filter(f => /(\.|_)(test|spec)\.[a-zA-Z0-9]+$|^tests?\/|^__tests__\/|^e2e\//i.test(f));
+    inspection.configFiles = files.filter(f => /tsconfig.*\.json|vite\.config|next\.config|tailwind\.config|eslint|\.prettier|webpack\.config|biome\.json/i.test(f.split('/').pop() || ''));
+
+    // Bounded manifest candidate discovery
+    const recognizedManifests = new Set([
+      'package.json',
+      'pnpm-workspace.yaml',
+      'turbo.json',
+      'composer.json',
+      'go.mod',
+      'cargo.toml',
+      'pyproject.toml',
+      'requirements.txt'
+    ]);
+
+    const isIgnoredPath = (path: string) => {
+      const lower = path.toLowerCase();
+      return (
+        lower.includes('/node_modules/') ||
+        lower.startsWith('node_modules/') ||
+        lower.includes('/vendor/') ||
+        lower.startsWith('vendor/') ||
+        lower.includes('/.git/') ||
+        lower.startsWith('.git/') ||
+        lower.includes('/dist/') ||
+        lower.startsWith('dist/') ||
+        lower.includes('/build/') ||
+        lower.startsWith('build/') ||
+        lower.includes('/.next/') ||
+        lower.startsWith('.next/') ||
+        lower.includes('/target/') ||
+        lower.startsWith('target/')
+      );
+    };
+
+    const manifestCandidates = files.filter(f => {
+      if (isIgnoredPath(f)) return false;
+      const segments = f.split('/');
+      if (segments.length > MAX_MANIFEST_DEPTH) return false;
+      const fileName = segments[segments.length - 1].toLowerCase();
+      return recognizedManifests.has(fileName);
+    });
+
+    // Sort: root manifests first, then lexicographically
+    manifestCandidates.sort((a, b) => {
+      const aIsRoot = !a.includes('/');
+      const bIsRoot = !b.includes('/');
+      if (aIsRoot && !bIsRoot) return -1;
+      if (!aIsRoot && bIsRoot) return 1;
+      return a.localeCompare(b);
+    });
+
+    // Cap at MAX_MANIFEST_FILES_PER_REPO
+    const cappedManifests = manifestCandidates.slice(0, MAX_MANIFEST_FILES_PER_REPO);
+
+    // Fetch recognized manifest contents
+    for (const manifestPath of cappedManifests) {
+      const manifestRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/contents/${encodeURIComponent(manifestPath)}?ref=${encodeURIComponent(defaultBranch)}`, {
+        headers: getGitHubHeaders(options, 'application/vnd.github.v3.raw')
       });
-      if (pkgRes.ok) {
-        inspection.packageJsonContent = await pkgRes.text();
+
+      if (!manifestRes.ok) {
+        if (manifestRes.status === 404) {
+          throw new Error(`Manifest file "${manifestPath}" listed in tree for "${cleanOwner}/${cleanRepo}" was not found (404). Inconsistent repository state.`);
+        }
+        handleGitHubHttpError(manifestRes, `fetching manifest "${manifestPath}" for "${cleanOwner}/${cleanRepo}"`);
+      } else {
+        const content = await manifestRes.text();
+        if (inspection.manifestContents) {
+          inspection.manifestContents[manifestPath] = content;
+        }
+        if (manifestPath === 'package.json') {
+          inspection.packageJsonContent = content;
+        } else if (manifestPath === 'pnpm-workspace.yaml') {
+          inspection.pnpmWorkspaceYaml = content;
+        } else if (manifestPath === 'turbo.json') {
+          inspection.turboJson = content;
+        }
       }
-    } catch {
-      // Non-fatal
     }
   }
 
@@ -638,10 +856,15 @@ export function generateGitHubProfileDetails(
   projects.forEach(p => {
     const evidence = getProjectTechnologyEvidence(p);
     evidence.forEach(rawTech => {
-      const normalized = normalizeTechnologyName(rawTech);
-      if (!normalized) return;
+      const canonicalName = normalizeTechnologyName(rawTech);
+      if (!canonicalName) return;
 
-      const families = getTechnologyFamilies(normalized);
+      if (!techProjectMap.has(canonicalName)) {
+        techProjectMap.set(canonicalName, new Set());
+      }
+      techProjectMap.get(canonicalName)!.add(p.id);
+
+      const families = getTechnologyFamilies(canonicalName);
       families.forEach(fam => {
         if (!techProjectMap.has(fam)) {
           techProjectMap.set(fam, new Set());
@@ -656,7 +879,6 @@ export function generateGitHubProfileDetails(
     return Boolean(RECOGNIZED_CAPABILITY_TAXONOMY[tech]);
   });
 
-  // Sort by project count descending, then alphabetical
   eligibleTechs.sort((a, b) => {
     const countA = techProjectMap.get(a)?.size || 0;
     const countB = techProjectMap.get(b)?.size || 0;
@@ -673,7 +895,6 @@ export function generateGitHubProfileDetails(
     const radius = 90 + Math.floor(idx / 8) * 35;
     const gridX = Math.round((Math.cos(angle) * radius) / 20) * 20;
     const gridY = Math.round((Math.sin(angle) * (radius * 0.7)) / 20) * 20;
-
     const taxonomyMeta = RECOGNIZED_CAPABILITY_TAXONOMY[tech];
     const cat = taxonomyMeta?.category || inferCategory(tech, [], '');
     const titleSuffix = taxonomyMeta?.titleSuffix || 'Application Architecture';
@@ -728,7 +949,7 @@ export function generateGitHubProfileDetails(
     handle: `@${username}`,
     role,
     location,
-    status: 'ACTIVE_BUILD // GITHUB SYNCHRONIZED',
+    status: 'ACTIVE_BUILD // GITHUB SNAPSHOT',
     focus: user?.bio || `Public GitHub repositories using ${primaryStack.slice(0, 4).join(', ') || 'unreported technologies'}`,
     yearsActive: 0,
     commitsIndexed: 'Not indexed',
@@ -750,52 +971,44 @@ export function generateGitHubProfileDetails(
 }
 
 /**
- * Fetch GitHub user or organization repositories
+ * Stage 1: Discover inventory (Profile + all paginated repositories)
  */
-export async function fetchGitHubUserData(username: string): Promise<GitHubSyncResult> {
+export async function discoverGitHubInventory(
+  username: string,
+  options?: GitHubFetchOptions
+): Promise<{ user: GitHubUser; repos: GitHubRepoRaw[]; rawCount: number }> {
+  const fetchImpl = options?.fetchImpl || globalThis.fetch;
   const cleanUser = username.trim().replace(/^@/, '');
-  
+
   // 1. Fetch User Profile
-  const userRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}`, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json'
-    }
+  const userRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanUser)}`, {
+    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
   });
 
   if (!userRes.ok) {
     if (userRes.status === 404) {
       throw new Error(`GitHub user or organization "@${cleanUser}" was not found.`);
-    } else if (userRes.status === 403) {
-      throw new Error(`GitHub API rate limit reached. Please wait a moment or try a specific repository.`);
-    } else {
-      throw new Error(`Failed to fetch GitHub profile: ${userRes.statusText}`);
     }
+    handleGitHubHttpError(userRes, `fetching GitHub profile for "@${cleanUser}"`);
   }
 
-  const user: GitHubUser = await userRes.json();
+  const rawUser = await userRes.json();
+  const user = sanitizeGitHubUser(rawUser);
 
-  // 2. Fetch Repositories (sorted by recently updated, with pagination up to 100 per page)
+  // 2. Fetch Repositories with pagination
   const allRawRepos: GitHubRepoRaw[] = [];
   let page = 1;
 
   while (true) {
-    const reposRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json'
-      }
+    const reposRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
+      headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
     });
 
     if (!reposRes.ok) {
       if (page === 1) {
-        if (reposRes.status === 403) {
-          throw new Error(`GitHub API rate limit reached. Please wait a moment.`);
-        }
-        throw new Error(`Failed to fetch repositories for "${cleanUser}".`);
+        handleGitHubHttpError(reposRes, `fetching repositories for "${cleanUser}"`);
       } else {
-        if (reposRes.status === 403) {
-          throw new Error(`GitHub API rate limit reached while requesting page ${page} for "${cleanUser}".`);
-        }
-        throw new Error(`Failed to fetch all repositories for "${cleanUser}" while requesting page ${page}: ${reposRes.statusText || reposRes.status}`);
+        handleGitHubHttpError(reposRes, `fetching all repositories for "${cleanUser}" while requesting page ${page}`);
       }
     }
 
@@ -816,14 +1029,24 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
     throw new Error(`User "@${cleanUser}" has no public repositories to visualize.`);
   }
 
-  // Filter out forks if there are enough original repos, or include non-empty repos
-  const nonForkRepos = allRawRepos.filter(r => !r.fork && r.size > 0);
-  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : allRawRepos.filter(r => r.size > 0);
-  const eligibleRepos = candidateRepos.length > 0 ? candidateRepos : allRawRepos;
+  return { user, repos: allRawRepos, rawCount: allRawRepos.length };
+}
 
-  // Deduplicate repositories belonging to the same explicit canonical cluster (e.g. TowerDesk canonical + clean showcase)
+/**
+ * Stage 2: Filter eligible repositories (non-fork, non-empty, non-empty candidate fallback)
+ */
+export function filterEligibleRepositories(repos: GitHubRepoRaw[]): GitHubRepoRaw[] {
+  const nonForkRepos = repos.filter(r => !r.fork && r.size > 0);
+  const candidateRepos = nonForkRepos.length >= 3 ? nonForkRepos : repos.filter(r => r.size > 0);
+  return candidateRepos.length > 0 ? candidateRepos : repos;
+}
+
+/**
+ * Stage 3: Deduplicate repositories belonging to the same canonical cluster BEFORE deep inspection
+ */
+export function canonicalizeRepositories(repos: GitHubRepoRaw[]): GitHubRepoRaw[] {
   const seenClusters = new Map<string, GitHubRepoRaw>();
-  for (const repo of eligibleRepos) {
+  for (const repo of repos) {
     const clusterKey = getCanonicalRepositoryKey(repo.name);
     if (!seenClusters.has(clusterKey)) {
       seenClusters.set(clusterKey, repo);
@@ -834,56 +1057,103 @@ export async function fetchGitHubUserData(username: string): Promise<GitHubSyncR
       }
     }
   }
-  const finalRepos = Array.from(seenClusters.values());
+  return Array.from(seenClusters.values());
+}
 
-  // Inspect top candidate repositories for richer evidence if available (top 3 to conserve rate limits)
-  const inspectionPromises = finalRepos.map(async (repo, idx) => {
-    if (idx < 3) {
-      return fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch).catch(() => undefined);
+/**
+ * Stage 4: Deep inspect ALL canonical candidate repositories with bounded concurrency
+ */
+export async function inspectCanonicalRepositories(
+  canonicalRepos: GitHubRepoRaw[],
+  options?: GitHubFetchOptions
+): Promise<{ inspections: (RawRepositoryInspection | undefined)[]; summary: RepositoryInspectionSummary }> {
+  const concurrency = options?.inspectionConcurrency ?? DEFAULT_INSPECTION_CONCURRENCY;
+  let successfulInspections = 0;
+
+  const inspections = await runWithConcurrency(
+    canonicalRepos,
+    concurrency,
+    async (repo) => {
+      const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, options);
+      successfulInspections++;
+      return insp;
     }
-    return undefined;
-  });
-
-  const inspections = await Promise.all(inspectionPromises);
-
-  const projects = finalRepos.map((repo, idx) => 
-    transformGitHubRepoToProject(repo, idx, finalRepos.length, inspections[idx])
   );
-  const { skills, operator, experience } = generateGitHubProfileDetails(projects, user, cleanUser);
+
+  const summary: RepositoryInspectionSummary = {
+    canonicalRepositoryCount: canonicalRepos.length,
+    inspectedRepositoryCount: successfulInspections,
+    warnings: []
+  };
+
+  return { inspections, summary };
+}
+
+/**
+ * Stage 5: Analyze inspected canonical repositories and synthesize systems cartography snapshot
+ */
+export function analyzeGitHubSnapshot(
+  user: GitHubUser | null,
+  canonicalRepos: GitHubRepoRaw[],
+  inspections: (RawRepositoryInspection | undefined)[],
+  sourceIdentifier: string,
+  _options?: GitHubFetchOptions
+): GitHubSyncResult {
+  const projects = canonicalRepos.map((repo, idx) => 
+    transformGitHubRepoToProject(repo, idx, canonicalRepos.length, inspections[idx])
+  );
+  const { skills, operator, experience } = generateGitHubProfileDetails(projects, user, sourceIdentifier);
 
   return {
     sourceType: 'user',
-    sourceIdentifier: cleanUser,
-    user,
+    sourceIdentifier,
+    user: user || sanitizeGitHubUser(null),
     projects,
     skills,
     operator,
     experience,
-    rawCount: allRawRepos.length
+    rawCount: canonicalRepos.length
   };
+}
+
+/**
+ * Fetch GitHub user or organization repositories and deep inspect ALL canonical repositories
+ */
+export async function fetchGitHubUserData(
+  username: string, 
+  options?: GitHubFetchOptions
+): Promise<GitHubSyncResult> {
+  const { user, repos, rawCount } = await discoverGitHubInventory(username, options);
+  const eligibleRepos = filterEligibleRepositories(repos);
+  const canonicalRepos = canonicalizeRepositories(eligibleRepos);
+  const { inspections, summary } = await inspectCanonicalRepositories(canonicalRepos, options);
+  const result = analyzeGitHubSnapshot(user, canonicalRepos, inspections, user.login || username, options);
+  result.rawCount = rawCount;
+  result.inspectionSummary = summary;
+  return result;
 }
 
 /**
  * Fetch a single GitHub repository with inspection data
  */
-export async function fetchGitHubRepoData(owner: string, repoName: string): Promise<GitHubSyncResult> {
+export async function fetchGitHubRepoData(
+  owner: string, 
+  repoName: string, 
+  options?: GitHubFetchOptions
+): Promise<GitHubSyncResult> {
+  const fetchImpl = options?.fetchImpl || globalThis.fetch;
   const cleanOwner = owner.trim();
   const cleanRepo = repoName.trim();
 
-  const repoRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}`, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json'
-    }
+  const repoRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}`, {
+    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
   });
 
   if (!repoRes.ok) {
     if (repoRes.status === 404) {
       throw new Error(`Repository "${cleanOwner}/${cleanRepo}" was not found or is private.`);
-    } else if (repoRes.status === 403) {
-      throw new Error(`GitHub API rate limit reached. Please wait a moment.`);
-    } else {
-      throw new Error(`Failed to fetch repository: ${repoRes.statusText}`);
     }
+    handleGitHubHttpError(repoRes, `fetching repository "${cleanOwner}/${cleanRepo}"`);
   }
 
   const rawRepo: GitHubRepoRaw = await repoRes.json();
@@ -891,16 +1161,22 @@ export async function fetchGitHubRepoData(owner: string, repoName: string): Prom
   // Try fetching user profile of repo owner
   let user: GitHubUser | null = null;
   try {
-    const userRes = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanOwner)}`);
+    const userRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanOwner)}`, {
+      headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
+    });
     if (userRes.ok) {
-      user = await userRes.json();
+      user = sanitizeGitHubUser(await userRes.json());
     }
   } catch {
     // Non-fatal
   }
 
-  // Fetch repository inspection artifacts
-  const inspection = await fetchRepoInspection(cleanOwner, cleanRepo, rawRepo.default_branch).catch(() => undefined);
+  const inspection = await fetchRepoInspection(cleanOwner, cleanRepo, rawRepo.default_branch, options);
+  const summary: RepositoryInspectionSummary = {
+    canonicalRepositoryCount: 1,
+    inspectedRepositoryCount: inspection ? 1 : 0,
+    warnings: []
+  };
 
   const project = transformGitHubRepoToProject(rawRepo, 0, 1, inspection);
   const { skills, operator, experience } = generateGitHubProfileDetails([project], user, `${cleanOwner}/${cleanRepo}`);
@@ -908,48 +1184,26 @@ export async function fetchGitHubRepoData(owner: string, repoName: string): Prom
   return {
     sourceType: 'repo',
     sourceIdentifier: `${cleanOwner}/${cleanRepo}`,
-    user,
+    user: user || sanitizeGitHubUser(null),
     projects: [project],
     skills,
     operator,
     experience,
-    rawCount: 1
+    rawCount: 1,
+    inspectionSummary: summary
   };
 }
 
 /**
- * Smart URL parser: accepts "torvalds/linux", "https://github.com/torvalds/linux", or "torvalds"
+ * Deterministic target connector: accepts URL or shorthand handle/repo
  */
-export async function connectGitHubTarget(input: string): Promise<GitHubSyncResult> {
-  const cleaned = input.trim().replace(/\/+$/, '');
-  
-  if (!cleaned) {
-    throw new Error('Please enter a GitHub username, org, or repository link.');
+export async function connectGitHubTarget(
+  input: string, 
+  options?: GitHubFetchOptions
+): Promise<GitHubSyncResult> {
+  const parsed = parseGitHubTarget(input);
+  if (parsed.type === 'repo' && parsed.repo) {
+    return fetchGitHubRepoData(parsed.owner, parsed.repo, options);
   }
-
-  // Case 1: Full URL https://github.com/owner/repo or https://github.com/user
-  if (cleaned.includes('github.com')) {
-    const url = cleaned.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
-    const parts = url.split('/').filter(Boolean);
-    // parts[0] is 'github.com'
-    const owner = parts[1];
-    const repo = parts[2];
-
-    if (owner && repo) {
-      return fetchGitHubRepoData(owner, repo);
-    } else if (owner) {
-      return fetchGitHubUserData(owner);
-    }
-  }
-
-  // Case 2: Shorthand owner/repo
-  if (cleaned.includes('/')) {
-    const [owner, repo] = cleaned.split('/');
-    if (owner && repo) {
-      return fetchGitHubRepoData(owner, repo);
-    }
-  }
-
-  // Case 3: Pure username or org name
-  return fetchGitHubUserData(cleaned);
+  return fetchGitHubUserData(parsed.owner, options);
 }
