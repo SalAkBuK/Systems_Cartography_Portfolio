@@ -10,6 +10,7 @@ import {
 import { getCapabilityCoreTechnology } from '../src/utils/capabilityAssociations.ts';
 import { VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 import { GRID_SNAP_STEP } from '../src/utils/collision.ts';
+import { ProjectData, InfrastructureSkill } from '../src/types.ts';
 
 // ---------------------------------------------------------------------------
 // PART 1: Progressive Conduit Disclosure State Machine
@@ -168,44 +169,102 @@ test('8. getConduitPresentationState: Unrelated conduit when another node is hov
 });
 
 // ---------------------------------------------------------------------------
-// PART 2: Project Callout Title Wrapping
+// PART 2: Project Callout Title Wrapping & Safe Tokenization
 // ---------------------------------------------------------------------------
 
 test('9. wrapCalloutTitle: Short title returns a single line', () => {
-  const lines = wrapCalloutTitle('Worthy CRM', 18, 2);
+  const lines = wrapCalloutTitle('Worthy CRM', 20, 2);
   assert.deepEqual(lines, ['Worthy CRM']);
 });
 
-test('10. wrapCalloutTitle: Long multi-word title splits across 2 lines cleanly', () => {
-  const lines = wrapCalloutTitle('TowerDesk Mobile Client Application', 18, 2);
-  assert.equal(lines.length, 2);
-  assert.ok(lines[0].length <= 20);
-  assert.ok(lines[1].length <= 20);
+test('10. wrapCalloutTitle: Long multi-word title splits across 2 lines cleanly without character slicing', () => {
+  const lines = wrapCalloutTitle('TowerDesk Mobile Client Application', 20, 2);
+  assert.deepEqual(lines, ['TowerDesk Mobile', 'Client Application']);
 });
 
-test('11. wrapCalloutTitle: Long hyphenated identifier splits on hyphen boundary', () => {
-  const lines = wrapCalloutTitle('worthy-crm-nextjs-app', 18, 2);
-  assert.equal(lines.length, 2);
-  assert.ok(lines[0].includes('worthy-crm'));
+test('11. wrapCalloutTitle: Long hyphenated identifier splits cleanly on hyphen boundary', () => {
+  const lines = wrapCalloutTitle('binghatti-concierge-app-rn-expo', 20, 2);
+  assert.deepEqual(lines, ['binghatti-concierge-', 'app-rn-expo']);
 });
 
-test('12. wrapCalloutTitle: Extremely long unbroken token or title truncates with ellipsis at max 2 lines', () => {
-  const lines = wrapCalloutTitle('SupercalifragilisticexpialidociousUnbrokenStringLongerThanMaxLimit', 18, 2);
+test('12. wrapCalloutTitle: Mixed-case and underscore identifiers are preserved without delimiter range bug', () => {
+  const lines = wrapCalloutTitle('API_V2-Backend_Service', 20, 2);
+  assert.deepEqual(lines, ['API_V2-Backend_', 'Service']);
+});
+
+test('13. wrapCalloutTitle: Extremely long unbroken token or title truncates with ellipsis at max 2 lines', () => {
+  const lines = wrapCalloutTitle('SupercalifragilisticexpialidociousUnbrokenStringLongerThanMaxLimit', 20, 2);
   assert.equal(lines.length, 2);
-  assert.ok(lines[1].endsWith('…') || lines[1].length <= 18);
+  assert.ok(lines[1].endsWith('…'));
 });
 
 // ---------------------------------------------------------------------------
-// PART 3: Deterministic Schematic Layout Assembler
+// PART 3: Deterministic Schematic Layout Assembler & Synthetic Scaling
 // ---------------------------------------------------------------------------
 
-test('13. assembleTopologyLayout: Produces identical positions across multiple invocations (deterministic)', () => {
+function checkFootprintOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  );
+}
+
+function generateMockSkills(count: number): InfrastructureSkill[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `skill-${String(i + 1).padStart(3, '0')}`,
+    code: `CAP-${String(i + 1).padStart(2, '0')}`,
+    name: `Capability ${i + 1}`,
+    category: 'infrastructure' as const,
+    yearsActive: 3,
+    proficiencyScore: 90,
+    primaryUseCases: ['Distributed Systems'],
+    technicalHighlights: ['High throughput'],
+    samplePattern: 'Event Driven',
+    systemCount: 2,
+    usedInProjects: [],
+    gridPosition: { x: 0, y: 0 }
+  }));
+}
+
+function generateMockProjects(count: number): ProjectData[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `project-${String(i + 1).padStart(3, '0')}`,
+    code: `SYS-${String(i + 1).padStart(2, '0')}`,
+    title: `System Component ${i + 1}`,
+    summary: 'Synthetic summary',
+    problem: 'Synthetic problem',
+    solution: 'Synthetic solution',
+    architectureNotes: 'Synthetic notes',
+    status: 'ACTIVE' as const,
+    year: '2025',
+    tagline: 'Synthetic test component',
+    accentColor: '#C3E54E',
+    category: 'fullstack' as const,
+    techStack: ['TypeScript'],
+    infrastructureDeps: [],
+    subsystems: [],
+    dimensions: { width: 100, height: 60, levels: 2 },
+    gridPosition: { x: 0, y: 0 },
+    verifiedFacts: [],
+    metrics: [],
+    keyDecisions: [],
+    resilienceTesting: 'Chaos tested',
+    links: { github: 'https://github.com/mock' }
+  }));
+}
+
+test('14. assembleTopologyLayout: Produces identical positions across multiple invocations (deterministic)', () => {
   const layout1 = assembleTopologyLayout(VERIFIED_PROJECTS, VERIFIED_SKILLS);
   const layout2 = assembleTopologyLayout(VERIFIED_PROJECTS, VERIFIED_SKILLS);
   assert.deepEqual(layout1, layout2, 'Layout must be 100% deterministic');
 });
 
-test('14. assembleTopologyLayout: Stable sorting ensures shuffled input order does not alter output positions', () => {
+test('15. assembleTopologyLayout: Stable sorting ensures shuffled input order does not alter output positions', () => {
   const shuffledProjects = [...VERIFIED_PROJECTS].reverse();
   const shuffledSkills = [...VERIFIED_SKILLS].reverse();
   
@@ -215,43 +274,187 @@ test('14. assembleTopologyLayout: Stable sorting ensures shuffled input order do
   assert.deepEqual(layoutStandard, layoutShuffled, 'Shuffling input array order must yield identical positions');
 });
 
-test('15. assembleTopologyLayout: All positions are snapped to GRID_SNAP_STEP multiples', () => {
+test('16. assembleTopologyLayout: Verified portfolio layout has zero overlaps and correct inner/outer separation', () => {
   const { projectPositions, skillPositions } = assembleTopologyLayout(VERIFIED_PROJECTS, VERIFIED_SKILLS);
-  
+
+  // Assert all coordinates snapped
   Object.values(projectPositions).forEach(pos => {
-    assert.equal(pos.x % GRID_SNAP_STEP, 0, 'Project position x must be a multiple of GRID_SNAP_STEP');
-    assert.equal(pos.y % GRID_SNAP_STEP, 0, 'Project position y must be a multiple of GRID_SNAP_STEP');
+    assert.equal(pos.x % GRID_SNAP_STEP, 0);
+    assert.equal(pos.y % GRID_SNAP_STEP, 0);
   });
-
   Object.values(skillPositions).forEach(pos => {
-    assert.equal(pos.x % GRID_SNAP_STEP, 0, 'Skill position x must be a multiple of GRID_SNAP_STEP');
-    assert.equal(pos.y % GRID_SNAP_STEP, 0, 'Skill position y must be a multiple of GRID_SNAP_STEP');
+    assert.equal(pos.x % GRID_SNAP_STEP, 0);
+    assert.equal(pos.y % GRID_SNAP_STEP, 0);
   });
+
+  const skillBoxes = VERIFIED_SKILLS.map(s => ({
+    id: s.id,
+    x: skillPositions[s.id].x,
+    y: skillPositions[s.id].y,
+    width: 48,
+    height: 48
+  }));
+
+  const projectBoxes = VERIFIED_PROJECTS.map(p => ({
+    id: p.id,
+    x: projectPositions[p.id].x,
+    y: projectPositions[p.id].y,
+    width: (p.dimensions?.width || 100) * 0.75,
+    height: 55
+  }));
+
+  // Assert zero skill-to-skill overlap
+  for (let i = 0; i < skillBoxes.length; i++) {
+    for (let j = i + 1; j < skillBoxes.length; j++) {
+      assert.equal(
+        checkFootprintOverlap(skillBoxes[i], skillBoxes[j]),
+        false,
+        `Skills ${skillBoxes[i].id} and ${skillBoxes[j].id} must not overlap`
+      );
+    }
+  }
+
+  // Assert zero project-to-project overlap
+  for (let i = 0; i < projectBoxes.length; i++) {
+    for (let j = i + 1; j < projectBoxes.length; j++) {
+      assert.equal(
+        checkFootprintOverlap(projectBoxes[i], projectBoxes[j]),
+        false,
+        `Projects ${projectBoxes[i].id} and ${projectBoxes[j].id} must not overlap`
+      );
+    }
+  }
+
+  // Assert zero project-to-skill overlap
+  for (const pb of projectBoxes) {
+    for (const sb of skillBoxes) {
+      assert.equal(
+        checkFootprintOverlap(pb, sb),
+        false,
+        `Project ${pb.id} and Skill ${sb.id} must not overlap`
+      );
+    }
+  }
+
+  // Assert projects strictly outside inner capability core
+  const maxSkillRadius = Math.max(...skillBoxes.map(s => Math.hypot(s.x + s.width / 2, s.y + s.height / 2)));
+  const minProjectRadius = Math.min(...projectBoxes.map(p => Math.hypot(p.x + p.width / 2, p.y + p.height / 2)));
+  assert.ok(maxSkillRadius < minProjectRadius, 'Skills must be strictly inside project rings');
 });
 
-test('16. assembleTopologyLayout: Skills are positioned in inner core region while projects are in outer region', () => {
-  const { projectPositions, skillPositions } = assembleTopologyLayout(VERIFIED_PROJECTS, VERIFIED_SKILLS);
-  
-  const skillDistances = Object.values(skillPositions).map(p => Math.hypot(p.x, p.y));
-  const projectDistances = Object.values(projectPositions).map(p => Math.hypot(p.x, p.y));
-  
-  const maxSkillRadius = Math.max(...skillDistances);
-  const minProjectRadius = Math.min(...projectDistances);
-  
-  assert.ok(
-    maxSkillRadius < minProjectRadius, 
-    'Inner skill core max radius must be less than outer project min radius'
-  );
-});
+// Synthetic Scaling Matrix Tests
+const skillCounts = [1, 6, 12, 24];
+const projectCounts = [1, 8, 20, 50, 100];
+
+for (const sCount of skillCounts) {
+  for (const pCount of projectCounts) {
+    test(`assembleTopologyLayout Scale Test: ${sCount} Capabilities × ${pCount} Projects`, () => {
+      const mockSkills = generateMockSkills(sCount);
+      const mockProjects = generateMockProjects(pCount);
+
+      const layout1 = assembleTopologyLayout(mockProjects, mockSkills);
+      const layout2 = assembleTopologyLayout(mockProjects, mockSkills);
+
+      // 1. Assert 100% determinism
+      assert.deepEqual(layout1, layout2, 'Must produce identical coordinates across calls');
+
+      // 2. Assert shuffled input determinism
+      const shuffledProjects = [...mockProjects].reverse();
+      const shuffledSkills = [...mockSkills].reverse();
+      const layoutShuffled = assembleTopologyLayout(shuffledProjects, shuffledSkills);
+      assert.deepEqual(layout1, layoutShuffled, 'Must produce identical coordinates when input order is reversed');
+
+      const { projectPositions, skillPositions } = layout1;
+
+      // 3. Assert all nodes receive finite grid-snapped coordinates
+      mockSkills.forEach(s => {
+        const pos = skillPositions[s.id];
+        assert.ok(pos, `Skill ${s.id} position missing`);
+        assert.ok(Number.isFinite(pos.x));
+        assert.ok(Number.isFinite(pos.y));
+        assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0, `Skill ${s.id} x must be multiple of ${GRID_SNAP_STEP}`);
+        assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP, 0, `Skill ${s.id} y must be multiple of ${GRID_SNAP_STEP}`);
+      });
+
+      mockProjects.forEach(p => {
+        const pos = projectPositions[p.id];
+        assert.ok(pos, `Project ${p.id} position missing`);
+        assert.ok(Number.isFinite(pos.x));
+        assert.ok(Number.isFinite(pos.y));
+        assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0, `Project ${p.id} x must be multiple of ${GRID_SNAP_STEP}`);
+        assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP, 0, `Project ${p.id} y must be multiple of ${GRID_SNAP_STEP}`);
+      });
+
+      const skillBoxes = mockSkills.map(s => ({
+        id: s.id,
+        x: skillPositions[s.id].x,
+        y: skillPositions[s.id].y,
+        width: 48,
+        height: 48
+      }));
+
+      const projectBoxes = mockProjects.map(p => ({
+        id: p.id,
+        x: projectPositions[p.id].x,
+        y: projectPositions[p.id].y,
+        width: (p.dimensions?.width || 100) * 0.75,
+        height: 55
+      }));
+
+      // 4. Assert zero capability overlap
+      for (let i = 0; i < skillBoxes.length; i++) {
+        for (let j = i + 1; j < skillBoxes.length; j++) {
+          assert.equal(
+            checkFootprintOverlap(skillBoxes[i], skillBoxes[j]),
+            false,
+            `Collision detected between skills ${skillBoxes[i].id} and ${skillBoxes[j].id}`
+          );
+        }
+      }
+
+      // 5. Assert zero project overlap
+      for (let i = 0; i < projectBoxes.length; i++) {
+        for (let j = i + 1; j < projectBoxes.length; j++) {
+          assert.equal(
+            checkFootprintOverlap(projectBoxes[i], projectBoxes[j]),
+            false,
+            `Collision detected between projects ${projectBoxes[i].id} and ${projectBoxes[j].id}`
+          );
+        }
+      }
+
+      // 6. Assert zero project-capability overlap
+      for (const pb of projectBoxes) {
+        for (const sb of skillBoxes) {
+          assert.equal(
+            checkFootprintOverlap(pb, sb),
+            false,
+            `Collision detected between project ${pb.id} and skill ${sb.id}`
+          );
+        }
+      }
+
+      // 7. Assert project region is outside capability core
+      const maxSkillDist = Math.max(...skillBoxes.map(s => Math.hypot(s.x + s.width / 2, s.y + s.height / 2)));
+      const minProjectDist = Math.min(...projectBoxes.map(p => Math.hypot(p.x + p.width / 2, p.y + p.height / 2)));
+      assert.ok(
+        maxSkillDist < minProjectDist,
+        `Inner skill core max radius (${maxSkillDist}) must be less than outer project min radius (${minProjectDist})`
+      );
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // PART 4: Experience Dock & Stale Code Deletion Invariants
 // ---------------------------------------------------------------------------
 
-test('17. App.tsx: traceModeActive defaults to false', () => {
+test('17. App.tsx: traceModeActive specifically initialized to false', () => {
   const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8');
-  assert.ok(appContent.includes("useState(false)"), 'traceModeActive must default to false in App.tsx');
-  assert.ok(!appContent.includes("useState(true)"), 'traceModeActive must not default to true in App.tsx');
+  assert.ok(
+    appContent.includes("const [traceModeActive, setTraceModeActive] = useState(false);"),
+    'traceModeActive state hook must specifically initialize to false in App.tsx'
+  );
 });
 
 test('18. TopologyCanvas.tsx: Floating Experience Dock and drag handlers are completely removed', () => {
@@ -264,11 +467,14 @@ test('18. TopologyCanvas.tsx: Floating Experience Dock and drag handlers are com
   assert.ok(!canvasContent.includes("onSelectExperience:"), 'onSelectExperience prop removed from TopologyCanvasProps');
 });
 
-test('19. forceLayout.ts: Dead simulation methods are deleted while conduit geometry is preserved', async () => {
+test('19. forceLayout.ts: Dead force-graph scaffolding and simulation methods are deleted', async () => {
   const forceLayoutModule = await import('../src/utils/forceLayout.ts');
   const forceLayoutContent = fs.readFileSync(path.resolve('src/utils/forceLayout.ts'), 'utf8');
   
   assert.equal(typeof forceLayoutModule.calculateConduitGeometry, 'function', 'calculateConduitGeometry must be exported');
+  assert.ok(!forceLayoutContent.includes("createTopologyGraph"), 'createTopologyGraph must be removed');
+  assert.ok(!forceLayoutContent.includes("LayoutNode"), 'LayoutNode interface must be removed');
+  assert.ok(!forceLayoutContent.includes("LayoutEdge"), 'LayoutEdge interface must be removed');
   assert.ok(!forceLayoutContent.includes("stepForceSimulation"), 'stepForceSimulation must be removed');
   assert.ok(!forceLayoutContent.includes("computeEquilibriumLayout"), 'computeEquilibriumLayout must be removed');
 });

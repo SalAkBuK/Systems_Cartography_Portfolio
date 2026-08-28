@@ -1,29 +1,11 @@
-import { ProjectData, InfrastructureSkill } from '../types';
 import { project3DToIso } from '../components/TopologyCanvas';
-import { projectUsesCapability } from './capabilityAssociations';
 
-export interface LayoutNode {
-  id: string;
-  type: 'project' | 'skill';
+export interface ConduitEndpointNode {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  width: number;
-  height: number; // depth on the 3D plane
-  mass: number;
-  isPinned: boolean;
-  targetZoneY?: number;
-}
-
-export interface LayoutEdge {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  sourceType: 'project' | 'skill';
-  targetType: 'project' | 'skill';
-  restLength: number;
-  stiffness: number;
+  width?: number;
+  height?: number;
+  type?: string;
 }
 
 export interface ConduitPoint {
@@ -48,92 +30,11 @@ export interface ConduitPathGeometry {
 }
 
 /**
- * Builds the graph representation (nodes & edges) from portfolio data and custom positions
- */
-export function createTopologyGraph(
-  projects: ProjectData[],
-  skills: InfrastructureSkill[],
-  customProjects: Record<string, { x: number; y: number }> = {},
-  customSkills: Record<string, { x: number; y: number }> = {},
-  draggingNode: { type: string; id: string; currentPos: { x: number; y: number } } | null = null
-): { nodes: Map<string, LayoutNode>; edges: LayoutEdge[] } {
-  const nodes = new Map<string, LayoutNode>();
-  const edges: LayoutEdge[] = [];
-  const edgeSet = new Set<string>();
-
-  // 1. Projects
-  projects.forEach(p => {
-    const isDragged = draggingNode?.type === 'project' && draggingNode.id === p.id;
-    const pos = isDragged ? draggingNode.currentPos : (customProjects[p.id] || p.gridPosition);
-    const width = (p.dimensions?.width || 100) * 0.75;
-    const depth = 55;
-
-    nodes.set(p.id, {
-      id: p.id,
-      type: 'project',
-      x: pos.x,
-      y: pos.y,
-      vx: 0,
-      vy: 0,
-      width,
-      height: depth,
-      mass: 2.5,
-      isPinned: isDragged,
-      targetZoneY: -120
-    });
-  });
-
-  // 2. Skills
-  skills.forEach(s => {
-    const isDragged = draggingNode?.type === 'skill' && draggingNode.id === s.id;
-    const pos = isDragged ? draggingNode.currentPos : (customSkills[s.id] || s.gridPosition);
-
-    nodes.set(s.id, {
-      id: s.id,
-      type: 'skill',
-      x: pos.x,
-      y: pos.y,
-      vx: 0,
-      vy: 0,
-      width: 48,
-      height: 48,
-      mass: 1.2,
-      isPinned: isDragged,
-      targetZoneY: 220
-    });
-  });
-
-  // Build edges
-  projects.forEach(project => {
-    skills.forEach(skill => {
-      if (projectUsesCapability(project, skill)) {
-        const key = `${project.id}--${skill.id}`;
-        if (!edgeSet.has(key)) {
-          edgeSet.add(key);
-          const isDep = project.infrastructureDeps.includes(skill.id);
-          edges.push({
-            id: key,
-            sourceId: project.id,
-            targetId: skill.id,
-            sourceType: 'project',
-            targetType: 'skill',
-            restLength: 180,
-            stiffness: isDep ? 0.045 : 0.025
-          });
-        }
-      }
-    });
-  });
-
-  return { nodes, edges };
-}
-
-/**
  * Calculates optimal 3D attachment ports and isometric coordinates for connection conduits
  */
 export function calculateConduitGeometry(
-  sourceNode: LayoutNode | { x: number; y: number; width?: number; height?: number; type: string },
-  targetNode: LayoutNode | { x: number; y: number; width?: number; height?: number; type: string },
+  sourceNode: ConduitEndpointNode,
+  targetNode: ConduitEndpointNode,
   edgeId: string,
   sourceId: string,
   targetId: string,
