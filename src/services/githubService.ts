@@ -16,6 +16,7 @@ import {
   projectUsesCapability, 
   RECOGNIZED_CAPABILITY_TAXONOMY 
 } from '../utils/capabilityAssociations';
+import { parseGitHubTarget } from '../utils/portfolioUtils';
 
 export const DEFAULT_INSPECTION_CONCURRENCY = 3;
 export const MAX_MANIFEST_DEPTH = 4;
@@ -119,7 +120,6 @@ export interface GitHubSyncResult {
 export interface GitHubFetchOptions {
   token?: string;
   inspectionConcurrency?: number;
-  allowPartial?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -679,7 +679,6 @@ export async function fetchRepoInspection(
   options?: GitHubFetchOptions
 ): Promise<RawRepositoryInspection> {
   const fetchImpl = options?.fetchImpl || globalThis.fetch;
-  const isStrict = options?.allowPartial !== true;
   const cleanOwner = owner.trim();
   const cleanRepo = repo.trim();
 
@@ -703,12 +702,10 @@ export async function fetchRepoInspection(
     if (readmeRes.ok) {
       inspection.readmeContent = await readmeRes.text();
     } else if (readmeRes.status !== 404) {
-      if (readmeRes.status === 403 || readmeRes.status === 429) {
-        handleGitHubHttpError(readmeRes, `fetching README for "${cleanOwner}/${cleanRepo}"`);
-      }
+      handleGitHubHttpError(readmeRes, `fetching README for "${cleanOwner}/${cleanRepo}"`);
     }
   } catch (err: any) {
-    if (isStrict && err.message && (err.message.includes('rate limit') || err.message.includes('forbidden'))) {
+    if (err.message && (err.message.includes('rate limit') || err.message.includes('forbidden') || err.message.includes('Failed to fetch'))) {
       throw err;
     }
   }
@@ -719,18 +716,17 @@ export async function fetchRepoInspection(
   });
 
   if (!treeRes.ok) {
-    if (isStrict) {
-      handleGitHubHttpError(treeRes, `fetching git tree for "${cleanOwner}/${cleanRepo}"`);
-    }
-  } else {
-    const treeData = await treeRes.json();
-    if (isStrict && treeData.truncated === true) {
-      throw new Error(`Tree truncated for "${cleanOwner}/${cleanRepo}". Deep inspection incomplete.`);
-    }
-    if (Array.isArray(treeData.tree)) {
-      inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
-    }
+    handleGitHubHttpError(treeRes, `fetching git tree for "${cleanOwner}/${cleanRepo}"`);
   }
+
+  const treeData = await treeRes.json();
+  if (treeData.truncated === true) {
+    throw new Error(`Tree truncated for "${cleanOwner}/${cleanRepo}". Deep inspection incomplete.`);
+  }
+  if (!treeData || !Array.isArray(treeData.tree)) {
+    throw new Error(`Incomplete inspection for "${cleanOwner}/${cleanRepo}": Git tree payload is missing or not an array.`);
+  }
+  inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
 
   // 3. Scan tree paths for categorized artifact collections and manifest candidates
   if (inspection.treeFiles && inspection.treeFiles.length > 0) {
@@ -801,12 +797,10 @@ export async function fetchRepoInspection(
       });
 
       if (!manifestRes.ok) {
-        if (isStrict) {
-          if (manifestRes.status === 404) {
-            throw new Error(`Manifest file "${manifestPath}" listed in tree for "${cleanOwner}/${cleanRepo}" was not found (404). Inconsistent repository state.`);
-          }
-          handleGitHubHttpError(manifestRes, `fetching manifest "${manifestPath}" for "${cleanOwner}/${cleanRepo}"`);
+        if (manifestRes.status === 404) {
+          throw new Error(`Manifest file "${manifestPath}" listed in tree for "${cleanOwner}/${cleanRepo}" was not found (404). Inconsistent repository state.`);
         }
+        handleGitHubHttpError(manifestRes, `fetching manifest "${manifestPath}" for "${cleanOwner}/${cleanRepo}"`);
       } else {
         const content = await manifestRes.text();
         if (inspection.manifestContents) {
@@ -821,23 +815,8 @@ export async function fetchRepoInspection(
         }
       }
     }
-  } else {
-    // Fallback: If no tree is available (in allowPartial mode), try fetching root package.json directly
-    try {
-      const pkgRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/contents/package.json`, {
-        headers: getGitHubHeaders(options, 'application/vnd.github.v3.raw')
-      });
-      if (pkgRes.ok) {
-        const content = await pkgRes.text();
-        inspection.packageJsonContent = content;
-        if (inspection.manifestContents) {
-          inspection.manifestContents['package.json'] = content;
-        }
-      }
-    } catch {
-      // Non-fatal
-    }
   }
+
   return inspection;
 }
 
@@ -868,8 +847,8 @@ export function generateGitHubProfileDetails(
 ): { skills: InfrastructureSkill[]; operator: OperatorMetadata; experience: ExperienceNode[] } {
   const username = user?.login || sourceIdentifier.split('/')[0] || 'operator';
   const name = user?.name || username;
-  const role = 'Systems Architect & Full Stack Engineer';
-  const location = user?.location || 'Global';
+  const role = user?.bio ? user.bio.split('\n')[0].slice(0, 60) : 'GitHub profile';
+  const location = user?.location || 'Not provided on GitHub';
 
   // 1. Synthesize recognized technologies across all projects using evidence & family mapping
   const techProjectMap = new Map<string, Set<string>>();
@@ -970,7 +949,7 @@ export function generateGitHubProfileDetails(
     handle: `@${username}`,
     role,
     location,
-    status: 'ACTIVE_BUILD // GITHUB SYNCHRONIZED',
+    status: 'ACTIVE_BUILD // GITHUB SNAPSHOT',
     focus: user?.bio || `Public GitHub repositories using ${primaryStack.slice(0, 4).join(', ') || 'unreported technologies'}`,
     yearsActive: 0,
     commitsIndexed: 'Not indexed',
@@ -1088,33 +1067,23 @@ export async function inspectCanonicalRepositories(
   canonicalRepos: GitHubRepoRaw[],
   options?: GitHubFetchOptions
 ): Promise<{ inspections: (RawRepositoryInspection | undefined)[]; summary: RepositoryInspectionSummary }> {
-  const isStrict = options?.allowPartial !== true;
   const concurrency = options?.inspectionConcurrency ?? DEFAULT_INSPECTION_CONCURRENCY;
-  const warnings: string[] = [];
   let successfulInspections = 0;
 
   const inspections = await runWithConcurrency(
     canonicalRepos,
     concurrency,
     async (repo) => {
-      try {
-        const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, options);
-        successfulInspections++;
-        return insp;
-      } catch (err: any) {
-        if (isStrict) {
-          throw err;
-        }
-        warnings.push(`Incomplete inspection for repository "${repo.full_name}": ${err.message || err}`);
-        return undefined;
-      }
+      const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, options);
+      successfulInspections++;
+      return insp;
     }
   );
 
   const summary: RepositoryInspectionSummary = {
     canonicalRepositoryCount: canonicalRepos.length,
     inspectedRepositoryCount: successfulInspections,
-    warnings
+    warnings: []
   };
 
   return { inspections, summary };
@@ -1226,41 +1195,15 @@ export async function fetchGitHubRepoData(
 }
 
 /**
- * Smart URL parser: accepts "torvalds/linux", "https://github.com/torvalds/linux", or "torvalds"
+ * Deterministic target connector: accepts URL or shorthand handle/repo
  */
 export async function connectGitHubTarget(
   input: string, 
   options?: GitHubFetchOptions
 ): Promise<GitHubSyncResult> {
-  const cleaned = input.trim().replace(/\/+$/, '');
-  
-  if (!cleaned) {
-    throw new Error('Please enter a GitHub username, org, or repository link.');
+  const parsed = parseGitHubTarget(input);
+  if (parsed.type === 'repo' && parsed.repo) {
+    return fetchGitHubRepoData(parsed.owner, parsed.repo, options);
   }
-
-  // Case 1: Full URL https://github.com/owner/repo or https://github.com/user
-  if (cleaned.includes('github.com')) {
-    const url = cleaned.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
-    const parts = url.split('/').filter(Boolean);
-    // parts[0] is 'github.com'
-    const owner = parts[1];
-    const repo = parts[2];
-
-    if (owner && repo) {
-      return fetchGitHubRepoData(owner, repo, options);
-    } else if (owner) {
-      return fetchGitHubUserData(owner, options);
-    }
-  }
-
-  // Case 2: Shorthand owner/repo
-  if (cleaned.includes('/')) {
-    const [owner, repo] = cleaned.split('/');
-    if (owner && repo) {
-      return fetchGitHubRepoData(owner, repo, options);
-    }
-  }
-
-  // Case 3: Pure username or org name
-  return fetchGitHubUserData(cleaned, options);
+  return fetchGitHubUserData(parsed.owner, options);
 }

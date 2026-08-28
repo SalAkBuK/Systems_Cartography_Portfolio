@@ -94,7 +94,7 @@ Public GitHub repository data is committed as a static snapshot in `src/data/git
 
 Selected repositories can have reviewed evidence mappings in `src/data/repositoryEvidence.ts`. Those mappings must be supported by public README or code evidence. The application does not infer employment history, proficiency percentages, production uptime, performance benchmarks, SLAs, or business outcomes from GitHub.
 
-At runtime, the browser application executes completely offline with zero API calls. Fork safety is enforced by owner-scoping: if the configured `PORTFOLIO_CONFIG.githubTarget` does not match the committed snapshot, the UI displays `SNAPSHOT // REFRESH REQUIRED` instead of rendering mismatched data.
+Repository rendering is network-independent and performs zero visitor-time GitHub API calls. The portfolio loads its repository topology from the committed snapshot even when GitHub is unavailable. Fork safety is enforced by owner-scoping: if the configured `PORTFOLIO_CONFIG.githubTarget` does not match the committed snapshot, the UI displays `SNAPSHOT // REFRESH REQUIRED` instead of rendering mismatched data.
 
 ## Professional data provenance
 

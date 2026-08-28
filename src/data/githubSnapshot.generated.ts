@@ -6,7 +6,7 @@ import type { GitHubSyncResult } from '../services/githubService';
 
 export const GITHUB_SNAPSHOT_METADATA: GitHubSnapshotMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-28T18:00:55.418Z",
+  "generatedAt": "2026-08-28T18:12:38.191Z",
   "githubTarget": "https://github.com/SalAkBuK",
   "sourceIdentifier": "SalAkBuK",
   "rawRepositoryCount": 19,
@@ -74,16 +74,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-7",
-        "gh-infra-9",
-        "gh-infra-10",
-        "gh-infra-14",
-        "gh-infra-19",
-        "gh-infra-25",
-        "gh-infra-27",
-        "gh-infra-110"
+        "gh-infra-4",
+        "gh-infra-5"
       ],
       "subsystems": [
         {
@@ -149,7 +141,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         },
         {
           "label": "Repo Footprint",
-          "value": "0.6 MB",
+          "value": "0.7 MB",
           "note": "Source code & assets",
           "provenance": "VERIFIED"
         },
@@ -252,16 +244,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-7",
-        "gh-infra-9",
-        "gh-infra-10",
-        "gh-infra-14",
-        "gh-infra-19",
-        "gh-infra-25",
-        "gh-infra-27",
-        "gh-infra-110"
+        "gh-infra-4",
+        "gh-infra-5"
       ],
       "subsystems": [
         {
@@ -431,18 +415,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-9",
-        "gh-infra-13",
-        "gh-infra-18",
-        "gh-infra-23",
-        "gh-infra-26",
-        "gh-infra-32",
-        "gh-infra-55",
-        "gh-infra-56",
-        "gh-infra-57",
-        "gh-infra-98"
+        "gh-infra-10",
+        "gh-infra-15"
       ],
       "subsystems": [
         {
@@ -645,19 +619,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-11",
-        "gh-infra-12",
-        "gh-infra-16",
-        "gh-infra-17",
-        "gh-infra-33",
-        "gh-infra-81",
-        "gh-infra-105",
-        "gh-infra-110",
-        "gh-infra-111",
-        "gh-infra-114"
+        "gh-infra-7",
+        "gh-infra-8",
+        "gh-infra-9",
+        "gh-infra-11"
       ],
       "subsystems": [
         {
@@ -887,31 +852,15 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "Redis"
       ],
       "infrastructureDeps": [
-        "gh-infra-3",
+        "gh-infra-2",
         "gh-infra-4",
+        "gh-infra-10",
+        "gh-infra-11",
         "gh-infra-13",
-        "gh-infra-14",
-        "gh-infra-15",
-        "gh-infra-18",
-        "gh-infra-27",
-        "gh-infra-28",
-        "gh-infra-29",
-        "gh-infra-31",
-        "gh-infra-33",
-        "gh-infra-35",
-        "gh-infra-36",
-        "gh-infra-41",
-        "gh-infra-67",
-        "gh-infra-80",
-        "gh-infra-83",
-        "gh-infra-84",
-        "gh-infra-90",
-        "gh-infra-91",
-        "gh-infra-93",
-        "gh-infra-94",
-        "gh-infra-100",
-        "gh-infra-105",
-        "gh-infra-109"
+        "gh-infra-16",
+        "gh-infra-20",
+        "gh-infra-22",
+        "gh-infra-23"
       ],
       "subsystems": [
         {
@@ -1153,9 +1102,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "techStack": [
         "Codebase"
       ],
-      "infrastructureDeps": [
-        "gh-infra-46"
-      ],
+      "infrastructureDeps": [],
       "subsystems": [
         {
           "id": "physio_bot-core",
@@ -1297,22 +1244,12 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-3",
         "gh-infra-4",
+        "gh-infra-7",
+        "gh-infra-8",
         "gh-infra-9",
-        "gh-infra-11",
-        "gh-infra-14",
-        "gh-infra-16",
         "gh-infra-17",
-        "gh-infra-27",
-        "gh-infra-29",
-        "gh-infra-38",
-        "gh-infra-45",
-        "gh-infra-59",
-        "gh-infra-81",
-        "gh-infra-99",
-        "gh-infra-107",
-        "gh-infra-108"
+        "gh-infra-24"
       ],
       "subsystems": [
         {
@@ -1537,19 +1474,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "Nodejs"
       ],
       "infrastructureDeps": [
-        "gh-infra-7",
-        "gh-infra-8",
-        "gh-infra-14",
-        "gh-infra-16",
-        "gh-infra-22",
-        "gh-infra-27",
-        "gh-infra-40",
-        "gh-infra-47",
-        "gh-infra-62",
-        "gh-infra-63",
-        "gh-infra-66",
-        "gh-infra-68",
-        "gh-infra-75"
+        "gh-infra-4",
+        "gh-infra-5",
+        "gh-infra-6",
+        "gh-infra-8"
       ],
       "subsystems": [
         {
@@ -1692,16 +1620,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-11",
-        "gh-infra-30",
-        "gh-infra-58",
-        "gh-infra-81",
-        "gh-infra-96",
-        "gh-infra-97",
-        "gh-infra-106",
-        "gh-infra-110"
+        "gh-infra-7",
+        "gh-infra-14"
       ],
       "subsystems": [
         {
@@ -1887,14 +1807,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-9",
-        "gh-infra-11",
-        "gh-infra-17",
-        "gh-infra-81",
-        "gh-infra-110"
+        "gh-infra-7",
+        "gh-infra-9"
       ],
       "subsystems": [
         {
@@ -2048,24 +1962,12 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-3",
         "gh-infra-4",
-        "gh-infra-7",
+        "gh-infra-5",
+        "gh-infra-9",
+        "gh-infra-12",
         "gh-infra-13",
-        "gh-infra-14",
-        "gh-infra-15",
-        "gh-infra-17",
-        "gh-infra-24",
-        "gh-infra-26",
-        "gh-infra-27",
-        "gh-infra-28",
-        "gh-infra-32",
-        "gh-infra-61",
-        "gh-infra-89",
-        "gh-infra-90",
-        "gh-infra-91",
-        "gh-infra-95",
-        "gh-infra-101"
+        "gh-infra-15"
       ],
       "subsystems": [
         {
@@ -2288,18 +2190,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-8",
-        "gh-infra-10",
-        "gh-infra-12",
-        "gh-infra-42",
-        "gh-infra-44",
-        "gh-infra-68",
-        "gh-infra-92",
-        "gh-infra-110"
+        "gh-infra-3",
+        "gh-infra-6"
       ],
       "subsystems": [
         {
@@ -2447,21 +2339,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-8",
-        "gh-infra-10",
-        "gh-infra-12",
-        "gh-infra-21",
-        "gh-infra-23",
-        "gh-infra-39",
-        "gh-infra-43",
-        "gh-infra-51",
-        "gh-infra-68",
-        "gh-infra-104",
-        "gh-infra-110"
+        "gh-infra-3",
+        "gh-infra-6"
       ],
       "subsystems": [
         {
@@ -2607,22 +2486,12 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "Twillio"
       ],
       "infrastructureDeps": [
-        "gh-infra-7",
-        "gh-infra-8",
-        "gh-infra-13",
-        "gh-infra-14",
-        "gh-infra-15",
-        "gh-infra-20",
-        "gh-infra-21",
-        "gh-infra-24",
-        "gh-infra-27",
-        "gh-infra-33",
-        "gh-infra-37",
-        "gh-infra-68",
-        "gh-infra-76",
-        "gh-infra-77",
-        "gh-infra-105",
-        "gh-infra-112"
+        "gh-infra-4",
+        "gh-infra-5",
+        "gh-infra-6",
+        "gh-infra-11",
+        "gh-infra-12",
+        "gh-infra-18"
       ],
       "subsystems": [
         {
@@ -2815,26 +2684,9 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "JSON Cache"
       ],
       "infrastructureDeps": [
-        "gh-infra-3",
-        "gh-infra-9",
-        "gh-infra-31",
-        "gh-infra-34",
-        "gh-infra-48",
-        "gh-infra-49",
-        "gh-infra-50",
-        "gh-infra-65",
-        "gh-infra-69",
-        "gh-infra-70",
-        "gh-infra-71",
-        "gh-infra-73",
-        "gh-infra-74",
-        "gh-infra-78",
-        "gh-infra-79",
-        "gh-infra-85",
-        "gh-infra-86",
-        "gh-infra-87",
-        "gh-infra-88",
-        "gh-infra-103"
+        "gh-infra-2",
+        "gh-infra-19",
+        "gh-infra-21"
       ],
       "subsystems": [
         {
@@ -3087,26 +2939,12 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "Node.js"
       ],
       "infrastructureDeps": [
-        "gh-infra-7",
+        "gh-infra-4",
+        "gh-infra-5",
+        "gh-infra-6",
         "gh-infra-8",
-        "gh-infra-14",
-        "gh-infra-16",
-        "gh-infra-18",
-        "gh-infra-20",
-        "gh-infra-22",
-        "gh-infra-27",
-        "gh-infra-30",
-        "gh-infra-52",
-        "gh-infra-53",
-        "gh-infra-54",
-        "gh-infra-60",
-        "gh-infra-68",
-        "gh-infra-69",
-        "gh-infra-70",
-        "gh-infra-72",
-        "gh-infra-82",
-        "gh-infra-102",
-        "gh-infra-113"
+        "gh-infra-10",
+        "gh-infra-14"
       ],
       "subsystems": [
         {
@@ -3330,15 +3168,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-10",
-        "gh-infra-11",
-        "gh-infra-15",
-        "gh-infra-19",
-        "gh-infra-64",
-        "gh-infra-81",
-        "gh-infra-110"
+        "gh-infra-7"
       ],
       "subsystems": [
         {
@@ -3502,15 +3332,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-4",
-        "gh-infra-5",
-        "gh-infra-6",
-        "gh-infra-8",
-        "gh-infra-10",
-        "gh-infra-12",
-        "gh-infra-68",
-        "gh-infra-110"
+        "gh-infra-3",
+        "gh-infra-6"
       ],
       "subsystems": [
         {
@@ -3653,47 +3476,13 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-2",
       "code": "INF-02",
-      "name": "React DOM & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 80,
-        "y": 0
-      },
-      "systemCount": 12,
-      "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1072943348",
-        "gh-1121594562",
-        "gh-1301560608",
-        "gh-1299619574",
-        "gh-1300791569",
-        "gh-1237757392",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-1074198727",
-        "gh-929429993"
-      ],
-      "primaryUseCases": [
-        "Detected in 12 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-3",
-      "code": "INF-03",
       "name": "TypeScript & Typed Systems & Architecture",
       "category": "fullstack",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
         "x": 80,
-        "y": 0
+        "y": 20
       },
       "systemCount": 11,
       "usedInProjects": [
@@ -3718,31 +3507,60 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "samplePattern": "// Evidence source: public GitHub repository metadata"
     },
     {
-      "id": "gh-infra-4",
-      "code": "INF-04",
-      "name": "ESLint & Application Architecture",
-      "category": "fullstack",
+      "id": "gh-infra-3",
+      "code": "INF-03",
+      "name": "Tailwind CSS & Design Systems & UI",
+      "category": "frontend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
         "x": 80,
-        "y": 20
+        "y": 40
       },
-      "systemCount": 10,
+      "systemCount": 9,
       "usedInProjects": [
-        "gh-1072943348",
+        "gh-1347309405",
+        "gh-1348899950",
         "gh-1121594562",
-        "gh-1122295326",
-        "gh-1301560608",
+        "gh-1299619574",
         "gh-1300791569",
-        "gh-1237757392",
         "gh-929426683",
         "gh-929445293",
         "gh-1074198727",
         "gh-929429993"
       ],
       "primaryUseCases": [
-        "Detected in 10 public GitHub repositories"
+        "Detected in 9 public GitHub repositories"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-4",
+      "code": "INF-04",
+      "name": "Node.js & Application Architecture",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 60,
+        "y": 40
+      },
+      "systemCount": 8,
+      "usedInProjects": [
+        "gh-1347309405",
+        "gh-1348899950",
+        "gh-1122295326",
+        "gh-1301560608",
+        "gh-1237812647",
+        "gh-1237757392",
+        "gh-913331020",
+        "gh-1133595694"
+      ],
+      "primaryUseCases": [
+        "Detected in 8 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3752,28 +3570,25 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-5",
       "code": "INF-05",
-      "name": "Tailwind CSS & Design Systems & UI",
-      "category": "frontend",
+      "name": "Express & API Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 20
+        "x": 40,
+        "y": 60
       },
-      "systemCount": 9,
+      "systemCount": 6,
       "usedInProjects": [
         "gh-1347309405",
         "gh-1348899950",
-        "gh-1121594562",
-        "gh-1299619574",
-        "gh-1300791569",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-1074198727",
-        "gh-929429993"
+        "gh-1237812647",
+        "gh-1237757392",
+        "gh-913331020",
+        "gh-1133595694"
       ],
       "primaryUseCases": [
-        "Detected in 9 public GitHub repositories"
+        "Detected in 6 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3783,27 +3598,25 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-6",
       "code": "INF-06",
-      "name": "Lucide Icons & Application Architecture",
+      "name": "JavaScript & Application Engineering",
       "category": "fullstack",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 20
+        "x": 20,
+        "y": 60
       },
-      "systemCount": 8,
+      "systemCount": 6,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1121594562",
-        "gh-1299619574",
-        "gh-1300791569",
+        "gh-1237812647",
         "gh-929426683",
         "gh-929445293",
+        "gh-913331020",
+        "gh-1133595694",
         "gh-929429993"
       ],
       "primaryUseCases": [
-        "Detected in 8 public GitHub repositories"
+        "Detected in 6 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3813,25 +3626,24 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-7",
       "code": "INF-07",
-      "name": "Express & API Architecture",
-      "category": "backend",
+      "name": "Next.js & Full-Stack Architecture",
+      "category": "fullstack",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 20
+        "x": 0,
+        "y": 60
       },
-      "systemCount": 6,
+      "systemCount": 5,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1133595694"
+        "gh-1121594562",
+        "gh-1301560608",
+        "gh-1299619574",
+        "gh-1300791569",
+        "gh-1074198727"
       ],
       "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
+        "Detected in 5 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3841,25 +3653,23 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-8",
       "code": "INF-08",
-      "name": "JavaScript & Application Engineering",
-      "category": "fullstack",
+      "name": "Playwright & End-to-End Test Architecture",
+      "category": "tooling",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 20
+        "x": -20,
+        "y": 60
       },
-      "systemCount": 6,
+      "systemCount": 4,
       "usedInProjects": [
+        "gh-1121594562",
+        "gh-1301560608",
         "gh-1237812647",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-913331020",
-        "gh-1133595694",
-        "gh-929429993"
+        "gh-1133595694"
       ],
       "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
+        "Detected in 4 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3869,25 +3679,23 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-9",
       "code": "INF-09",
-      "name": "TypeScript Type-Check & Application Architecture",
-      "category": "fullstack",
+      "name": "Vitest & Unit & Integration Testing",
+      "category": "tooling",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 120,
-        "y": 40
+        "x": -60,
+        "y": 80
       },
-      "systemCount": 6,
+      "systemCount": 4,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1072943348",
+        "gh-1121594562",
         "gh-1301560608",
         "gh-1300791569",
-        "gh-1128809227"
+        "gh-1237757392"
       ],
       "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
+        "Detected in 4 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3897,25 +3705,22 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-10",
       "code": "INF-10",
-      "name": "Vite & Application Architecture",
-      "category": "fullstack",
+      "name": "Jest & Automated Test Harness",
+      "category": "tooling",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 40
+        "x": -80,
+        "y": 60
       },
-      "systemCount": 6,
+      "systemCount": 3,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-1074198727",
-        "gh-929429993"
+        "gh-1072943348",
+        "gh-1122295326",
+        "gh-1133595694"
       ],
       "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
+        "Detected in 3 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3925,24 +3730,22 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-11",
       "code": "INF-11",
-      "name": "Next.js & Full-Stack Architecture",
-      "category": "fullstack",
+      "name": "Socket.IO & Realtime WebSocket Gateway",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
+        "x": -100,
         "y": 40
       },
-      "systemCount": 5,
+      "systemCount": 3,
       "usedInProjects": [
         "gh-1121594562",
-        "gh-1301560608",
-        "gh-1299619574",
-        "gh-1300791569",
-        "gh-1074198727"
+        "gh-1122295326",
+        "gh-913331020"
       ],
       "primaryUseCases": [
-        "Detected in 5 public GitHub repositories"
+        "Detected in 3 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3952,23 +3755,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-12",
       "code": "INF-12",
-      "name": "Framer Motion & Application Architecture",
-      "category": "fullstack",
+      "name": "Docker & Container & Deployment Architecture",
+      "category": "infrastructure",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 40
+        "x": -120,
+        "y": 20
       },
-      "systemCount": 4,
+      "systemCount": 2,
       "usedInProjects": [
-        "gh-1121594562",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-929429993"
+        "gh-1237757392",
+        "gh-913331020"
       ],
       "primaryUseCases": [
-        "Detected in 4 public GitHub repositories"
+        "Detected in 2 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3978,23 +3779,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-13",
       "code": "INF-13",
-      "name": "GitHub Actions & Application Architecture",
-      "category": "fullstack",
+      "name": "PostgreSQL & Relational Database Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 60
+        "x": -120,
+        "y": 0
       },
-      "systemCount": 4,
+      "systemCount": 2,
       "usedInProjects": [
-        "gh-1072943348",
         "gh-1122295326",
-        "gh-1237757392",
-        "gh-913331020"
+        "gh-1237757392"
       ],
       "primaryUseCases": [
-        "Detected in 4 public GitHub repositories"
+        "Detected in 2 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4004,27 +3803,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-14",
       "code": "INF-14",
-      "name": "Nodejs & Application Architecture",
-      "category": "fullstack",
+      "name": "Python & Data & Service Engineering",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 60
+        "x": -120,
+        "y": -20
       },
-      "systemCount": 8,
+      "systemCount": 2,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1122295326",
-        "gh-1301560608",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
+        "gh-1299619574",
         "gh-1133595694"
       ],
       "primaryUseCases": [
-        "Detected in 8 public GitHub repositories"
+        "Detected in 2 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4034,23 +3827,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-15",
       "code": "INF-15",
-      "name": "Nodemailer & Application Architecture",
-      "category": "fullstack",
+      "name": "React Native & Mobile Architecture",
+      "category": "frontend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 60
+        "x": -100,
+        "y": -40
       },
-      "systemCount": 4,
+      "systemCount": 2,
       "usedInProjects": [
-        "gh-1122295326",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1074198727"
+        "gh-1072943348",
+        "gh-1237757392"
       ],
       "primaryUseCases": [
-        "Detected in 4 public GitHub repositories"
+        "Detected in 2 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4060,23 +3851,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-16",
       "code": "INF-16",
-      "name": "Playwright & End-to-End Test Architecture",
-      "category": "tooling",
+      "name": "BullMQ & Distributed Queue Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 60
+        "x": -80,
+        "y": -60
       },
-      "systemCount": 4,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1121594562",
-        "gh-1301560608",
-        "gh-1237812647",
-        "gh-1133595694"
+        "gh-1122295326"
       ],
       "primaryUseCases": [
-        "Detected in 4 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4086,23 +3874,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-17",
       "code": "INF-17",
-      "name": "Vitest & Unit & Integration Testing",
-      "category": "tooling",
+      "name": "Fastify & High-Throughput Services",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 80
+        "x": -80,
+        "y": -100
       },
-      "systemCount": 4,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1121594562",
-        "gh-1301560608",
-        "gh-1300791569",
-        "gh-1237757392"
+        "gh-1301560608"
       ],
       "primaryUseCases": [
-        "Detected in 4 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4112,22 +3897,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-18",
       "code": "INF-18",
-      "name": "Jest & Automated Test Harness",
-      "category": "tooling",
+      "name": "MongoDB & Document Storage Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": 100
+        "x": -40,
+        "y": -100
       },
-      "systemCount": 3,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1072943348",
-        "gh-1122295326",
-        "gh-1133595694"
+        "gh-913331020"
       ],
       "primaryUseCases": [
-        "Detected in 3 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4137,22 +3920,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-19",
       "code": "INF-19",
-      "name": "Motion & Application Architecture",
-      "category": "fullstack",
+      "name": "MySQL & Relational Database Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 100
+        "x": 0,
+        "y": -120
       },
-      "systemCount": 3,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1074198727"
+        "gh-1128809227"
       ],
       "primaryUseCases": [
-        "Detected in 3 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4162,21 +3943,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-20",
       "code": "INF-20",
-      "name": "Api & Application Architecture",
-      "category": "fullstack",
+      "name": "NestJS & Modular Monolith Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": 100
+        "x": 40,
+        "y": -100
       },
-      "systemCount": 2,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-913331020",
-        "gh-1133595694"
+        "gh-1122295326"
       ],
       "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4186,21 +3966,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-21",
       "code": "INF-21",
-      "name": "Auction System & Application Architecture",
-      "category": "fullstack",
+      "name": "PHP & Web Application Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
         "x": 80,
-        "y": 100
+        "y": -100
       },
-      "systemCount": 2,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-929445293",
-        "gh-913331020"
+        "gh-1128809227"
       ],
       "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4210,21 +3989,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-22",
       "code": "INF-22",
-      "name": "Automation & Application Architecture",
-      "category": "fullstack",
+      "name": "Prisma & Data Access & Schema Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 60,
-        "y": 100
+        "x": 120,
+        "y": -80
       },
-      "systemCount": 2,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1237812647",
-        "gh-1133595694"
+        "gh-1122295326"
       ],
       "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4234,21 +4012,20 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-23",
       "code": "INF-23",
-      "name": "Axios & Application Architecture",
-      "category": "fullstack",
+      "name": "Redis & In-Memory & Caching Systems",
+      "category": "infrastructure",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 60,
-        "y": 100
+        "x": 140,
+        "y": -60
       },
-      "systemCount": 2,
+      "systemCount": 1,
       "usedInProjects": [
-        "gh-1072943348",
-        "gh-929445293"
+        "gh-1122295326"
       ],
       "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
+        "Detected in 1 public GitHub repository"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -4258,2127 +4035,17 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-24",
       "code": "INF-24",
-      "name": "Docker & Container & Deployment Architecture",
-      "category": "infrastructure",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
-        "y": 100
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1237757392",
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-25",
-      "code": "INF-25",
-      "name": "esbuild & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-26",
-      "code": "INF-26",
-      "name": "Expo & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1072943348",
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-27",
-      "code": "INF-27",
-      "name": "Node.js & Application Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 20,
-        "y": 140
-      },
-      "systemCount": 8,
-      "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1122295326",
-        "gh-1301560608",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 8 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-28",
-      "code": "INF-28",
-      "name": "PostgreSQL & Relational Database Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 20,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-29",
-      "code": "INF-29",
-      "name": "Prettier & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 0,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-30",
-      "code": "INF-30",
-      "name": "Python & Data & Service Engineering",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 0,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1299619574",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-31",
-      "code": "INF-31",
-      "name": "RBAC & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -20,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-32",
-      "code": "INF-32",
-      "name": "React Native & Mobile Architecture",
-      "category": "frontend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -20,
-        "y": 140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1072943348",
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-33",
-      "code": "INF-33",
-      "name": "Socket.IO & Realtime WebSocket Gateway",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -40,
-        "y": 160
-      },
-      "systemCount": 3,
-      "usedInProjects": [
-        "gh-1121594562",
-        "gh-1122295326",
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 3 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-34",
-      "code": "INF-34",
-      "name": "Admin Dashboard & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -60,
-        "y": 160
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-35",
-      "code": "INF-35",
-      "name": "Argon2 & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -60,
-        "y": 160
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-36",
-      "code": "INF-36",
-      "name": "Autocannon (Load) & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -80,
-        "y": 160
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-37",
-      "code": "INF-37",
-      "name": "Backend & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -100,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-38",
-      "code": "INF-38",
-      "name": "better-sqlite3 & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -100,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-39",
-      "code": "INF-39",
-      "name": "Booking Management System & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -120,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929445293"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-40",
-      "code": "INF-40",
-      "name": "Browser Automation & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -120,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-41",
-      "code": "INF-41",
-      "name": "BullMQ & Distributed Queue Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -160,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-42",
-      "code": "INF-42",
-      "name": "Car Listings & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -160,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929426683"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-43",
-      "code": "INF-43",
-      "name": "Car Management & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -180,
-        "y": 140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929445293"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-44",
-      "code": "INF-44",
-      "name": "Chatbot & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -180,
-        "y": 120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929426683"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-45",
-      "code": "INF-45",
-      "name": "Chromium & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -200,
-        "y": 120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-46",
-      "code": "INF-46",
-      "name": "Codebase & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -200,
-        "y": 120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1335930004"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-47",
-      "code": "INF-47",
-      "name": "Cookies & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -220,
-        "y": 100
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-48",
-      "code": "INF-48",
-      "name": "Crm Platform & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -220,
-        "y": 100
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-49",
-      "code": "INF-49",
-      "name": "Cron & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -260,
-        "y": 100
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-50",
-      "code": "INF-50",
-      "name": "cURL & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": 80
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-51",
-      "code": "INF-51",
-      "name": "Dashboard & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": 80
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929445293"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-52",
-      "code": "INF-52",
-      "name": "Data Fetcher & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": 60
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-53",
-      "code": "INF-53",
-      "name": "Data Pipeline & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": 60
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-54",
-      "code": "INF-54",
-      "name": "Dubai Real Estate & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -300,
-        "y": 40
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-55",
-      "code": "INF-55",
-      "name": "Expo Notifications & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -300,
-        "y": 40
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1072943348"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-56",
-      "code": "INF-56",
-      "name": "Expo Router & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -300,
-        "y": 20
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1072943348"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-57",
-      "code": "INF-57",
-      "name": "Expo SecureStore & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": 20
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1072943348"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-58",
-      "code": "INF-58",
-      "name": "FastAPI & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": 0
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1299619574"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-59",
-      "code": "INF-59",
-      "name": "Fastify & High-Throughput Services",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": -20
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-60",
-      "code": "INF-60",
-      "name": "File System & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": -20
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-61",
-      "code": "INF-61",
-      "name": "Firebase Admin & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": -40
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-62",
-      "code": "INF-62",
-      "name": "Flow & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -320,
-        "y": -60
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-63",
-      "code": "INF-63",
-      "name": "Grok & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -320,
-        "y": -60
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-64",
-      "code": "INF-64",
-      "name": "GSAP & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -320,
-        "y": -80
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1074198727"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-65",
-      "code": "INF-65",
-      "name": "HTML & Application Architecture",
-      "category": "frontend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": -100
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-66",
-      "code": "INF-66",
-      "name": "Image Generation & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -340,
-        "y": -120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-67",
-      "code": "INF-67",
-      "name": "ioredis & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -320,
-        "y": -120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-68",
-      "code": "INF-68",
-      "name": "Javascript & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -320,
-        "y": -140
-      },
-      "systemCount": 6,
-      "usedInProjects": [
-        "gh-1237812647",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-913331020",
-        "gh-1133595694",
-        "gh-929429993"
-      ],
-      "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-69",
-      "code": "INF-69",
-      "name": "Json & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -300,
-        "y": -140
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1128809227",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-70",
-      "code": "INF-70",
-      "name": "JSON & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -300,
-        "y": -160
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1128809227",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-71",
-      "code": "INF-71",
-      "name": "JSON Cache & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": -180
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-72",
-      "code": "INF-72",
-      "name": "JSONL & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -260,
-        "y": -180
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-73",
-      "code": "INF-73",
-      "name": "Lead Generation & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -280,
-        "y": -200
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-74",
-      "code": "INF-74",
-      "name": "Lead Management & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -260,
-        "y": -220
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-75",
-      "code": "INF-75",
-      "name": "Local Tool & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -240,
-        "y": -220
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237812647"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-76",
-      "code": "INF-76",
-      "name": "Mongodb & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -220,
-        "y": -240
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-77",
-      "code": "INF-77",
-      "name": "Mongoose & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -200,
-        "y": -240
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-78",
-      "code": "INF-78",
-      "name": "Mysql & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -180,
-        "y": -260
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-79",
-      "code": "INF-79",
-      "name": "MySQL & Relational Database Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -160,
-        "y": -260
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-80",
-      "code": "INF-80",
-      "name": "NestJS & Modular Monolith Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -140,
-        "y": -260
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-81",
-      "code": "INF-81",
-      "name": "Next.js API Routes & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -140,
-        "y": -300
-      },
-      "systemCount": 5,
-      "usedInProjects": [
-        "gh-1121594562",
-        "gh-1301560608",
-        "gh-1299619574",
-        "gh-1300791569",
-        "gh-1074198727"
-      ],
-      "primaryUseCases": [
-        "Detected in 5 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-82",
-      "code": "INF-82",
-      "name": "Normalization & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -100,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-83",
-      "code": "INF-83",
-      "name": "Passport & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -80,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-84",
-      "code": "INF-84",
-      "name": "Passport JWT & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -60,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-85",
-      "code": "INF-85",
-      "name": "PDO & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -40,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-86",
-      "code": "INF-86",
-      "name": "Php & Application Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": -20,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-87",
-      "code": "INF-87",
-      "name": "PHP 8 & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 20,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-88",
-      "code": "INF-88",
-      "name": "PHPUnit & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-89",
-      "code": "INF-89",
-      "name": "Pill Tracker & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 60,
-        "y": -320
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-90",
-      "code": "INF-90",
-      "name": "Postgresql & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 100,
-        "y": -320
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-91",
-      "code": "INF-91",
-      "name": "PostgreSQL (pg) & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 120,
-        "y": -320
-      },
-      "systemCount": 2,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 2 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-92",
-      "code": "INF-92",
-      "name": "Price Prediction & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 140,
-        "y": -320
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929426683"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-93",
-      "code": "INF-93",
-      "name": "Prisma & Data Access & Schema Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 160,
-        "y": -320
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-94",
-      "code": "INF-94",
-      "name": "Prisma Client & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 200,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-95",
-      "code": "INF-95",
-      "name": "Push Notifications & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 220,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-96",
-      "code": "INF-96",
-      "name": "Pydantic & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 240,
-        "y": -280
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1299619574"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-97",
-      "code": "INF-97",
-      "name": "pytest & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 280,
-        "y": -300
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1299619574"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-98",
-      "code": "INF-98",
-      "name": "React Navigation & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 300,
-        "y": -280
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1072943348"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-99",
-      "code": "INF-99",
-      "name": "React Testing Library & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 320,
-        "y": -280
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-100",
-      "code": "INF-100",
-      "name": "Redis & In-Memory & Caching Systems",
-      "category": "infrastructure",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 340,
-        "y": -260
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-101",
-      "code": "INF-101",
-      "name": "Refill Alerts & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 360,
-        "y": -240
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1237757392"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-102",
-      "code": "INF-102",
-      "name": "Requests & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 380,
-        "y": -240
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-103",
-      "code": "INF-103",
-      "name": "Role Based & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 400,
-        "y": -220
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-104",
-      "code": "INF-104",
-      "name": "Socket Io & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 420,
-        "y": -200
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-929445293"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-105",
-      "code": "INF-105",
-      "name": "Socket.IO Client & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 460,
-        "y": -200
-      },
-      "systemCount": 3,
-      "usedInProjects": [
-        "gh-1121594562",
-        "gh-1122295326",
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 3 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-106",
-      "code": "INF-106",
-      "name": "SQLAlchemy & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 480,
-        "y": -180
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1299619574"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-107",
-      "code": "INF-107",
       "name": "SQLite & Embedded Storage Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 500,
-        "y": -160
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-108",
-      "code": "INF-108",
-      "name": "SSE & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 500,
-        "y": -140
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1301560608"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-109",
-      "code": "INF-109",
-      "name": "Swagger & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 520,
-        "y": -120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1122295326"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-110",
-      "code": "INF-110",
-      "name": "Tailwindcss & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 520,
-        "y": -100
-      },
-      "systemCount": 9,
-      "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
-        "gh-1121594562",
-        "gh-1299619574",
-        "gh-1300791569",
-        "gh-929426683",
-        "gh-929445293",
-        "gh-1074198727",
-        "gh-929429993"
-      ],
-      "primaryUseCases": [
-        "Detected in 9 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-111",
-      "code": "INF-111",
-      "name": "TanStack Query & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 540,
-        "y": -80
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1121594562"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-112",
-      "code": "INF-112",
-      "name": "Twillio & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 540,
-        "y": -60
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-913331020"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-113",
-      "code": "INF-113",
-      "name": "Web Scraping & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 580,
-        "y": -40
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-114",
-      "code": "INF-114",
-      "name": "Zustand & Application Architecture",
-      "category": "fullstack",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 580,
+        "x": 160,
         "y": -20
       },
       "systemCount": 1,
       "usedInProjects": [
-        "gh-1121594562"
+        "gh-1301560608"
       ],
       "primaryUseCases": [
         "Detected in 1 public GitHub repository"
@@ -6392,21 +4059,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
   "operator": {
     "name": "SalAkBuK",
     "handle": "@SalAkBuK",
-    "role": "Systems Architect & Full Stack Engineer",
-    "location": "Global",
-    "status": "ACTIVE_BUILD // GITHUB SYNCHRONIZED",
-    "focus": "Public GitHub repositories using React, React DOM, TypeScript, ESLint",
+    "role": "GitHub profile",
+    "location": "Not provided on GitHub",
+    "status": "ACTIVE_BUILD // GITHUB SNAPSHOT",
+    "focus": "Public GitHub repositories using React, TypeScript, Tailwind CSS, Node.js",
     "yearsActive": 0,
     "commitsIndexed": "Not indexed",
     "productionUptime": "Not claimed",
     "primaryStack": [
       "React",
-      "React DOM",
       "TypeScript",
-      "ESLint",
       "Tailwind CSS",
-      "Lucide Icons",
-      "Express"
+      "Node.js",
+      "Express",
+      "JavaScript",
+      "Next.js"
     ],
     "systemManifesto": "Profile synthesized from public GitHub repository metadata. Verify personal and architectural claims before publication.",
     "contact": {
@@ -6424,13 +4091,13 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "id": "gh-exp-1",
       "code": "BUILD-01",
       "yearRange": "PUBLIC GITHUB SNAPSHOT",
-      "role": "Systems Architect & Full Stack Engineer",
+      "role": "GitHub profile",
       "organization": "GitHub repositories",
-      "location": "Global",
+      "location": "Not provided on GitHub",
       "systemDomain": "Public repository metadata",
       "keyOutputs": [
         "Mapped 18 public repositories returned by GitHub.",
-        "Detected repository languages and topics: React, React DOM, TypeScript, ESLint, Tailwind CSS.",
+        "Detected repository languages and topics: React, TypeScript, Tailwind CSS, Node.js, Express.",
         "No employment history or performance claims inferred."
       ],
       "systemsArchitected": [
@@ -6440,10 +4107,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "technologies": [
         "React",
-        "React DOM",
         "TypeScript",
-        "ESLint",
-        "Tailwind CSS"
+        "Tailwind CSS",
+        "Node.js",
+        "Express"
       ],
       "gridPosition": {
         "x": -260,

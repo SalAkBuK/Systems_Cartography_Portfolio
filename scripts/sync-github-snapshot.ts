@@ -30,9 +30,12 @@ export async function generateGitHubSnapshot(
 ): Promise<{ metadata: GitHubSnapshotMetadata; snapshot: GitHubSyncResult; outputContent: string }> {
   const result = await connectGitHubTarget(target, {
     inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
-    allowPartial: false,
     ...options
   });
+
+  if (!result.inspectionSummary) {
+    throw new Error('Internal contract error: Snapshot result is missing inspectionSummary.');
+  }
 
   const metadata: GitHubSnapshotMetadata = {
     schemaVersion: 1,
@@ -40,10 +43,22 @@ export async function generateGitHubSnapshot(
     githubTarget: target,
     sourceIdentifier: result.sourceIdentifier,
     rawRepositoryCount: result.rawCount ?? result.projects.length,
-    canonicalRepositoryCount: result.inspectionSummary?.canonicalRepositoryCount ?? result.projects.length,
-    inspectedRepositoryCount: result.inspectionSummary?.inspectedRepositoryCount ?? result.projects.length,
-    inspectionWarnings: result.inspectionSummary?.warnings ?? []
+    canonicalRepositoryCount: result.inspectionSummary.canonicalRepositoryCount,
+    inspectedRepositoryCount: result.inspectionSummary.inspectedRepositoryCount,
+    inspectionWarnings: result.inspectionSummary.warnings
   };
+
+  if (metadata.inspectedRepositoryCount !== metadata.canonicalRepositoryCount) {
+    throw new Error(
+      `Snapshot generation incomplete: Inspected ${metadata.inspectedRepositoryCount} of ${metadata.canonicalRepositoryCount} canonical repositories.`
+    );
+  }
+
+  if (metadata.inspectionWarnings.length > 0) {
+    throw new Error(
+      `Snapshot generation produced warnings: ${metadata.inspectionWarnings.join('; ')}`
+    );
+  }
 
   const outputContent = serializeGitHubSnapshot(metadata, result);
 
@@ -88,7 +103,6 @@ export async function syncGitHubSnapshotToFile(
 async function main() {
   const target = readArg('--target') || readArg('--github') || PORTFOLIO_CONFIG.githubTarget;
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const allowPartial = process.argv.includes('--allow-partial');
 
   console.log(`[sync:github] Fetching public repository snapshot for target: ${target}`);
   if (token) {
@@ -96,15 +110,11 @@ async function main() {
   } else {
     console.log(`[sync:github] No GITHUB_TOKEN detected. Requests will run unauthenticated.`);
   }
-  if (allowPartial) {
-    console.log(`[sync:github] WARN: Running with --allow-partial flag.`);
-  }
 
   const startTime = Date.now();
   const { metadata, snapshot } = await syncGitHubSnapshotToFile(target, {
     token,
-    inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
-    allowPartial
+    inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY
   });
 
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
