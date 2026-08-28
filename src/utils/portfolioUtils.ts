@@ -1,5 +1,49 @@
-import { ExperienceNode, EvidenceProvenance, SystemCategory } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
+import type { GitHubSyncResult } from '../services/githubService';
+
+/**
+ * Normalizes a GitHub target string (URL, handle, or path) to a canonical lowercased identity.
+ * e.g. "https://github.com/SalAkBuK/" -> "salakbuk"
+ *      "github.com/SalAkBuK" -> "salakbuk"
+ *      "SalAkBuK" -> "salakbuk"
+ */
+export function normalizeGitHubTarget(target?: string | null): string {
+  if (!target || typeof target !== 'string') return '';
+  return target
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/^github\.com\//i, '')
+    .replace(/^@/, '')
+    .replace(/\/+$/, '')
+    .trim();
+}
+
+/**
+ * Owner-scopes the generated GitHub snapshot.
+ * Returns the snapshot if the configured target matches the snapshot metadata target,
+ * otherwise returns null to prevent data leakage in forks.
+ */
+export function resolveGitHubSnapshotForTarget(
+  configuredTarget: string,
+  metadata?: GitHubSnapshotMetadata | null,
+  snapshot?: GitHubSyncResult | null
+): GitHubSyncResult | null {
+  if (!configuredTarget || !metadata || !snapshot) {
+    return null;
+  }
+
+  const normalizedConfigured = normalizeGitHubTarget(configuredTarget);
+  const normalizedSnapshot = normalizeGitHubTarget(metadata.githubTarget || metadata.sourceIdentifier);
+
+  if (normalizedConfigured && normalizedSnapshot && normalizedConfigured === normalizedSnapshot) {
+    return snapshot;
+  }
+
+  return null;
+}
 
 /**
  * Resolves professional experience with clean source precedence and provenance tracking.

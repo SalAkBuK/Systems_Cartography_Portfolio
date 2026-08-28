@@ -296,3 +296,14 @@ export interface ViewportState {
   y: number;
   zoom: number;
 }
+
+export interface GitHubSnapshotMetadata {
+  schemaVersion: number;
+  generatedAt: string;
+  githubTarget: string;
+  sourceIdentifier: string;
+  rawRepositoryCount: number;
+  canonicalRepositoryCount: number;
+  inspectedRepositoryCount: number;
+  inspectionWarnings?: string[];
+}

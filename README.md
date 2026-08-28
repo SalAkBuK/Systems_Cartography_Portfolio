@@ -13,18 +13,22 @@ The intended owner setup is deliberately small:
 1. Fork the repository.
 2. Export your LinkedIn profile as a PDF.
 3. Install dependencies.
-4. Run the one-time importer.
-5. Review the detected identity and employment history.
-6. Confirm generation, commit the generated profile, and deploy.
+4. Run the one-time profile importer.
+5. Generate the committed public GitHub repository snapshot.
+6. Review the detected identity, repositories, and employment history.
+7. Commit the generated files and deploy.
 
 ```bash
 npm install
 mkdir -p imports
 # Put your LinkedIn PDF anywhere local; imports/ is convenient and PDF files there are gitignored.
 npm run setup -- ./imports/linkedin-profile.pdf
+
+# Generate the committed, owner-scoped GitHub repository snapshot
+npm run sync:github
 ```
 
-The importer:
+The importer (`npm run setup`):
 
 - reads the LinkedIn PDF locally;
 - extracts the owner name, headline, location, summary, email, LinkedIn URL, top skills, certifications, education text, and employment history;
@@ -37,12 +41,22 @@ The importer:
 - shows a terminal review gate before writing source-controlled data;
 - writes `src/data/ownerProfile.generated.ts` only after confirmation.
 
-The PDF itself is **never copied into the repository** and `imports/*.pdf` is gitignored. The generated TypeScript snapshot is the durable public source used by the portfolio after setup. The public application has no upload/import UI and no LinkedIn runtime dependency.
+The GitHub sync tool (`npm run sync:github`):
+
+- deep-inspects all eligible canonical public repositories with bounded concurrency;
+- discovers and extracts bounded dependency manifests (`package.json`, `composer.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `requirements.txt`);
+- aggregates technology evidence into synthesized capabilities and layer classifications;
+- merges reviewed architectural evidence from `src/data/repositoryEvidence.ts`;
+- owner-scopes the snapshot to prevent data leakage in forks;
+- writes `src/data/githubSnapshot.generated.ts` for zero-network-dependency runtime execution.
+
+The PDF itself is **never copied into the repository** and `imports/*.pdf` is gitignored. The generated TypeScript snapshots are durable public sources used by the portfolio after setup. The public application has no visitor upload UI and no browser-time GitHub API dependency.
 
 If the git remote cannot be used to infer the GitHub profile, the setup command asks for it. It can also be supplied explicitly:
 
 ```bash
 npm run setup -- ./imports/linkedin-profile.pdf --github https://github.com/your-user
+npm run sync:github -- --github https://github.com/your-user
 ```
 
 After generation, verify the fork:
@@ -71,16 +85,16 @@ The product rule is simple: **the deployed instance showcases its configured own
 
 ## GitHub data model
 
-The configured GitHub profile is loaded automatically. Repository metadata may provide:
+Public GitHub repository data is committed as a static snapshot in `src/data/githubSnapshot.generated.ts`. Repository metadata provides:
 
 - public repository names and descriptions;
-- languages and topics;
+- languages, topics, and multi-manifest dependencies;
 - stars, forks, open issues, license, and repository size;
 - repository and homepage links.
 
 Selected repositories can have reviewed evidence mappings in `src/data/repositoryEvidence.ts`. Those mappings must be supported by public README or code evidence. The application does not infer employment history, proficiency percentages, production uptime, performance benchmarks, SLAs, or business outcomes from GitHub.
 
-If GitHub is temporarily unavailable, the most recently cached public repository snapshot can still render. Cached repository data is a resilience mechanism, not a visitor-personalization feature.
+At runtime, the browser application executes completely offline with zero API calls. Fork safety is enforced by owner-scoping: if the configured `PORTFOLIO_CONFIG.githubTarget` does not match the committed snapshot, the UI displays `SNAPSHOT // REFRESH REQUIRED` instead of rendering mismatched data.
 
 ## Professional data provenance
 
