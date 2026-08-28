@@ -1204,10 +1204,6 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     );
                   })}
                 </div>
-
-                <div className="p-1.5 bg-[#CBC59B]/50 border border-[#15150F]/30 text-[7.5px] text-[#5C5946] font-mono">
-                  TIP // EXPERIENCE DOCK CAN ALSO BE REPOSITIONED ON TOPOLOGY
-                </div>
               </div>
             ) : activeView === 'infrastructure' ? (
               /* --- TECHNICAL CAPABILITIES INDEX --- */

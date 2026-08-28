@@ -9,7 +9,7 @@ import {
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig.ts';
 import { VERIFIED_EXPERIENCE, VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 import { matchesProjectClassification } from '../src/utils/portfolioUtils.ts';
-import { createTopologyGraph } from '../src/utils/forceLayout.ts';
+import { assembleTopologyLayout } from '../src/utils/topologyLayout.ts';
 
 const repo: GitHubRepoRaw = {
   id: 1,
@@ -482,21 +482,14 @@ test('backend service with test frameworks remains backend and not tooling', () 
   assert.equal(matchesProjectClassification(project, 'backend'), true, 'Must match BACKEND filter');
 });
 
-test('createTopologyGraph operates strictly on projects and skills without accepting experience', () => {
+test('assembleTopologyLayout operates strictly on projects and skills without accepting experience', () => {
   const mockProjects = [transformGitHubRepoToProject(repo, 0, 1)];
-  const graph = createTopologyGraph(mockProjects, VERIFIED_SKILLS);
+  const { projectPositions, skillPositions } = assembleTopologyLayout(mockProjects, VERIFIED_SKILLS);
 
-  // Assert all node types are project or skill only
-  for (const node of graph.nodes.values()) {
-    assert.ok(node.type === 'project' || node.type === 'skill', 'Node type must be project or skill only');
-    assert.notEqual(node.type, 'experience', 'Experience must never be a force-layout node');
-  }
-
-  // Assert all edges are between project and skill only
-  for (const edge of graph.edges) {
-    assert.ok(edge.sourceType === 'project' || edge.sourceType === 'skill');
-    assert.ok(edge.targetType === 'project' || edge.targetType === 'skill');
-  }
+  // Assert positions generated for projects and skills only
+  assert.ok(projectPositions[mockProjects[0].id], 'Project position must be generated');
+  assert.equal(Object.keys(projectPositions).length, mockProjects.length);
+  assert.equal(Object.keys(skillPositions).length, VERIFIED_SKILLS.length);
 });
 
 test('summary provenance is VERIFIED from GitHub metadata while challenge and solution remain UNAVAILABLE', () => {
