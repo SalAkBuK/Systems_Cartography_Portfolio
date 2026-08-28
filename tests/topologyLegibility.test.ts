@@ -766,16 +766,27 @@ test('22. App.tsx: topologyViewMode specifically initialized to "systems"', () =
   assert.ok(!appContent.includes("traceModeActive"), 'traceModeActive state hook must be removed from App.tsx');
 });
 
-test('23. App.tsx: Explicit navigation establishes topology view mode while node selection preserves it', () => {
+test('23. App.tsx: Explicit navigation establishes neutral topology view mode while node selection preserves it', () => {
   const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8').replace(/\r\n/g, '\n');
   
-  // Navigation changes establish default perspective
-  assert.ok(appContent.includes("view === 'projects') {\n      setTopologyViewMode('systems');"), 'Explicit navigation to projects establishes systems mode');
+  // Navigation to projects establishes neutral SYSTEMS view with no arbitrary project selected
+  const projectsNavIdx = appContent.indexOf("view === 'projects'");
+  assert.ok(projectsNavIdx !== -1, 'projects nav branch must exist');
+  const projectsNavSection = appContent.slice(projectsNavIdx, projectsNavIdx + 200);
+
+  assert.ok(projectsNavSection.includes("setTopologyViewMode('systems');"), 'Explicit navigation to projects establishes systems mode');
+  assert.ok(projectsNavSection.includes("setSelectedProjectId(null);"), 'Explicit navigation to projects clears selectedProjectId for neutral landscape');
+  assert.ok(projectsNavSection.includes("setSelectedSkillId(null);"), 'Explicit navigation to projects clears selectedSkillId');
+  assert.ok(projectsNavSection.includes("setSelectedExperienceId(null);"), 'Explicit navigation to projects clears selectedExperienceId');
+  assert.ok(!projectsNavSection.includes("setSelectedProjectId(projects[0].id)"), 'Explicit navigation must NOT arbitrarily auto-select projects[0]');
+
+  // Navigation to infrastructure establishes CAPABILITIES mode
   assert.ok(appContent.includes("view === 'infrastructure') {\n      setTopologyViewMode('capabilities');"), 'Explicit navigation to capabilities establishes capabilities mode');
   
   // Node selection handlers do NOT overwrite topologyViewMode
   const handleSelectProj = appContent.slice(appContent.indexOf('handleSelectProject ='), appContent.indexOf('handleSelectSkill ='));
   assert.ok(!handleSelectProj.includes('setTopologyViewMode'), 'handleSelectProject must not overwrite topologyViewMode');
+  assert.ok(handleSelectProj.includes('setSelectedProjectId(id);'), 'handleSelectProject selects the requested project ID');
   
   const handleSelectSk = appContent.slice(appContent.indexOf('handleSelectSkill ='), appContent.indexOf('handleSelectExperience ='));
   assert.ok(!handleSelectSk.includes('setTopologyViewMode'), 'handleSelectSkill must not overwrite topologyViewMode');
