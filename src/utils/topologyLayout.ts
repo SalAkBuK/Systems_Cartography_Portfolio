@@ -177,28 +177,58 @@ export interface AssembledTopologyPositions {
   skillPositions: Record<string, { x: number; y: number }>;
 }
 
-interface PlacedNodeBox {
+export interface PlacedNodeBounds {
   id: string;
   type: 'project' | 'skill';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
 }
 
 /**
- * Checks AABB collision between two node bounding boxes on the ground drafting plane.
+ * Returns the AABB bounds for a node given its canonical coordinate semantics.
+ * - Project: pos is TOP-LEFT origin. Bounds: [pos.x, pos.x + width], [pos.y, pos.y + height]
+ * - Skill: pos is CENTER. Bounds: [pos.x - width/2, pos.x + width/2], [pos.y - height/2, pos.y + height/2]
  */
-function boxesOverlap(
-  a: { x: number; y: number; width: number; height: number },
-  b: { x: number; y: number; width: number; height: number },
+export function getNodeBounds(
+  type: 'project' | 'skill',
+  pos: { x: number; y: number },
+  width: number = type === 'skill' ? 48 : 75,
+  height: number = type === 'skill' ? 48 : 55
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  if (type === 'skill') {
+    const halfW = width / 2;
+    const halfH = height / 2;
+    return {
+      minX: pos.x - halfW,
+      maxX: pos.x + halfW,
+      minY: pos.y - halfH,
+      maxY: pos.y + halfH
+    };
+  } else {
+    return {
+      minX: pos.x,
+      maxX: pos.x + width,
+      minY: pos.y,
+      maxY: pos.y + height
+    };
+  }
+}
+
+/**
+ * Checks AABB collision between two node bounding boxes on the ground drafting plane with optional margin.
+ */
+export function checkAABBOverlap(
+  a: { minX: number; maxX: number; minY: number; maxY: number },
+  b: { minX: number; maxX: number; minY: number; maxY: number },
   margin: number = 10
 ): boolean {
   return (
-    a.x - margin < b.x + b.width &&
-    a.x + a.width + margin > b.x &&
-    a.y - margin < b.y + b.height &&
-    a.y + a.height + margin > b.y
+    a.minX - margin < b.maxX &&
+    a.maxX + margin > b.minX &&
+    a.minY - margin < b.maxY &&
+    a.maxY + margin > b.minY
   );
 }
 
@@ -209,11 +239,15 @@ function boxesOverlap(
  * - Capabilities: Inner core backbone rings (expanding as capacity requires)
  * - Projects: Outer concentric system rings (strictly outside the entire capability core)
  *
+ * Coordinate Semantics:
+ * - Project coordinates: TOP-LEFT origin of the structure box.
+ * - Skill coordinates: CENTER of the capability plinth.
+ *
  * Guarantees:
  * - Deterministic output: identical inputs produce identical coordinates.
  * - Stable sorting: input array ordering changes do NOT change coordinates.
  * - Dynamic scaling: calculates capacity per ring and dynamically adds rings as needed.
- * - Collision-safe: verifies bounding-box clearance against all placed nodes.
+ * - Guaranteed collision-safe: verifies bounding-box clearance before writing positions.
  * - Grid-snapped: all node x/y coordinates are multiples of GRID_SNAP_STEP.
  * - 0 animation frames / 0 physics relaxation needed.
  */
@@ -223,7 +257,7 @@ export function assembleTopologyLayout(
 ): AssembledTopologyPositions {
   const projectPositions: Record<string, { x: number; y: number }> = {};
   const skillPositions: Record<string, { x: number; y: number }> = {};
-  const placedBoxes: PlacedNodeBox[] = [];
+  const placedBoxes: PlacedNodeBounds[] = [];
 
   const snap = (val: number, step: number = GRID_SNAP_STEP) => (Math.round(val / step) * step) || 0;
 
@@ -247,19 +281,18 @@ export function assembleTopologyLayout(
 
   // 3. Layout Capabilities (Inner Core Backbone Rings)
   const totalSkills = sortedSkills.length;
-  let maxCapabilityRadius = 0;
-  let maxCapabilityRx = 0;
-  let maxCapabilityRy = 0;
+  let maxCapabilityExtentX = 0;
+  let maxCapabilityExtentY = 0;
 
   if (totalSkills === 1) {
-    // Single capability at center
+    // Single capability at center (0, 0)
     const skill = sortedSkills[0];
     const pos = { x: 0, y: 0 };
+    const bounds = getNodeBounds('skill', pos, 48, 48);
     skillPositions[skill.id] = pos;
-    placedBoxes.push({ id: skill.id, type: 'skill', x: pos.x, y: pos.y, width: 48, height: 48 });
-    maxCapabilityRadius = 35;
-    maxCapabilityRx = 35;
-    maxCapabilityRy = 35;
+    placedBoxes.push({ id: skill.id, type: 'skill', ...bounds });
+    maxCapabilityExtentX = 24;
+    maxCapabilityExtentY = 24;
   } else if (totalSkills > 1) {
     let unplacedSkills = [...sortedSkills];
     let ringIndex = 0;
@@ -269,7 +302,7 @@ export function assembleTopologyLayout(
     while (unplacedSkills.length > 0) {
       // Approximate ellipse perimeter = 2 * PI * sqrt((rx^2 + ry^2) / 2)
       const perimeter = 2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2);
-      // Capability footprint is 48x48; with clearance ~75px per node along perimeter
+      // Capability footprint is 48x48; safe arc spacing ~75px per node along perimeter
       const capacity = Math.max(3, Math.floor(perimeter / 75));
       const batchCount = Math.min(unplacedSkills.length, capacity);
       const batch = unplacedSkills.slice(0, batchCount);
@@ -285,24 +318,41 @@ export function assembleTopologyLayout(
 
         let candX = snap(rawX);
         let candY = snap(rawY);
-        let candBox = { x: candX, y: candY, width: 48, height: 48 };
+        let candBounds = getNodeBounds('skill', { x: candX, y: candY }, 48, 48);
 
-        // Deterministic collision deflection if snapped box overlaps placed nodes
+        // Deterministic collision search with radial stepping & candidate ring expansion
+        let isCollisionFree = false;
         let step = 0;
-        while (placedBoxes.some(box => boxesOverlap(candBox, box, 12)) && step < 50) {
+        let currentCandRx = rx;
+        let currentCandRy = ry;
+
+        while (!isCollisionFree && step < 80) {
+          if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 12))) {
+            isCollisionFree = true;
+            break;
+          }
           step++;
-          candX = snap(rawX + Math.cos(angle) * (step * GRID_SNAP_STEP));
-          candY = snap(rawY + Math.sin(angle) * (step * GRID_SNAP_STEP));
-          candBox = { x: candX, y: candY, width: 48, height: 48 };
+          if (step % 8 === 0) {
+            currentCandRx += GRID_SNAP_STEP * 2;
+            currentCandRy += GRID_SNAP_STEP * 2;
+          }
+          const rayOffset = (step % 8) * GRID_SNAP_STEP;
+          candX = snap(Math.cos(angle) * (currentCandRx + rayOffset));
+          candY = snap(Math.sin(angle) * (currentCandRy + rayOffset));
+          candBounds = getNodeBounds('skill', { x: candX, y: candY }, 48, 48);
+        }
+
+        if (!isCollisionFree) {
+          throw new Error(`Deterministic layout failed: unable to place capability ${skill.id} without collision.`);
         }
 
         skillPositions[skill.id] = { x: candX, y: candY };
-        placedBoxes.push({ id: skill.id, type: 'skill', x: candX, y: candY, width: 48, height: 48 });
+        placedBoxes.push({ id: skill.id, type: 'skill', ...candBounds });
 
-        const dist = Math.hypot(candX + 24, candY + 24);
-        if (dist > maxCapabilityRadius) maxCapabilityRadius = dist;
-        if (Math.abs(candX) > maxCapabilityRx) maxCapabilityRx = Math.abs(candX);
-        if (Math.abs(candY) > maxCapabilityRy) maxCapabilityRy = Math.abs(candY);
+        const extentX = Math.abs(candX) + 24;
+        const extentY = Math.abs(candY) + 24;
+        if (extentX > maxCapabilityExtentX) maxCapabilityExtentX = extentX;
+        if (extentY > maxCapabilityExtentY) maxCapabilityExtentY = extentY;
       }
 
       // Expand to next capability ring
@@ -319,8 +369,8 @@ export function assembleTopologyLayout(
     let projectRingIndex = 0;
 
     // Start project rings outside the entire capability core plus clearance buffer
-    let projRx = Math.max(260, maxCapabilityRx + 160);
-    let projRy = Math.max(185, maxCapabilityRy + 120);
+    let projRx = Math.max(260, maxCapabilityExtentX + 160);
+    let projRy = Math.max(185, maxCapabilityExtentY + 120);
 
     while (unplacedProjects.length > 0) {
       const perimeter = 2 * Math.PI * Math.sqrt((projRx * projRx + projRy * projRy) / 2);
@@ -343,19 +393,36 @@ export function assembleTopologyLayout(
 
         let candX = snap(rawX);
         let candY = snap(rawY);
-        let candBox = { x: candX, y: candY, width: pWidth, height: pHeight };
+        let candBounds = getNodeBounds('project', { x: candX, y: candY }, pWidth, pHeight);
 
-        // Deterministic collision deflection if snapped box overlaps any placed node
+        // Deterministic collision search with radial stepping & candidate ring expansion
+        let isCollisionFree = false;
         let step = 0;
-        while (placedBoxes.some(box => boxesOverlap(candBox, box, 15)) && step < 60) {
+        let currentCandRx = projRx;
+        let currentCandRy = projRy;
+
+        while (!isCollisionFree && step < 120) {
+          if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 15))) {
+            isCollisionFree = true;
+            break;
+          }
           step++;
-          candX = snap(rawX + Math.cos(angle) * (step * GRID_SNAP_STEP));
-          candY = snap(rawY + Math.sin(angle) * (step * GRID_SNAP_STEP));
-          candBox = { x: candX, y: candY, width: pWidth, height: pHeight };
+          if (step % 10 === 0) {
+            currentCandRx += GRID_SNAP_STEP * 2;
+            currentCandRy += GRID_SNAP_STEP * 2;
+          }
+          const rayOffset = (step % 10) * GRID_SNAP_STEP;
+          candX = snap(Math.cos(angle) * (currentCandRx + rayOffset));
+          candY = snap(Math.sin(angle) * (currentCandRy + rayOffset));
+          candBounds = getNodeBounds('project', { x: candX, y: candY }, pWidth, pHeight);
+        }
+
+        if (!isCollisionFree) {
+          throw new Error(`Deterministic layout failed: unable to place project ${proj.id} without collision.`);
         }
 
         projectPositions[proj.id] = { x: candX, y: candY };
-        placedBoxes.push({ id: proj.id, type: 'project', x: candX, y: candY, width: pWidth, height: pHeight });
+        placedBoxes.push({ id: proj.id, type: 'project', ...candBounds });
       }
 
       // Expand to next concentric project ring
