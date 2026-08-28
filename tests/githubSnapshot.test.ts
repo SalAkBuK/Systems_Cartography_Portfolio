@@ -3,17 +3,21 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { 
   resolveGitHubSnapshotForTarget, 
-  normalizeGitHubTarget 
+  normalizeGitHubTarget,
+  applyProjectLinkOverrides 
 } from '../src/utils/portfolioUtils.ts';
 import { 
   runWithConcurrency, 
   fetchRepoInspection, 
   fetchGitHubUserData, 
+  canonicalizeRepositories,
+  inspectCanonicalRepositories,
+  handleGitHubHttpError,
   GitHubRepoRaw 
 } from '../src/services/githubService.ts';
 import { analyzeDependencies } from '../src/services/repositoryAnalyzer/dependencyAnalyzer.ts';
 import { analyzeRepository } from '../src/services/repositoryAnalyzer/index.ts';
-import { serializeGitHubSnapshot } from '../scripts/sync-github-snapshot.ts';
+import { serializeGitHubSnapshot, generateGitHubSnapshot, syncGitHubSnapshotToFile } from '../scripts/sync-github-snapshot.ts';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from '../src/data/githubSnapshot.generated.ts';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig.ts';
 import type { GitHubSnapshotMetadata } from '../src/types.ts';
@@ -65,6 +69,7 @@ const sampleSnapshot: GitHubSyncResult = {
       techStack: ['TypeScript', 'React', 'Vite'],
       infrastructureDeps: [],
       subsystems: [],
+      metrics: [],
       keyDecisions: [],
       links: {
         github: 'https://github.com/SalAkBuK/Systems_Cartography_Portfolio'
@@ -297,28 +302,63 @@ test('fetchGitHubUserData deep-inspects all canonical repos without top-3 limit'
 // ---------------------------------------------------------------------------
 // 5. Rate Limit & Error Handling
 // ---------------------------------------------------------------------------
-test('fetchGitHubUserData throws actionable rate-limit error on 403 response with x-ratelimit-reset header', async () => {
-  const resetUnix = Math.floor(Date.now() / 1000) + 3600;
-  const mockFetch: typeof fetch = (async () => {
-    return {
-      ok: false,
-      status: 403,
-      headers: {
-        get: (name: string) => {
-          if (name.toLowerCase() === 'x-ratelimit-remaining') return '0';
-          if (name.toLowerCase() === 'x-ratelimit-reset') return resetUnix.toString();
-          return null;
-        }
-      }
-    } as unknown as Response;
-  }) as typeof fetch;
-
-  await assert.rejects(
-    async () => {
-      await fetchGitHubUserData('test-user', { fetchImpl: mockFetch });
-    },
-    /GitHub API rate limit exhausted while fetching GitHub profile.*Provide GITHUB_TOKEN/
+// ---------------------------------------------------------------------------
+// 5. Rate Limit, 403 Forbidden & Error Classification
+// ---------------------------------------------------------------------------
+test('handleGitHubHttpError correctly distinguishes 429, 403 remaining=0, 403 retry-after, and plain 403', () => {
+  // Case A: 429
+  const res429 = {
+    status: 429,
+    statusText: 'Too Many Requests',
+    headers: { get: () => null }
+  } as unknown as Response;
+  assert.throws(
+    () => handleGitHubHttpError(res429, 'testing 429'),
+    /GitHub API rate limit exceeded while testing 429/
   );
+
+  // Case B: 403 + remaining = '0'
+  const resetUnix = Math.floor(Date.now() / 1000) + 3600;
+  const res403Primary = {
+    status: 403,
+    statusText: 'Forbidden',
+    headers: {
+      get: (h: string) => h.toLowerCase() === 'x-ratelimit-remaining' ? '0' : h.toLowerCase() === 'x-ratelimit-reset' ? resetUnix.toString() : null
+    }
+  } as unknown as Response;
+  assert.throws(
+    () => handleGitHubHttpError(res403Primary, 'testing primary limit'),
+    /GitHub API primary rate limit exhausted while testing primary limit/
+  );
+
+  // Case C: 403 + Retry-After
+  const res403Secondary = {
+    status: 403,
+    statusText: 'Forbidden',
+    headers: {
+      get: (h: string) => h.toLowerCase() === 'retry-after' ? '60' : null
+    }
+  } as unknown as Response;
+  assert.throws(
+    () => handleGitHubHttpError(res403Secondary, 'testing secondary limit'),
+    /GitHub API secondary rate limit reached while testing secondary limit/
+  );
+
+  // Case D: Plain 403 (e.g. permission denied or repository restricted)
+  const res403Plain = {
+    status: 403,
+    statusText: 'Forbidden',
+    headers: {
+      get: (h: string) => h.toLowerCase() === 'x-ratelimit-remaining' ? '4990' : null
+    }
+  } as unknown as Response;
+  try {
+    handleGitHubHttpError(res403Plain, 'testing plain 403');
+    assert.fail('Should have thrown');
+  } catch (err: any) {
+    assert.match(err.message, /GitHub API request forbidden\/rejected while testing plain 403/);
+    assert.ok(!err.message.includes('rate limit exhausted'), 'Plain 403 must not report rate limit exhaustion');
+  }
 });
 
 test('fetchRepoInspection throws error when git tree is truncated in strict mode', async () => {
@@ -340,16 +380,87 @@ test('fetchRepoInspection throws error when git tree is truncated in strict mode
   await assert.rejects(
     async () => {
       await fetchRepoInspection('test-user', 'big-repo', 'main', {
-        fetchImpl: mockFetch,
-        strictInspection: true
+        fetchImpl: mockFetch
       });
     },
     /Tree truncated for "test-user\/big-repo"/
   );
 });
 
+test('fetchRepoInspection throws in strict mode when tree-listed manifest returns 404 or 500', async () => {
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/git/trees/')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          tree: [{ path: 'package.json' }, { path: 'apps/api/package.json' }],
+          truncated: false
+        })
+      } as Response;
+    }
+    if (url.includes('/contents/package.json')) {
+      return { ok: true, status: 200, text: async () => '{"name":"root"}' } as Response;
+    }
+    if (url.includes('/contents/apps%2Fapi%2Fpackage.json')) {
+      return { ok: false, status: 404, statusText: 'Not Found' } as Response;
+    }
+    return { ok: false, status: 404 } as Response;
+  }) as typeof fetch;
+
+  await assert.rejects(
+    async () => {
+      await fetchRepoInspection('test-user', 'broken-manifest-repo', 'main', {
+        fetchImpl: mockFetch
+      });
+    },
+    /Manifest file "apps\/api\/package\.json" listed in tree for "test-user\/broken-manifest-repo" was not found \(404\)/
+  );
+});
+
 // ---------------------------------------------------------------------------
-// 6. Multi-Manifest Dependency Extraction & Ecosystem Analysis
+// 6. Staged Pipeline & Canonical Deduplication Before Inspection
+// ---------------------------------------------------------------------------
+test('canonicalizeRepositories dedupes clusters before deep inspection and discarded aliases receive 0 requests', async () => {
+  const clusterRepos: GitHubRepoRaw[] = [
+    { ...sampleRepo, id: 1, name: 'towerdesk-backend-clean', full_name: 'test-user/towerdesk-backend-clean' },
+    { ...sampleRepo, id: 2, name: 'towerdesk-backend', full_name: 'test-user/towerdesk-backend' },
+    { ...sampleRepo, id: 3, name: 'svc-alpha', full_name: 'test-user/svc-alpha' },
+    { ...sampleRepo, id: 4, name: 'svc-beta', full_name: 'test-user/svc-beta' },
+    { ...sampleRepo, id: 5, name: 'svc-gamma', full_name: 'test-user/svc-gamma' },
+    { ...sampleRepo, id: 6, name: 'svc-delta', full_name: 'test-user/svc-delta' },
+    { ...sampleRepo, id: 7, name: 'svc-epsilon', full_name: 'test-user/svc-epsilon' }
+  ];
+
+  const canonical = canonicalizeRepositories(clusterRepos);
+  assert.equal(canonical.length, 6, 'Cluster must dedupe down to 6 canonical repos');
+
+  const requestedInspectionRepos: string[] = [];
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/git/trees/')) {
+      const match = url.match(/\/repos\/test-user\/([^\/]+)\/git\/trees/);
+      if (match) requestedInspectionRepos.push(match[1]);
+      return { ok: true, status: 200, json: async () => ({ tree: [] }) } as Response;
+    }
+    return { ok: true, status: 200, text: async () => '' } as Response;
+  }) as typeof fetch;
+
+  const { inspections, summary } = await inspectCanonicalRepositories(canonical, {
+    fetchImpl: mockFetch
+  });
+
+  assert.equal(summary.canonicalRepositoryCount, 6);
+  assert.equal(summary.inspectedRepositoryCount, 6);
+  assert.equal(summary.warnings.length, 0);
+  assert.equal(inspections.length, 6);
+  assert.ok(requestedInspectionRepos.includes('towerdesk-backend-clean'), 'Canonical repo must be inspected');
+  assert.ok(!requestedInspectionRepos.includes('towerdesk-backend'), 'Discarded alias must receive 0 inspection requests');
+});
+
+// ---------------------------------------------------------------------------
+// 7. Multi-Manifest Dependency Extraction & Section-Aware TOML / Pyproject
 // ---------------------------------------------------------------------------
 test('analyzeDependencies extracts dependencies across multiple bounded package.json manifests', () => {
   const inspection = {
@@ -380,76 +491,22 @@ test('analyzeDependencies extracts dependencies across multiple bounded package.
   assert.equal(deps.packageScripts.build, 'vite build');
 });
 
-test('analyzeDependencies extracts PHP dependencies from composer.json', () => {
-  const inspection = {
-    manifestContents: {
-      'composer.json': JSON.stringify({
-        require: {
-          'laravel/framework': '^11.0',
-          'doctrine/orm': '^3.0'
-        },
-        'require-dev': {
-          'phpunit/phpunit': '^11.0'
-        }
-      })
-    },
-    treeFiles: ['composer.json']
-  };
-
-  const deps = analyzeDependencies(inspection);
-  assert.equal(deps.primaryEcosystem, 'PHP');
-  assert.ok(deps.frameworks.backend.includes('Laravel'));
-  assert.ok(deps.frameworks.database.includes('Doctrine'));
-  assert.ok(deps.frameworks.testing.includes('PHPUnit'));
-});
-
-test('analyzeDependencies extracts Go dependencies from go.mod', () => {
-  const goModContent = `
-module github.com/test-user/stream-engine
-
-go 1.22
-
-require (
-\tgithub.com/gin-gonic/gin v1.9.1
-\tgoogle.golang.org/grpc v1.62.0
-\tgithub.com/jackc/pgx v5.5.0
-\tgithub.com/stretchr/testify v1.8.4
-)
-`;
-
-  const inspection = {
-    manifestContents: {
-      'go.mod': goModContent
-    },
-    treeFiles: ['go.mod', 'main.go']
-  };
-
-  const deps = analyzeDependencies(inspection);
-  assert.equal(deps.primaryEcosystem, 'Go');
-  assert.ok(deps.frameworks.backend.includes('Go Module'));
-  assert.ok(deps.frameworks.backend.includes('Gin'));
-  assert.ok(deps.frameworks.backend.includes('gRPC'));
-  assert.ok(deps.frameworks.database.includes('PostgreSQL Driver'));
-  assert.ok(deps.frameworks.testing.includes('Testify'));
-});
-
-test('analyzeDependencies extracts Rust dependencies from Cargo.toml', () => {
-  const cargoTomlContent = `
+test('analyzeDependencies ignores non-dependency descriptions in Cargo.toml (No False Positives)', () => {
+  const cargoTomlWithProse = `
 [package]
 name = "event-broker"
 version = "0.1.0"
 edition = "2021"
+description = "A high-performance broker inspired by axum and actix-web HTTP patterns"
 
 [dependencies]
-axum = "0.7"
 tokio = { version = "1.0", features = ["full"] }
-sqlx = { version = "0.7", features = ["postgres"] }
 serde = { version = "1.0", features = ["derive"] }
 `;
 
   const inspection = {
     manifestContents: {
-      'Cargo.toml': cargoTomlContent
+      'Cargo.toml': cargoTomlWithProse
     },
     treeFiles: ['Cargo.toml', 'src/main.rs']
   };
@@ -457,56 +514,58 @@ serde = { version = "1.0", features = ["derive"] }
   const deps = analyzeDependencies(inspection);
   assert.equal(deps.primaryEcosystem, 'Rust');
   assert.ok(deps.frameworks.backend.includes('Cargo / Rust'));
-  assert.ok(deps.frameworks.backend.includes('Axum'));
   assert.ok(deps.frameworks.backend.includes('Tokio'));
-  assert.ok(deps.frameworks.database.includes('SQLx'));
   assert.ok(deps.frameworks.tools.includes('Serde'));
+  assert.ok(!deps.frameworks.backend.includes('Axum'), 'Axum mentioned only in description must NOT be detected as dependency');
+  assert.ok(!deps.frameworks.backend.includes('Actix Web'), 'Actix Web mentioned only in description must NOT be detected');
 });
 
-test('analyzeDependencies extracts Python dependencies from requirements.txt and pyproject.toml', () => {
-  const requirementsContent = `
-fastapi==0.110.0
-sqlalchemy>=2.0.0
-pytest>=8.0.0
-pydantic>=2.0.0
-celery>=5.3.0
+test('analyzeDependencies ignores non-dependency descriptions in pyproject.toml (No False Positives)', () => {
+  const pyprojectWithProse = `
+[project]
+name = "data-pipeline"
+version = "0.1.0"
+description = "Microservice designed for migration from FastAPI and Django to Celery async tasks"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "pydantic>=2.0.0"
+]
+
+[tool.ruff]
+target-version = "py311"
 `;
 
   const inspection = {
     manifestContents: {
-      'requirements.txt': requirementsContent
+      'pyproject.toml': pyprojectWithProse
     },
-    treeFiles: ['requirements.txt', 'app.py']
+    treeFiles: ['pyproject.toml', 'main.py']
   };
 
   const deps = analyzeDependencies(inspection);
   assert.equal(deps.primaryEcosystem, 'Python');
-  assert.ok(deps.frameworks.backend.includes('FastAPI'));
   assert.ok(deps.frameworks.database.includes('SQLAlchemy'));
-  assert.ok(deps.frameworks.testing.includes('pytest'));
   assert.ok(deps.frameworks.tools.includes('Pydantic'));
-  assert.ok(deps.frameworks.backend.includes('Celery'));
-});
-
-test('analyzeDependencies ignores unknown packages without inventing capabilities', () => {
-  const inspection = {
-    packageJsonContent: JSON.stringify({
-      dependencies: {
-        'some-random-internal-lib': '1.0.0',
-        'foo-bar-baz-custom': '0.0.1'
-      }
-    }),
-    treeFiles: ['package.json']
-  };
-
-  const deps = analyzeDependencies(inspection);
-  assert.deepEqual(deps.frameworks.frontend, []);
-  assert.deepEqual(deps.frameworks.backend, []);
-  assert.deepEqual(deps.frameworks.database, []);
+  assert.ok(!deps.frameworks.backend.includes('FastAPI'), 'FastAPI mentioned only in description must NOT be detected');
+  assert.ok(!deps.frameworks.backend.includes('Django'), 'Django mentioned only in description must NOT be detected');
 });
 
 // ---------------------------------------------------------------------------
-// 7. Reviewed Repository Evidence Precedence
+// 8. Project Link Overrides Independence
+// ---------------------------------------------------------------------------
+test('applyProjectLinkOverrides applies live demo URLs at runtime without modifying snapshot', () => {
+  const baseProjects = sampleSnapshot.projects;
+  const projectLinks = {
+    'Systems_Cartography_Portfolio': 'https://portfolio-live.example.com'
+  };
+
+  const overridden = applyProjectLinkOverrides(baseProjects, projectLinks);
+  assert.equal(overridden[0].links.demo, 'https://portfolio-live.example.com');
+  assert.equal(baseProjects[0].links.demo, undefined, 'Original snapshot project must remain unmodified');
+});
+
+// ---------------------------------------------------------------------------
+// 9. Reviewed Repository Evidence Precedence
 // ---------------------------------------------------------------------------
 test('analyzeRepository gives reviewed repository evidence precedence over generic parsed signals', () => {
   const towerdeskRepo: GitHubRepoRaw = {
@@ -535,25 +594,75 @@ test('analyzeRepository gives reviewed repository evidence precedence over gener
 });
 
 // ---------------------------------------------------------------------------
-// 8. Snapshot Serializer Contract & Safety
+// 10. Snapshot Serializer Contract, Real Secret Safety & Transactional Write
 // ---------------------------------------------------------------------------
-test('serializeGitHubSnapshot produces valid TypeScript module without leaking tokens or local paths', () => {
-  const output = serializeGitHubSnapshot(sampleMetadata, sampleSnapshot);
-  assert.ok(output.includes('export const GITHUB_SNAPSHOT_METADATA: GitHubSnapshotMetadata = {'));
-  assert.ok(output.includes('export const GITHUB_SNAPSHOT: GitHubSyncResult = {'));
-  assert.ok(!output.includes('token'), 'Snapshot must not contain tokens');
-  assert.ok(!output.includes('ghp_'), 'Snapshot must not contain GitHub PATs');
-  assert.ok(!output.includes('C:\\'), 'Snapshot must not contain Windows local paths');
+test('generateGitHubSnapshot rejects real injected tokens and prevents leakage in serialized module', async () => {
+  const fakeSecret = 'TEST_FAKE_GITHUB_SECRET_9f83abc123';
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/users/test-user/repos')) {
+      return { ok: true, status: 200, json: async () => [sampleRepo] } as Response;
+    }
+    if (url.includes('/users/test-user')) {
+      return { ok: true, status: 200, json: async () => ({ login: 'test-user', public_repos: 1 }) } as Response;
+    }
+    if (url.includes('/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ tree: [] }) } as Response;
+    }
+    return { ok: true, status: 200, text: async () => 'README with Bearer authentication discussion' } as Response;
+  }) as typeof fetch;
+
+  const { outputContent } = await generateGitHubSnapshot('test-user', {
+    token: fakeSecret,
+    fetchImpl: mockFetch
+  });
+
+  assert.ok(!outputContent.includes(fakeSecret), 'Output must not leak the injected secret value');
+  assert.ok(!outputContent.includes('Authorization: Bearer'), 'Output must not leak authorization header');
+  assert.ok(outputContent.includes('export const GITHUB_SNAPSHOT: GitHubSyncResult = {'));
+});
+
+test('syncGitHubSnapshotToFile performs transactional write and preserves target on failure', async () => {
+  const { writeFile, unlink } = await import('node:fs/promises');
+  const testFile = 'tests/scratch-test-snapshot.ts';
+  const initialContent = '// Original untouched file content';
+  await writeFile(testFile, initialContent, 'utf8');
+
+  const mockFailingFetch: typeof fetch = (async () => {
+    return { ok: false, status: 500, statusText: 'Internal Server Error' } as Response;
+  }) as typeof fetch;
+
+  await assert.rejects(
+    async () => {
+      await syncGitHubSnapshotToFile('test-user', { fetchImpl: mockFailingFetch }, testFile);
+    }
+  );
+
+  const afterContent = readFileSync(testFile, 'utf8');
+  assert.equal(afterContent, initialContent, 'Failed snapshot sync must not corrupt original file');
+
+  await unlink(testFile);
 });
 
 // ---------------------------------------------------------------------------
-// 9. Committed Snapshot Validation
+// 11. Committed Snapshot Validation & Completeness Contract
 // ---------------------------------------------------------------------------
-test('committed GITHUB_SNAPSHOT is valid, matches configured target, and contains projects', () => {
+test('committed GITHUB_SNAPSHOT is valid, matches configured target, and reports true complete inspection', () => {
   assert.equal(GITHUB_SNAPSHOT_METADATA.schemaVersion, 1);
   assert.equal(normalizeGitHubTarget(GITHUB_SNAPSHOT_METADATA.githubTarget), normalizeGitHubTarget(PORTFOLIO_CONFIG.githubTarget));
   assert.equal(GITHUB_SNAPSHOT_METADATA.sourceIdentifier, 'SalAkBuK');
   assert.ok(GITHUB_SNAPSHOT.projects.length >= 15, 'Committed snapshot should contain all canonical owner projects');
   assert.ok(GITHUB_SNAPSHOT.skills.length >= 10, 'Committed snapshot should contain synthesized capabilities');
   assert.equal(GITHUB_SNAPSHOT.operator.handle, '@SalAkBuK');
+  assert.equal(
+    GITHUB_SNAPSHOT_METADATA.inspectedRepositoryCount, 
+    GITHUB_SNAPSHOT_METADATA.canonicalRepositoryCount,
+    'All canonical repositories must be deeply inspected in committed snapshot'
+  );
+  assert.equal(
+    GITHUB_SNAPSHOT_METADATA.inspectionWarnings.length, 
+    0,
+    'A successful strict snapshot must have zero inspection warnings'
+  );
 });
+

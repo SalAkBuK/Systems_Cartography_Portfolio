@@ -1,4 +1,4 @@
-import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 import type { GitHubSyncResult } from '../services/githubService';
 
@@ -246,3 +246,24 @@ export function groupExperienceByProgression(experience: ExperienceNode[]): Grou
     };
   });
 }
+
+/**
+ * Pure helper to clone and apply deployment/demo links from local configuration to projects.
+ * Preserves the underlying GitHub snapshot and fallback repository homepage.
+ */
+export function applyProjectLinkOverrides(
+  projects: ProjectData[],
+  projectLinks: Record<string, string> = {}
+): ProjectData[] {
+  return projects.map(p => {
+    const overriddenDemo = resolveDeploymentLink(p.title, p.links.demo, projectLinks);
+    return {
+      ...p,
+      links: {
+        ...p.links,
+        demo: overriddenDemo
+      }
+    };
+  });
+}
+
