@@ -144,7 +144,7 @@ export default function App() {
   
   const [selectedCategory, setSelectedCategory] = useState<SystemCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [traceModeActive, setTraceModeActive] = useState(true);
+  const [traceModeActive, setTraceModeActive] = useState(false);
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, zoom: 1 });
 
   // Modal States
@@ -415,7 +415,6 @@ export default function App() {
               selectedSkillId={selectedSkillId}
               onSelectSkill={handleSelectSkill}
               selectedExperienceId={selectedExperienceId}
-              onSelectExperience={handleSelectExperience}
               selectedCategory={selectedCategory}
               searchQuery={searchQuery}
               traceModeActive={traceModeActive}
