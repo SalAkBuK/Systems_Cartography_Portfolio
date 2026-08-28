@@ -5,11 +5,12 @@ import {
 } from '../types';
 import { OWNER_PROFILE } from '../data/ownerProfile.generated';
 import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../data/ownerExperienceEvidence';
-import { ADDITIONAL_OWNER_EXPERIENCE } from '../data/ownerAdditionalExperience';
+import { getDefaultAdditionalOwnerExperience } from '../data/ownerAdditionalExperience';
 
 export interface ResolveProfessionalExperienceOptions {
   importedExperience?: ExperienceNode[];
   additionalExperience?: ExperienceNode[];
+  ownerGithubTarget?: string;
   curatedEvidence?: OwnerExperienceEvidence[];
 }
 
@@ -69,11 +70,13 @@ export function mergeExperienceSources(
 export function resolveProfessionalExperience(
   options: ResolveProfessionalExperienceOptions = {}
 ): ExperienceNode[] {
-  const {
-    importedExperience = OWNER_PROFILE.experience,
-    additionalExperience = ADDITIONAL_OWNER_EXPERIENCE,
-    curatedEvidence = OWNER_EXPERIENCE_EVIDENCE
-  } = options;
+  const ownerGithubTarget = options.ownerGithubTarget ?? OWNER_PROFILE.githubTarget;
+  const importedExperience = options.importedExperience ?? OWNER_PROFILE.experience;
+  const additionalExperience =
+    options.additionalExperience !== undefined
+      ? options.additionalExperience
+      : getDefaultAdditionalOwnerExperience(ownerGithubTarget);
+  const curatedEvidence = options.curatedEvidence ?? OWNER_EXPERIENCE_EVIDENCE;
 
   const combinedExperience = mergeExperienceSources(importedExperience, additionalExperience);
 

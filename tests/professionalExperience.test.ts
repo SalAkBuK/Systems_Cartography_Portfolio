@@ -740,7 +740,7 @@ test('34. ADDITIONAL_OWNER_EXPERIENCE contains the persistent AOK freelance reco
   assert.equal(aok.location, 'Client Engagement');
   assert.equal(aok.systemDomain, 'Client Web Delivery');
   assert.equal(aok.provenance, 'CURATED');
-  assert.equal(aok.progressionGroup, 'independent-freelance');
+  assert.equal(aok.progressionGroup, 'salakbuk-independent-freelance');
   assert.equal(aok.progressionOrder, 1);
   assert.equal(aok.startDate, undefined, 'startDate must be omitted without contract date evidence');
   assert.equal(aok.endDate, undefined, 'endDate must be undefined and NOT null (not current/present)');
@@ -990,4 +990,217 @@ test('45. AOK infrastructureOperations contains Hostinger as CURATED and no AWS 
   assert.ok(!hosting.details.includes('EC2'), 'No EC2 claim in AOK hosting');
   assert.ok(!hosting.details.includes('CloudFront'), 'No CloudFront claim in AOK hosting');
   assert.ok(!hosting.details.includes('Vercel'), 'No Vercel claim in AOK hosting');
+});
+
+test('46. Fork Safety: Different owner githubTarget does NOT append AOK freelance experience by default', () => {
+  const forkOwnerExperience: ExperienceNode[] = [
+    {
+      id: 'exp-fork-01',
+      code: 'EXP-01',
+      organization: 'Fork Corp',
+      role: 'Software Engineer',
+      yearRange: '2024 - 2025',
+      location: 'London, UK',
+      systemDomain: 'Cloud Infrastructure',
+      keyOutputs: ['Built cloud pipelines.'],
+      systemsArchitected: [],
+      technologies: ['Go', 'Kubernetes'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED',
+      startDate: '2024-01',
+      endDate: '2025-01'
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: forkOwnerExperience,
+    ownerGithubTarget: 'https://github.com/AnotherDeveloper'
+  });
+
+  assert.equal(resolved.length, 1, 'Fork owner must retain exactly their own 1 experience record');
+  assert.equal(resolved[0].id, 'exp-fork-01');
+  assert.ok(!resolved.some(e => e.id === 'exp-freelance-aok-health-solutions'), 'AOK must NOT be resolved for different fork owner');
+});
+
+test('47. Fork Safety: Fork owner with their own "Independent / Freelance" role does NOT receive AOK evidence', () => {
+  const forkOwnerFreelance: ExperienceNode[] = [
+    {
+      id: 'exp-fork-freelance',
+      code: 'EXP-FL-01',
+      organization: 'Independent / Freelance',
+      role: 'Consultant',
+      yearRange: '2024',
+      location: 'Berlin, Germany',
+      systemDomain: 'Web Delivery',
+      keyOutputs: ['Client consulting.'],
+      systemsArchitected: [],
+      technologies: ['Vue.js'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED',
+      progressionGroup: 'fork-freelance',
+      progressionOrder: 1
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: forkOwnerFreelance,
+    ownerGithubTarget: 'https://github.com/AnotherDeveloper'
+  });
+
+  assert.equal(resolved.length, 1);
+  const forkRole = resolved[0];
+  assert.equal(forkRole.organization, 'Independent / Freelance');
+  assert.equal(forkRole.systemsDelivered?.length || 0, 0, 'Generic Independent / Freelance role in fork must NOT receive AOK systems');
+  assert.equal(forkRole.architectedSystemsDetails?.length || 0, 0);
+  assert.equal(forkRole.evidenceLinks?.length || 0, 0);
+});
+
+test('48. Owner target normalization: trailing slashes and casing match the curated owner target', () => {
+  const resolvedTrailing = resolveProfessionalExperience({
+    ownerGithubTarget: 'https://github.com/SalAkBuK/'
+  });
+  assert.ok(resolvedTrailing.some(e => e.id === 'exp-freelance-aok-health-solutions'), 'Trailing slash matches owner target');
+
+  const resolvedCased = resolveProfessionalExperience({
+    ownerGithubTarget: 'HTTPS://GITHUB.COM/SALAKBUK'
+  });
+  assert.ok(resolvedCased.some(e => e.id === 'exp-freelance-aok-health-solutions'), 'Uppercase matches owner target');
+});
+
+test('49. Explicit additionalExperience override is honored regardless of ownerGithubTarget', () => {
+  const resolved = resolveProfessionalExperience({
+    importedExperience: [],
+    additionalExperience: ADDITIONAL_OWNER_EXPERIENCE,
+    ownerGithubTarget: 'https://github.com/AnotherDeveloper'
+  });
+
+  assert.equal(resolved.length, 1, 'Explicit additionalExperience array must be honored');
+  assert.equal(resolved[0].id, 'exp-freelance-aok-health-solutions');
+});
+
+test('50. mergeExperienceSources deduplicates when IDs differ but normalized organization + role + yearRange match', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+
+  const imported: ExperienceNode[] = [
+    {
+      id: 'exp-imp-diff-id',
+      code: 'EXP-01',
+      organization: 'Independent / Freelance',
+      role: 'Freelance Web Developer',
+      yearRange: '2025',
+      location: 'Karachi, Pakistan',
+      systemDomain: 'Web Development',
+      keyOutputs: ['Imported base identity with different ID.'],
+      systemsArchitected: [],
+      technologies: ['TypeScript'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const additional: ExperienceNode[] = [
+    {
+      id: 'exp-add-diff-id',
+      code: 'EXP-FL-01',
+      organization: 'independent / freelance',
+      role: 'freelance web developer',
+      yearRange: '2025',
+      location: 'Client Engagement',
+      systemDomain: 'Client Web Delivery',
+      keyOutputs: ['Curated additional with different ID.'],
+      systemsArchitected: [],
+      technologies: ['Next.js'],
+      gridPosition: { x: 100, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const merged = mergeExperienceSources(imported, additional);
+  assert.equal(merged.length, 1, 'Records with different IDs but matching org+role+year must deduplicate');
+  assert.equal(merged[0].id, 'exp-imp-diff-id', 'Imported ID wins');
+  assert.equal(merged[0].location, 'Karachi, Pakistan', 'Imported location wins');
+  assert.equal(merged[0].keyOutputs[0], 'Imported base identity with different ID.');
+});
+
+test('51. mergeExperienceSources retains multiple freelance engagements with different roles or year ranges', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+
+  const imported: ExperienceNode[] = [
+    {
+      id: 'exp-fl-2024',
+      code: 'EXP-01',
+      organization: 'Independent / Freelance',
+      role: 'WordPress Developer',
+      yearRange: '2024',
+      location: 'Client Engagement',
+      systemDomain: 'Web Development',
+      keyOutputs: ['Delivered CMS sites.'],
+      systemsArchitected: [],
+      technologies: ['PHP', 'WordPress'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const additional: ExperienceNode[] = [
+    {
+      id: 'exp-fl-2025',
+      code: 'EXP-FL-01',
+      organization: 'Independent / Freelance',
+      role: 'Freelance Web Developer',
+      yearRange: '2025',
+      location: 'Client Engagement',
+      systemDomain: 'Client Web Delivery',
+      keyOutputs: ['Built AOK site.'],
+      systemsArchitected: [],
+      technologies: ['Next.js'],
+      gridPosition: { x: 100, y: 0 },
+      provenance: 'CURATED'
+    }
+  ];
+
+  const merged = mergeExperienceSources(imported, additional);
+  assert.equal(merged.length, 2, 'Distinct freelance engagements must both be retained');
+  assert.equal(merged[0].id, 'exp-fl-2024');
+  assert.equal(merged[1].id, 'exp-fl-2025');
+});
+
+test('52. AOK evidence structure: Parent DeliveredSystem is CURATED DELIVERED while child surfaces are VERIFIED IMPLEMENTED', () => {
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  const sys = aok.systemsDelivered?.[0];
+  assert.ok(sys);
+  assert.equal(sys.status, 'DELIVERED');
+  assert.equal(sys.provenance, 'CURATED');
+
+  assert.ok(sys.surfaces && sys.surfaces.length === 2);
+  for (const surface of sys.surfaces) {
+    assert.equal(surface.status, 'IMPLEMENTED', 'Child verified surface status must be IMPLEMENTED');
+    assert.equal(surface.provenance, 'VERIFIED', 'Child surface must have VERIFIED provenance');
+  }
+});
+
+test('53. AOK verified engineering contributions contain implementation wording without unverified delivery claims', () => {
+  const resolved = resolveProfessionalExperience();
+  const aok = resolved.find(e => e.id === 'exp-freelance-aok-health-solutions')!;
+
+  assert.ok(aok);
+  assert.ok(aok.engineeringContributions && aok.engineeringContributions.length >= 2);
+
+  const contrib1 = aok.engineeringContributions.find(c => c.title.includes('Web Application'))!;
+  assert.ok(contrib1);
+  assert.equal(contrib1.title, 'Responsive Client Web Application Implementation', 'Title specifies Implementation');
+  assert.ok(contrib1.description.startsWith('Implemented'), 'Description begins with source-verifiable implementation verb');
+  assert.equal(contrib1.provenance, 'VERIFIED');
+});
+
+test('54. ownerAdditionalExperience.ts has clean UTF-8 encoding without BOM', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+  const buf = fs.readFileSync(path.resolve('src/data/ownerAdditionalExperience.ts'));
+
+  const hasBom = buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+  assert.equal(hasBom, false, 'src/data/ownerAdditionalExperience.ts must NOT have a UTF-8 BOM');
 });
