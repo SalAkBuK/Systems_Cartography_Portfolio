@@ -284,7 +284,7 @@ export default function App() {
       setSelectedExperienceId(null);
     } else if (view === 'projects') {
       setTopologyViewMode('systems');
-      if (!selectedProjectId && projects.length > 0) setSelectedProjectId(projects[0].id);
+      setSelectedProjectId(null);
       setSelectedSkillId(null);
       setSelectedExperienceId(null);
     } else if (view === 'experience') {
