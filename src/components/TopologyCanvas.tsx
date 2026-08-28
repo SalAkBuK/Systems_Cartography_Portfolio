@@ -21,7 +21,6 @@ import {
   ShieldAlert,
   CheckCircle2,
   Sparkles,
-  Zap,
   GitBranch
 } from 'lucide-react';
 import { 
@@ -34,7 +33,6 @@ import {
 import { VERIFIED_TOPOLOGY_ZONES as TOPOLOGY_ZONES } from '../data/verifiedPortfolioData';
 import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
-  VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
 import {
@@ -44,17 +42,21 @@ import {
 } from '../utils/collision';
 import {
   matchesProjectClassification,
-  isProjectLinkedToExperience,
-  groupExperienceByProgression
+  isProjectLinkedToExperience
 } from '../utils/portfolioUtils';
-import { projectUsesCapability } from '../utils/capabilityAssociations';
+import { 
+  projectUsesCapability, 
+  getCapabilityCoreTechnology 
+} from '../utils/capabilityAssociations';
 import {
-  createTopologyGraph,
   calculateConduitGeometry,
-  stepForceSimulation,
-  computeEquilibriumLayout,
   ConduitPathGeometry
 } from '../utils/forceLayout';
+import {
+  assembleTopologyLayout,
+  wrapCalloutTitle,
+  getConduitPresentationState
+} from '../utils/topologyLayout';
 
 interface TopologyCanvasProps {
   selectedProjectId: string | null;
@@ -63,7 +65,6 @@ interface TopologyCanvasProps {
   selectedSkillId: string | null;
   onSelectSkill: (id: string) => void;
   selectedExperienceId: string | null;
-  onSelectExperience: (id: string) => void;
   selectedCategory: SystemCategory | 'all';
   searchQuery: string;
   traceModeActive: boolean;
@@ -102,7 +103,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedSkillId,
   onSelectSkill,
   selectedExperienceId,
-  onSelectExperience,
   selectedCategory,
   searchQuery,
   traceModeActive,
@@ -115,147 +115,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
-  // Group activeExperience by progressionGroup / organization using shared helper
-  const groupedExperience = useMemo(() => groupExperienceByProgression(activeExperience), [activeExperience]);
-
   const containerRef = useRef<HTMLDivElement>(null);
-  const dockRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [hoveredSkillId, setHoveredSkillId] = useState<string | null>(null);
   const [containerDimensions, setContainerDimensions] = useState({ width: 1000, height: 700 });
-
-  // Movable Professional Experience Dock Viewport Overlay State & Persistence
-  const STORAGE_KEY_DOCK_POSITION = 'sys_cartography_experience_dock_position';
-  const DEFAULT_DOCK_POSITION = { x: 14, y: 52 };
-
-  const [dockPosition, setDockPosition] = useState<{ x: number; y: number }>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DOCK_POSITION);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed.x === 'number' && typeof parsed.y === 'number' && !isNaN(parsed.x) && !isNaN(parsed.y)) {
-          return { x: parsed.x, y: parsed.y };
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return DEFAULT_DOCK_POSITION;
-  });
-
-  const [dockDragging, setDockDragging] = useState<{
-    startX: number;
-    startY: number;
-    startDockX: number;
-    startDockY: number;
-  } | null>(null);
-
-  // Clamping helper ensuring dock stays within container boundaries
-  const clampDock = useCallback((pos: { x: number; y: number }): { x: number; y: number } => {
-    const margin = 12;
-    const containerW = containerDimensions.width || 1000;
-    const containerH = containerDimensions.height || 700;
-    const dockW = dockRef.current?.offsetWidth || 340;
-    const dockH = dockRef.current?.offsetHeight || 60;
-    const maxX = Math.max(margin, containerW - dockW - margin);
-    const maxY = Math.max(margin, containerH - dockH - margin);
-    return {
-      x: Math.min(Math.max(margin, Math.round(pos.x)), maxX),
-      y: Math.min(Math.max(margin, Math.round(pos.y)), maxY)
-    };
-  }, [containerDimensions]);
-
-  // Re-clamp position on container resize
-  useEffect(() => {
-    setDockPosition(prev => clampDock(prev));
-  }, [clampDock]);
-
-  const handleDockPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDockDragging({
-      startX: e.clientX,
-      startY: e.clientY,
-      startDockX: dockPosition.x,
-      startDockY: dockPosition.y
-    });
-  };
-
-  const handleDockPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dockDragging) return;
-    e.stopPropagation();
-    const deltaX = e.clientX - dockDragging.startX;
-    const deltaY = e.clientY - dockDragging.startY;
-    const rawNewPos = {
-      x: dockDragging.startDockX + deltaX,
-      y: dockDragging.startDockY + deltaY
-    };
-    setDockPosition(clampDock(rawNewPos));
-  };
-
-  const handleDockPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dockDragging) return;
-    e.stopPropagation();
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    setDockDragging(null);
-    try {
-      localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(dockPosition));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleDockPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dockDragging) return;
-    e.stopPropagation();
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    setDockDragging(null);
-  };
-
-  const handleResetDockPosition = useCallback(() => {
-    const defaultPos = clampDock(DEFAULT_DOCK_POSITION);
-    setDockPosition(defaultPos);
-    try {
-      localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(defaultPos));
-    } catch {
-      // ignore
-    }
-  }, [clampDock]);
-
-  const handleDockKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = e.shiftKey ? 32 : 16;
-    let dx = 0;
-    let dy = 0;
-    if (e.key === 'ArrowLeft') dx = -step;
-    else if (e.key === 'ArrowRight') dx = step;
-    else if (e.key === 'ArrowUp') dy = -step;
-    else if (e.key === 'ArrowDown') dy = step;
-    else return;
-
-    e.preventDefault();
-    setDockPosition(prev => {
-      const next = clampDock({ x: prev.x + dx, y: prev.y + dy });
-      try {
-        localStorage.setItem(STORAGE_KEY_DOCK_POSITION, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
-
-  const isDockMoved = dockPosition.x !== DEFAULT_DOCK_POSITION.x || dockPosition.y !== DEFAULT_DOCK_POSITION.y;
 
   // Custom dragged positions for 3D project structures and skill nodes
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -264,11 +129,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // Grid snap state (enabled by default)
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
   const [snapNotice, setSnapNotice] = useState<{ message: string; type: 'snap' | 'collision' } | null>(null);
-
-  // Force-Directed Layout & Dynamic Physics States
-  const [forceEngineActive, setForceEngineActive] = useState(true);
-  const [isSimulatingEquilibrium, setIsSimulatingEquilibrium] = useState(false);
-  const [simulationEnergy, setSimulationEnergy] = useState<number>(0);
 
   // Active node drag state with live position tracking
   const [draggingNode, setDraggingNode] = useState<{
@@ -307,8 +167,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // Active focus target (hovered node has top priority, followed by selected node)
   const activeFocusProjectId = hoveredProjectId || (hoveredSkillId ? null : selectedProjectId);
   const activeFocusSkillId = hoveredSkillId || (hoveredProjectId ? null : selectedSkillId);
-  const isNodeFocused = Boolean(hoveredProjectId || hoveredSkillId || selectedProjectId || selectedSkillId);
   const isHoverFocus = Boolean(hoveredProjectId || hoveredSkillId);
+  const isNodeFocused = Boolean(hoveredProjectId || hoveredSkillId || selectedProjectId || selectedSkillId);
 
   // Set of connected skills for the currently focused project
   const focusedConnectedSkillIds = useMemo(() => {
@@ -341,57 +201,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setTimeout(() => setSnapNotice(null), 2400);
   }, []);
 
-  // Animated Auto-Equilibrium Constraint Solver
-  const runAutoEquilibrium = useCallback(() => {
-    if (isSimulatingEquilibrium) return;
-    setIsSimulatingEquilibrium(true);
-    setSnapNotice({ message: 'CONSTRAINT SOLVER // HARMONIZING CONDUIT FORCES', type: 'snap' });
-
-    const { nodes, edges } = createTopologyGraph(
-      projects,
-      activeSkills,
-      customProjectPositions,
-      customSkillPositions
-    );
-
-    let frame = 0;
-    const maxFrames = 50;
-
-    const animStep = () => {
-      frame++;
-      const { maxVelocity, totalKineticEnergy } = stepForceSimulation(nodes, edges, {
-        damping: 0.82,
-        repulsionStrength: 4800,
-        springStrengthMultiplier: 1.25,
-        zoneGravityStrength: 0.015,
-        resolveCollisions: true
-      });
-
-      setSimulationEnergy(totalKineticEnergy);
-
-      const nextProjects: Record<string, { x: number; y: number }> = {};
-      const nextSkills: Record<string, { x: number; y: number }> = {};
-
-      nodes.forEach(node => {
-        const rounded = { x: Math.round(node.x), y: Math.round(node.y) };
-        if (node.type === 'project') nextProjects[node.id] = rounded;
-        else if (node.type === 'skill') nextSkills[node.id] = rounded;
-      });
-
-      setCustomProjectPositions(nextProjects);
-      setCustomSkillPositions(nextSkills);
-
-      if (frame < maxFrames && maxVelocity > 0.35) {
-        requestAnimationFrame(animStep);
-      } else {
-        setIsSimulatingEquilibrium(false);
-        setSnapNotice({ message: 'TOPOLOGY EQUILIBRIUM ACHIEVED // ZERO OVERLAP', type: 'snap' });
-        setTimeout(() => setSnapNotice(null), 2200);
-      }
-    };
-
-    requestAnimationFrame(animStep);
-  }, [isSimulatingEquilibrium, projects, activeSkills, customProjectPositions, customSkillPositions]);
+  // Instant Deterministic Schematic Layout Assembler
+  const handleAssemble = useCallback(() => {
+    const { projectPositions, skillPositions } = assembleTopologyLayout(projects, activeSkills);
+    setCustomProjectPositions(projectPositions);
+    setCustomSkillPositions(skillPositions);
+    setSnapNotice({ message: 'TOPOLOGY ASSEMBLED // SCHEMATIC LAYOUT APPLIED', type: 'snap' });
+    setTimeout(() => setSnapNotice(null), 2400);
+  }, [projects, activeSkills]);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
@@ -669,7 +486,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
     };
-  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, onSelectExperience, projects, activeSkills]);
+  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
 
   // Handle Pan & Drag on canvas surface
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -757,6 +574,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const connections: React.ReactNode[] = [];
     const connectedPairs = new Set<string>();
 
+    const isAnyProjectHovered = Boolean(hoveredProjectId);
+    const isAnySkillHovered = Boolean(hoveredSkillId);
+    const isAnyProjectSelected = Boolean(selectedProjectId);
+    const isAnySkillSelected = Boolean(selectedSkillId);
+    const isAnyDragging = Boolean(draggingNode);
+
     projects.forEach(project => {
       const isProjectSelected = selectedProjectId === project.id;
       const isProjectHovered = hoveredProjectId === project.id;
@@ -768,7 +591,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       activeSkills.forEach(skill => {
         // Check if project and skill are connected using centralized predicate
-        if (!projectUsesCapability(project, skill)) return;
+        const isConnected = projectUsesCapability(project, skill);
+        if (!isConnected) return;
 
         const pairKey = `${project.id}-${skill.id}`;
         if (connectedPairs.has(pairKey)) return;
@@ -778,13 +602,23 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         const isSkillHovered = hoveredSkillId === skill.id;
         const isDraggingThisSkill = draggingNode?.type === 'skill' && draggingNode.id === skill.id;
 
-        // Determine if this specific conduit is actively hovered / selected
-        const isDirectHoverConduit = isProjectHovered || isSkillHovered;
-        const isDirectSelectionConduit = (isProjectSelected && !hoveredProjectId && !hoveredSkillId) || 
-                                         (isSkillSelected && !hoveredProjectId && !hoveredSkillId);
-        
-        const isConduitActive = isDirectHoverConduit || isDirectSelectionConduit || isDraggingThisProj || isDraggingThisSkill || (traceModeActive && !isHoverFocus);
-        const isConduitDimmed = isHoverFocus && !isDirectHoverConduit;
+        const presentationState = getConduitPresentationState({
+          isConnected,
+          isProjectHovered,
+          isSkillHovered,
+          isProjectSelected,
+          isSkillSelected,
+          isDraggingThisProject: isDraggingThisProj,
+          isDraggingThisSkill: isDraggingThisSkill,
+          isAnyProjectHovered,
+          isAnySkillHovered,
+          isAnyProjectSelected,
+          isAnySkillSelected,
+          isAnyDragging,
+          traceModeActive
+        });
+
+        if (presentationState === 'hidden') return;
 
         const skillPos = getSkillPos(skill);
 
@@ -799,39 +633,57 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         );
 
         const { startIso, midIso, endIso, pathData, tension } = conduitGeom;
+        const isDraggingState = presentationState === 'dragging';
+        const isDirectHover = isProjectHovered || isSkillHovered;
+        const coreTech = getCapabilityCoreTechnology(skill);
 
-        connections.push(
-          <g 
-            key={pairKey} 
-            className={`transition-opacity duration-200 ${
-              isConduitDimmed ? 'opacity-10' : isConduitActive ? 'opacity-100' : 'opacity-70'
-            }`}
-          >
-            {/* Outer Glow Halo for Active Signal Conduits */}
-            {isConduitActive && (
+        if (presentationState === 'background') {
+          // Subdued, static schematic trace line
+          connections.push(
+            <g key={pairKey} className="opacity-40 transition-opacity duration-200">
               <path
                 d={pathData}
                 fill="none"
-                stroke="#C3E54E"
-                strokeWidth={isDirectHoverConduit ? 5 : 3.5}
-                strokeOpacity={isDirectHoverConduit ? 0.75 : 0.4}
-                strokeLinecap="round"
-                className="transition-all duration-150"
+                stroke="rgba(21, 21, 15, 0.35)"
+                strokeWidth={1}
+                strokeDasharray="3 3"
               />
-            )}
+              <circle cx={startIso.x} cy={startIso.y} r={1.8} fill="#15150F" />
+              <circle cx={midIso.x} cy={midIso.y} r={2} fill="#15150F" />
+              <circle cx={endIso.x} cy={endIso.y} r={1.8} fill="#15150F" />
+            </g>
+          );
+          return;
+        }
 
-            {/* Background trace line */}
+        // Focused or Dragging state
+        connections.push(
+          <g 
+            key={pairKey} 
+            className="transition-opacity duration-200 opacity-100"
+          >
+            {/* Outer Glow Halo for Active Signal Conduits */}
             <path
               d={pathData}
               fill="none"
-              stroke={isConduitActive ? '#15150F' : 'rgba(21, 21, 15, 0.22)'}
-              strokeWidth={isConduitActive ? (isDirectHoverConduit ? 3 : 2.2) : 1}
-              strokeDasharray={isConduitActive ? 'none' : '4 4'}
+              stroke="#C3E54E"
+              strokeWidth={isDirectHover ? 5 : 3.5}
+              strokeOpacity={isDirectHover ? 0.75 : 0.45}
+              strokeLinecap="round"
+              className="transition-all duration-150"
+            />
+
+            {/* Main high-contrast trace line */}
+            <path
+              d={pathData}
+              fill="none"
+              stroke="#15150F"
+              strokeWidth={isDirectHover ? 3 : 2.2}
               className="transition-colors duration-150"
             />
 
             {/* Elastic spring tension halo if being actively dragged */}
-            {(isDraggingThisProj || isDraggingThisSkill) && (
+            {isDraggingState && (
               <path
                 d={pathData}
                 fill="none"
@@ -842,30 +694,28 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               />
             )}
 
-            {/* High-speed animated signal pulse if active */}
-            {isConduitActive && (
-              <path
-                d={pathData}
-                fill="none"
-                stroke={isDirectHoverConduit ? '#15150F' : '#C3E54E'}
-                strokeWidth={isDirectHoverConduit ? 2.5 : 1.8}
-                className={isDirectHoverConduit ? 'signal-conduit-fast' : 'signal-conduit'}
-              />
-            )}
+            {/* High-speed animated signal pulse */}
+            <path
+              d={pathData}
+              fill="none"
+              stroke={isDirectHover ? '#15150F' : '#C3E54E'}
+              strokeWidth={isDirectHover ? 2.5 : 1.8}
+              className={isDirectHover ? 'signal-conduit-fast' : 'signal-conduit'}
+            />
 
             {/* Anchor Port at Project Foundation */}
             <circle
               cx={startIso.x}
               cy={startIso.y}
-              r={isConduitActive ? 3.5 : 1.8}
-              fill={isConduitActive ? '#C3E54E' : '#15150F'}
+              r={3.5}
+              fill="#C3E54E"
               stroke="#15150F"
-              strokeWidth={isConduitActive ? 1.2 : 0.8}
+              strokeWidth={1.2}
             />
 
-            {/* Junction dot at midpoint with optional hover tag */}
+            {/* Junction dot at midpoint with tag */}
             <g>
-              {isDirectHoverConduit && (
+              {isDirectHover && (
                 <circle
                   cx={midIso.x}
                   cy={midIso.y}
@@ -880,17 +730,17 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               <circle
                 cx={midIso.x}
                 cy={midIso.y}
-                r={isConduitActive ? 4 : 2}
-                fill={isConduitActive ? (tension > 0.5 ? '#FF7B72' : '#C3E54E') : '#15150F'}
+                r={4}
+                fill={tension > 0.5 ? '#FF7B72' : '#C3E54E'}
                 stroke="#15150F"
-                strokeWidth={isConduitActive ? 1.2 : 0.9}
+                strokeWidth={1.2}
               />
-              {isDirectHoverConduit && (
+              {isDirectHover && (
                 <g transform={`translate(${midIso.x + 8}, ${midIso.y - 6})`}>
                   <rect
                     x="-2"
                     y="-8"
-                    width={skill.name.split(' ')[0].length * 6 + 14}
+                    width={coreTech.length * 6.5 + 14}
                     height="13"
                     fill="#15150F"
                     stroke="#C3E54E"
@@ -904,7 +754,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     fill="#C3E54E"
                     fontFamily="monospace"
                   >
-                    {skill.name.split(' ')[0].toUpperCase()}
+                    {coreTech.toUpperCase()}
                   </text>
                 </g>
               )}
@@ -914,10 +764,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             <circle
               cx={endIso.x}
               cy={endIso.y}
-              r={isConduitActive ? 3.5 : 1.8}
-              fill={isConduitActive ? '#C3E54E' : '#15150F'}
+              r={3.5}
+              fill="#C3E54E"
               stroke="#15150F"
-              strokeWidth={isConduitActive ? 1.2 : 0.8}
+              strokeWidth={1.2}
             />
           </g>
         );
@@ -931,7 +781,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     selectedSkillId, 
     hoveredSkillId, 
     traceModeActive,
-    isHoverFocus,
     projects,
     activeSkills,
     getProjectPos,
@@ -974,96 +823,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </div>
       )}
 
-      {/* PROFESSIONAL EXPERIENCE DOCK (Movable Viewport Overlay) */}
-      {groupedExperience.length > 0 && (
-        <div 
-          ref={dockRef}
-          style={{ left: `${dockPosition.x}px`, top: `${dockPosition.y}px` }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          className="absolute z-20 flex flex-col gap-1 select-none pointer-events-auto max-w-[calc(100vw-40px)] sm:max-w-md md:max-w-lg lg:max-w-xl transition-shadow"
-        >
-          {/* Header Bar */}
-          <div className="flex items-center justify-between px-2 py-1 bg-[#15150F] text-[#D4CDA4] text-[8px] font-mono font-bold tracking-widest border border-[#15150F] shadow-[2px_2px_0px_#15150F]">
-            {/* Dedicated Drag Handle */}
-            <div 
-              tabIndex={0}
-              role="button"
-              aria-label="Drag experience dock, or use arrow keys to reposition"
-              onKeyDown={handleDockKeyDown}
-              onPointerDown={handleDockPointerDown}
-              onPointerMove={handleDockPointerMove}
-              onPointerUp={handleDockPointerUp}
-              onPointerCancel={handleDockPointerCancel}
-              className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing select-none outline-none focus:ring-1 focus:ring-[#C3E54E] flex-1 py-0.5"
-            >
-              <span className="text-[#C3E54E]">⠿</span>
-              <span>PROFESSIONAL EXPERIENCE DOCK</span>
-              <span className="text-[7px] text-[#A8A48B] opacity-75 font-normal tracking-normal">[DRAG]</span>
-            </div>
-
-            {/* Controls: Career count + Independent Reset button */}
-            <div className="flex items-center gap-2 pl-2">
-              <span className="text-[7.5px] text-[#C3E54E] font-mono shrink-0">CAREER // {groupedExperience.length}</span>
-              {isDockMoved && (
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleResetDockPosition();
-                  }}
-                  className="text-[7px] bg-[#2A2920] text-[#C3E54E] hover:bg-[#C3E54E] hover:text-[#15150F] px-1.5 py-0.5 border border-[#15150F] transition-colors cursor-pointer shrink-0 font-bold"
-                  title="Reset dock to default position"
-                >
-                  RESET
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {groupedExperience.map((exp) => {
-              const isSelected = selectedExperienceId ? exp.groupedRoleIds.includes(selectedExperienceId) : false;
-              const isPromoted = Boolean(exp.promotionNote);
-              return (
-                <button
-                  key={exp.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (selectedExperienceId && exp.groupedRoleIds.includes(selectedExperienceId)) {
-                      onSelectExperience(selectedExperienceId);
-                    } else {
-                      onSelectExperience(exp.id);
-                    }
-                  }}
-                  className={`px-2.5 py-1 text-left font-mono border transition-all text-[9px] shrink-0 flex items-center gap-2 shadow-[2px_2px_0px_#15150F] cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#15150F] text-[#C3E54E] border-[#15150F] font-bold ring-1 ring-[#C3E54E]'
-                      : 'bg-[#D4CDA4] text-[#15150F] border-[#15150F] hover:bg-[#E2DCB9]'
-                  }`}
-                  title={`${exp.role} @ ${exp.organization} (${exp.yearRange})`}
-                >
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold uppercase tracking-tight text-[9px]">{exp.organization}</span>
-                      {isPromoted && (
-                        <span className="text-[6.5px] bg-[#C3E54E] text-[#15150F] px-1 font-bold">
-                          PROMOTED
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[7.5px] opacity-75 truncate max-w-[130px]">{exp.role}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
+      {/* Bottom-Left Controls & Status */}
       <div className="absolute bottom-3 left-3 pointer-events-none flex items-center gap-2 text-[9px] font-mono text-[#15150F] z-10">
         <div className="bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-t-2">
           <span className="font-bold">TECHNICAL CAPABILITIES // SYSTEM BACKBONE</span>
@@ -1078,16 +838,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           <Magnet size={10} />
           <span>GRID SNAP: {gridSnapEnabled ? 'ON (25PX)' : 'OFF'}</span>
         </button>
-        <button
-          onClick={() => setForceEngineActive(prev => !prev)}
-          className={`pointer-events-auto px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1 transition-colors ${
-            forceEngineActive ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F]'
-          }`}
-          title="Toggle Force-Directed Physics & Dynamic Conduit Spring Simulation"
-        >
-          <Zap size={10} />
-          <span>PHYSICS ENGINE: {forceEngineActive ? 'ACTIVE' : 'STATIC'}</span>
-        </button>
         {hasCustomPositions && (
           <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1">
             <Move size={10} />
@@ -1096,14 +846,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         )}
       </div>
 
+      {/* Top-Right Viewport & Dragging Telemetry */}
       <div className="absolute top-3 right-3 pointer-events-none flex items-center gap-2 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2.5 py-1 border border-[#15150F]">
         <span>X: {viewport.x} Y: {viewport.y}</span>
         <span className="text-[#5C5946]">|</span>
         <span>SCALE: {viewport.zoom.toFixed(2)}x</span>
-        <span className="text-[#5C5946]">|</span>
-        <span className={forceEngineActive ? 'text-[#15150F] font-bold bg-[#C3E54E] px-1' : 'text-[#7A755D]'}>
-          FORCE: {forceEngineActive ? (simulationEnergy > 0.5 ? `SPRING [${simulationEnergy.toFixed(1)} eV]` : 'EQUILIBRIUM') : 'MANUAL'}
-        </span>
         {draggingNode && (
           <>
             <span className="text-[#5C5946]">|</span>
@@ -1128,35 +875,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            runAutoEquilibrium();
+            handleAssemble();
           }}
-          disabled={isSimulatingEquilibrium}
-          className="px-2 h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F] disabled:opacity-50"
-          title="Auto-Equilibrium Harmonic Relaxation (Force-Directed Graph Solver)"
+          className="px-2 h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
+          title="Apply Deterministic Multi-Ring Schematic Layout"
         >
-          <Sparkles size={12} className={isSimulatingEquilibrium ? 'animate-spin' : ''} />
-          <span>{isSimulatingEquilibrium ? 'SOLVING...' : 'HARMONIZE'}</span>
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setForceEngineActive(prev => {
-              const next = !prev;
-              setSnapNotice({
-                message: next ? 'PHYSICS SPRING ENGINE: ENGAGED' : 'PHYSICS ENGINE: STATIC',
-                type: 'snap'
-              });
-              setTimeout(() => setSnapNotice(null), 1800);
-              return next;
-            });
-          }}
-          className={`w-8 h-8 border border-[#15150F] flex items-center justify-center transition-colors shadow-[2px_2px_0px_#15150F] ${
-            forceEngineActive ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F] hover:text-[#D4CDA4]'
-          }`}
-          title="Toggle Dynamic Spring Simulation"
-        >
-          <Zap size={13} />
+          <Layers size={12} />
+          <span>ASSEMBLE</span>
         </button>
 
         <button
@@ -1194,6 +919,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           </button>
         )}
 
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom + 0.2, 2.5) }));
+          }}
+          className="w-8 h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center text-[#D4CDA4] hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors"
+          title="Zoom In (+)"
+        >
+          <ZoomIn size={14} />
+        </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1421,7 +1156,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   fill={isSelected ? '#15150F' : isSkillConnected ? '#15150F' : '#3D3A2C'}
                   fontFamily="monospace"
                 >
-                  {skill.name.split(' ')[0]}
+                  {getCapabilityCoreTechnology(skill)}
                 </text>
                 <text
                   x={posIso.x}
@@ -1769,92 +1504,131 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 </g>
 
                 {/* High-Contrast Brutalist Callout Box */}
-                <g transform={`translate(${p3_top.x - 8}, ${p3_top.y - 30})`}>
-                  {/* Lead Line */}
-                  <line
-                    x1="8"
-                    y1="30"
-                    x2="8"
-                    y2="16"
-                    stroke={isHovered ? '#C3E54E' : '#15150F'}
-                    strokeWidth="1.2"
-                  />
-                  <circle cx="8" cy="30" r="2" fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'} />
+                {(() => {
+                  const titleLines = wrapCalloutTitle(project.title, 18, 2);
+                  const isTwoLines = titleLines.length > 1;
+                  const cardWidth = 132;
+                  const cardHeight = isTwoLines ? 38 : 28;
+                  const cardY = isTwoLines ? -15 : -12;
 
-                  {/* Callout Card Base (SOLID BLACK) */}
-                  <rect
-                    x="-4"
-                    y="-12"
-                    width="122"
-                    height="28"
-                    fill="#15150F"
-                    stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'}
-                    strokeWidth={isSelected || isHovered || isThisDragging ? '1.8' : '1'}
-                  />
-
-                  {/* Category Accent Stripe */}
-                  <rect
-                    x="-4"
-                    y="-12"
-                    width="3.5"
-                    height="28"
-                    fill={isHovered ? '#C3E54E' : project.accentColor}
-                  />
-
-                  {/* Text inside Callout */}
-                  <text
-                    x="5"
-                    y="-1"
-                    fontSize="8.5"
-                    fontWeight="bold"
-                    fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
-                    fontFamily="monospace"
-                  >
-                    {project.code} // {project.title}
-                  </text>
-                  <text
-                    x="5"
-                    y="10"
-                    fontSize="7"
-                    fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#9E997F'}
-                    fontFamily="monospace"
-                  >
-                    {isHovered && focusedConnectedSkillIds.size > 0 
-                      ? `${focusedConnectedSkillIds.size} ACTIVE CONDUITS` 
-                      : `${project.status} · ${project.year}`}
-                  </text>
-
-                  {/* Drill-in icon button */}
-                  {isSelected && (
-                    <g 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDrillIntoProject(project.id);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <rect
-                        x="98"
-                        y="-10"
-                        width="16"
-                        height="24"
-                        fill="#C3E54E"
-                        stroke="#15150F"
-                        strokeWidth="1"
+                  return (
+                    <g transform={`translate(${p3_top.x - 8}, ${p3_top.y - 30})`}>
+                      {/* Lead Line */}
+                      <line
+                        x1="8"
+                        y1="30"
+                        x2="8"
+                        y2="16"
+                        stroke={isHovered ? '#C3E54E' : '#15150F'}
+                        strokeWidth="1.2"
                       />
-                      <text
-                        x="106"
-                        y="6"
-                        textAnchor="middle"
-                        fontSize="10"
-                        fontWeight="bold"
+                      <circle cx="8" cy="30" r="2" fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'} />
+
+                      {/* Callout Card Base (SOLID BLACK) */}
+                      <rect
+                        x="-4"
+                        y={cardY}
+                        width={cardWidth}
+                        height={cardHeight}
                         fill="#15150F"
+                        stroke={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#15150F'}
+                        strokeWidth={isSelected || isHovered || isThisDragging ? '1.8' : '1'}
+                      />
+
+                      {/* Category Accent Stripe */}
+                      <rect
+                        x="-4"
+                        y={cardY}
+                        width="3.5"
+                        height={cardHeight}
+                        fill={isHovered ? '#C3E54E' : project.accentColor}
+                      />
+
+                      {/* Text inside Callout */}
+                      {/* Line 1: Code */}
+                      <text
+                        x="5"
+                        y={isTwoLines ? -6 : -2}
+                        fontSize="7"
+                        fontWeight="bold"
+                        fill="#8C8870"
+                        fontFamily="monospace"
                       >
-                        →
+                        {project.code}
                       </text>
+
+                      {/* Line 2: Title Line 1 */}
+                      <text
+                        x="5"
+                        y={isTwoLines ? 3 : 7}
+                        fontSize="8"
+                        fontWeight="bold"
+                        fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
+                        fontFamily="monospace"
+                      >
+                        {titleLines[0]}
+                      </text>
+
+                      {/* Line 3 (if two lines): Title Line 2 */}
+                      {isTwoLines && (
+                        <text
+                          x="5"
+                          y="12"
+                          fontSize="8"
+                          fontWeight="bold"
+                          fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
+                          fontFamily="monospace"
+                        >
+                          {titleLines[1]}
+                        </text>
+                      )}
+
+                      {/* Status & Year line */}
+                      <text
+                        x="5"
+                        y={isTwoLines ? 19 : 14}
+                        fontSize="6.5"
+                        fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
+                        fontFamily="monospace"
+                      >
+                        {isHovered && focusedConnectedSkillIds.size > 0 
+                          ? `${focusedConnectedSkillIds.size} ACTIVE CONDUITS` 
+                          : `${project.status} · ${project.year}`}
+                      </text>
+
+                      {/* Drill-in icon button */}
+                      {isSelected && (
+                        <g 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDrillIntoProject(project.id);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <rect
+                            x={cardWidth - 24}
+                            y={cardY + 2}
+                            width="18"
+                            height={cardHeight - 4}
+                            fill="#C3E54E"
+                            stroke="#15150F"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={cardWidth - 15}
+                            y={cardY + cardHeight / 2 + 3}
+                            textAnchor="middle"
+                            fontSize="10"
+                            fontWeight="bold"
+                            fill="#15150F"
+                          >
+                            →
+                          </text>
+                        </g>
+                      )}
                     </g>
-                  )}
-                </g>
+                  );
+                })()}
               </g>
             );
           })}
@@ -1868,7 +1642,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           className="absolute top-12 left-4 z-30 w-76 bg-[#D4CDA4] border-2 border-[#15150F] p-3 pointer-events-none select-none shadow-[3px_3px_0px_#15150F] animate-in fade-in duration-150"
         >
           {(() => {
-            const p = PROJECTS.find(item => item.id === hoveredProjectId);
+            const p = projects.find(item => item.id === hoveredProjectId);
             if (!p) return null;
             return (
               <div className="flex flex-col gap-1.5 font-mono text-[10px]">
@@ -1885,7 +1659,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 <div className="flex items-center justify-between bg-[#15150F] text-[#C3E54E] px-2 py-1 text-[8.5px] font-bold">
                   <span>SIGNAL CONDUITS:</span>
                   <span className="flex items-center gap-1">
-                    <Zap size={10} />
+                    <Activity size={10} />
                     {focusedConnectedSkillIds.size} ACTIVE CHANNELS
                   </span>
                 </div>

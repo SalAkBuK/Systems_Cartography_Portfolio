@@ -471,27 +471,25 @@ test('22. Technical Capabilities and Experience views support neutral tab switch
   assert.ok(!appContent.includes("setSelectedExperienceId(experience[0].id)"), 'Must not auto-select first employer on navigation switch');
 });
 
-test('23. Experience dock default position avoids collision with top-left application title badge', async () => {
+test('23. Experience dock is removed from TopologyCanvas to prevent canvas clutter', async () => {
   const fs = await import('fs');
   const path = await import('path');
   const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
 
-  // Assert default position is y >= 48 so it does not overlap the top-left title badge (y: 12-28)
-  assert.ok(topologyContent.includes("DEFAULT_DOCK_POSITION = { x: 14, y: 52 }"), 'Dock default position must be y: 52 to avoid top-left label collision');
+  // Assert dock position states and localStorage keys are removed from TopologyCanvas
+  assert.ok(!topologyContent.includes("DEFAULT_DOCK_POSITION"), 'Dock default position state must be removed');
+  assert.ok(!topologyContent.includes("sys_cartography_experience_dock_position"), 'Dock localStorage key must be removed');
 });
 
-test('24. Experience dock drag handle is isolated and RESET button is independently clickable', async () => {
+test('24. Experience dock markup is removed while TECHNICAL CAPABILITIES label remains', async () => {
   const fs = await import('fs');
   const path = await import('path');
   const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
 
-  // Assert dock container stops pointer/mouse/touch propagation
-  assert.ok(topologyContent.includes("onPointerDown={(e) => e.stopPropagation()}"), 'Dock container must stop pointer propagation');
-  assert.ok(topologyContent.includes("onMouseDown={(e) => e.stopPropagation()}"), 'Dock container must stop mouse propagation');
-
-  // Assert RESET button is not inside a button drag handle
-  assert.ok(topologyContent.includes("handleResetDockPosition()"), 'RESET button must trigger handleResetDockPosition independently');
-  assert.ok(topologyContent.includes("TECHNICAL CAPABILITIES // SYSTEM BACKBONE"), 'Bottom label must be renamed to TECHNICAL CAPABILITIES // SYSTEM BACKBONE');
+  // Assert dock container markup is removed from canvas
+  assert.ok(!topologyContent.includes("PROFESSIONAL EXPERIENCE DOCK"), 'Experience dock markup must be removed from canvas');
+  assert.ok(!topologyContent.includes("handleResetDockPosition"), 'Dock reset handler must be removed');
+  assert.ok(topologyContent.includes("TECHNICAL CAPABILITIES // SYSTEM BACKBONE"), 'Bottom label TECHNICAL CAPABILITIES // SYSTEM BACKBONE must remain');
 });
 
 test('25. Synthetic capability connection fallback is removed and unmatched projects have empty infrastructureDeps', async () => {
@@ -591,15 +589,15 @@ test('27. groupExperienceByProgression centralizes grouping with organization te
   assert.equal(grouped[1].linkedSystemsCount, 0);
 });
 
-test('28. Movable Experience Dock and RightInspectorPanel consume the same groupExperienceByProgression helper', async () => {
+test('28. RightInspectorPanel consumes groupExperienceByProgression helper while TopologyCanvas keeps clean canvas', async () => {
   const fs = await import('fs');
   const path = await import('path');
   const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const panelContent = fs.readFileSync(path.resolve('src/components/RightInspectorPanel.tsx'), 'utf8');
 
-  // Verify both components import and use groupExperienceByProgression
-  assert.ok(topologyContent.includes("groupExperienceByProgression"), 'TopologyCanvas must import and use groupExperienceByProgression');
+  // Verify RightInspectorPanel imports and uses groupExperienceByProgression
   assert.ok(panelContent.includes("groupExperienceByProgression"), 'RightInspectorPanel must import and use groupExperienceByProgression');
+  assert.ok(!topologyContent.includes("groupedExperience"), 'TopologyCanvas must not retain dock grouping state');
 
   // Verify Experience Index UI elements
   assert.ok(panelContent.includes("PROFESSIONAL EXPERIENCE INDEX"), 'Panel must render PROFESSIONAL EXPERIENCE INDEX');
