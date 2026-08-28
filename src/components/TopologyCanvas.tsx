@@ -1505,7 +1505,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
                 {/* High-Contrast Brutalist Callout Box */}
                 {(() => {
-                  const titleLines = wrapCalloutTitle(project.title, 18, 2);
+                  const titleLines = wrapCalloutTitle(project.title, 20, 2);
                   const isTwoLines = titleLines.length > 1;
                   const cardWidth = 132;
                   const cardHeight = isTwoLines ? 38 : 28;

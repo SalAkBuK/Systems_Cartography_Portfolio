@@ -81,18 +81,18 @@ export function getConduitPresentationState(params: ConduitStateParams): Conduit
  */
 export function wrapCalloutTitle(
   title: string,
-  maxCharsPerLine: number = 19,
+  maxCharsPerLine: number = 20,
   maxLines: number = 2
 ): string[] {
   if (!title || typeof title !== 'string') return [''];
   const trimmed = title.trim();
   if (trimmed.length <= maxCharsPerLine) return [trimmed];
 
-  // Tokenize by spaces, hyphens, and underscores, preserving delimiters
-  const rawTokens = trimmed.split(/([ -_])/).filter(Boolean);
+  // Tokenize by spaces, hyphens, and underscores using safe delimiter regex
+  const rawTokens = trimmed.split(/([ \-_])/).filter(Boolean);
   const tokens: string[] = [];
 
-  // Group delimiter with previous word if applicable (e.g. "towerdesk-", "backend-")
+  // Group delimiter with previous word if applicable (e.g. "towerdesk-", "backend_")
   for (let i = 0; i < rawTokens.length; i++) {
     const t = rawTokens[i];
     if ((t === '-' || t === '_' || t === ' ') && tokens.length > 0) {
@@ -113,29 +113,30 @@ export function wrapCalloutTitle(
       if (currentLine.trim()) {
         lines.push(currentLine.trim());
         currentLine = '';
-        if (lines.length === maxLines) break;
-      }
-
-      let remaining = token;
-      while (remaining.length > 0) {
-        if (lines.length === maxLines - 1) {
-          if (remaining.length > maxCharsPerLine) {
-            lines.push(remaining.slice(0, maxCharsPerLine - 1) + '…');
-          } else {
-            lines.push(remaining);
-          }
-          break;
-        } else {
-          lines.push(remaining.slice(0, maxCharsPerLine));
-          remaining = remaining.slice(maxCharsPerLine);
-          if (lines.length === maxLines) break;
-        }
       }
       if (lines.length === maxLines) break;
+
+      // Slice the oversized token across available lines
+      let rem = token;
+      while (rem.length > 0 && lines.length < maxLines) {
+        if (lines.length === maxLines - 1) {
+          // Last line: truncate with ellipsis if necessary
+          if (rem.length > maxCharsPerLine) {
+            lines.push(rem.slice(0, maxCharsPerLine - 1) + '…');
+          } else {
+            lines.push(rem);
+          }
+          rem = '';
+          break;
+        } else {
+          lines.push(rem.slice(0, maxCharsPerLine));
+          rem = rem.slice(maxCharsPerLine);
+        }
+      }
       continue;
     }
 
-    const candidate = currentLine + token;
+    const candidate = currentLine ? `${currentLine}${token}` : token;
     if (candidate.length <= maxCharsPerLine) {
       currentLine = candidate;
     } else {
@@ -176,18 +177,44 @@ export interface AssembledTopologyPositions {
   skillPositions: Record<string, { x: number; y: number }>;
 }
 
+interface PlacedNodeBox {
+  id: string;
+  type: 'project' | 'skill';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
- * Computes an instant, deterministic schematic layout.
+ * Checks AABB collision between two node bounding boxes on the ground drafting plane.
+ */
+function boxesOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+  margin: number = 10
+): boolean {
+  return (
+    a.x - margin < b.x + b.width &&
+    a.x + a.width + margin > b.x &&
+    a.y - margin < b.y + b.height &&
+    a.y + a.height + margin > b.y
+  );
+}
+
+/**
+ * Computes an instant, deterministic, and collision-safe schematic layout.
  *
  * Hierarchy:
- * - Capabilities: Inner core backbone rings
- * - Projects: Outer concentric system rings
+ * - Capabilities: Inner core backbone rings (expanding as capacity requires)
+ * - Projects: Outer concentric system rings (strictly outside the entire capability core)
  *
  * Guarantees:
- * - Deterministic output: same input nodes always yield identical coordinates.
+ * - Deterministic output: identical inputs produce identical coordinates.
  * - Stable sorting: input array ordering changes do NOT change coordinates.
- * - Dynamic scaling: accommodates varying repository and capability counts.
- * - Grid-snapped and collision-safe spacing.
+ * - Dynamic scaling: calculates capacity per ring and dynamically adds rings as needed.
+ * - Collision-safe: verifies bounding-box clearance against all placed nodes.
+ * - Grid-snapped: all node x/y coordinates are multiples of GRID_SNAP_STEP.
  * - 0 animation frames / 0 physics relaxation needed.
  */
 export function assembleTopologyLayout(
@@ -196,6 +223,9 @@ export function assembleTopologyLayout(
 ): AssembledTopologyPositions {
   const projectPositions: Record<string, { x: number; y: number }> = {};
   const skillPositions: Record<string, { x: number; y: number }> = {};
+  const placedBoxes: PlacedNodeBox[] = [];
+
+  const snap = (val: number, step: number = GRID_SNAP_STEP) => (Math.round(val / step) * step) || 0;
 
   // 1. Stable Sort: Skills (code -> name -> id)
   const sortedSkills = [...skills].sort((a, b) => {
@@ -215,120 +245,123 @@ export function assembleTopologyLayout(
     return a.id.localeCompare(b.id);
   });
 
-  const snap = (val: number, step: number = GRID_SNAP_STEP) => Math.round(val / step) * step;
-
-  // 3. Layout Capabilities (Inner Core Backbone)
+  // 3. Layout Capabilities (Inner Core Backbone Rings)
   const totalSkills = sortedSkills.length;
-  if (totalSkills > 0) {
-    if (totalSkills <= 6) {
-      // Single inner ring
-      const rx = 90;
-      const ry = 65;
-      sortedSkills.forEach((skill, idx) => {
-        const angle = (idx / totalSkills) * Math.PI * 2 - Math.PI / 2;
+  let maxCapabilityRadius = 0;
+  let maxCapabilityRx = 0;
+  let maxCapabilityRy = 0;
+
+  if (totalSkills === 1) {
+    // Single capability at center
+    const skill = sortedSkills[0];
+    const pos = { x: 0, y: 0 };
+    skillPositions[skill.id] = pos;
+    placedBoxes.push({ id: skill.id, type: 'skill', x: pos.x, y: pos.y, width: 48, height: 48 });
+    maxCapabilityRadius = 35;
+    maxCapabilityRx = 35;
+    maxCapabilityRy = 35;
+  } else if (totalSkills > 1) {
+    let unplacedSkills = [...sortedSkills];
+    let ringIndex = 0;
+    let rx = 90;
+    let ry = 65;
+
+    while (unplacedSkills.length > 0) {
+      // Approximate ellipse perimeter = 2 * PI * sqrt((rx^2 + ry^2) / 2)
+      const perimeter = 2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2);
+      // Capability footprint is 48x48; with clearance ~75px per node along perimeter
+      const capacity = Math.max(3, Math.floor(perimeter / 75));
+      const batchCount = Math.min(unplacedSkills.length, capacity);
+      const batch = unplacedSkills.slice(0, batchCount);
+      unplacedSkills = unplacedSkills.slice(batchCount);
+
+      const angleStagger = ringIndex > 0 ? (ringIndex * Math.PI) / batchCount : 0;
+
+      for (let i = 0; i < batch.length; i++) {
+        const skill = batch[i];
+        const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
         const rawX = Math.cos(angle) * rx;
         const rawY = Math.sin(angle) * ry;
-        skillPositions[skill.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
-    } else {
-      // Multi-ring capability core (Inner Ring: 6, Outer Capability Ring: remainder)
-      const innerCount = Math.min(6, Math.ceil(totalSkills * 0.45));
-      const outerCount = totalSkills - innerCount;
 
-      sortedSkills.slice(0, innerCount).forEach((skill, idx) => {
-        const angle = (idx / innerCount) * Math.PI * 2 - Math.PI / 2;
-        const rawX = Math.cos(angle) * 75;
-        const rawY = Math.sin(angle) * 55;
-        skillPositions[skill.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
+        let candX = snap(rawX);
+        let candY = snap(rawY);
+        let candBox = { x: candX, y: candY, width: 48, height: 48 };
 
-      sortedSkills.slice(innerCount).forEach((skill, idx) => {
-        const angle = (idx / outerCount) * Math.PI * 2 - Math.PI / 2 + Math.PI / outerCount;
-        const rawX = Math.cos(angle) * 140;
-        const rawY = Math.sin(angle) * 105;
-        skillPositions[skill.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
+        // Deterministic collision deflection if snapped box overlaps placed nodes
+        let step = 0;
+        while (placedBoxes.some(box => boxesOverlap(candBox, box, 12)) && step < 50) {
+          step++;
+          candX = snap(rawX + Math.cos(angle) * (step * GRID_SNAP_STEP));
+          candY = snap(rawY + Math.sin(angle) * (step * GRID_SNAP_STEP));
+          candBox = { x: candX, y: candY, width: 48, height: 48 };
+        }
+
+        skillPositions[skill.id] = { x: candX, y: candY };
+        placedBoxes.push({ id: skill.id, type: 'skill', x: candX, y: candY, width: 48, height: 48 });
+
+        const dist = Math.hypot(candX + 24, candY + 24);
+        if (dist > maxCapabilityRadius) maxCapabilityRadius = dist;
+        if (Math.abs(candX) > maxCapabilityRx) maxCapabilityRx = Math.abs(candX);
+        if (Math.abs(candY) > maxCapabilityRy) maxCapabilityRy = Math.abs(candY);
+      }
+
+      // Expand to next capability ring
+      rx += 80;
+      ry += 60;
+      ringIndex++;
     }
   }
 
-  // 4. Layout Projects (Outer Concentric Rings)
+  // 4. Layout Projects (Outer Concentric Rings strictly outside capability region)
   const totalProjects = sortedProjects.length;
   if (totalProjects > 0) {
-    if (totalProjects <= 8) {
-      // Single outer project ring
-      const rx = 260;
-      const ry = 190;
-      sortedProjects.forEach((proj, idx) => {
-        const angle = (idx / totalProjects) * Math.PI * 2 - Math.PI / 2;
-        const rawX = Math.cos(angle) * rx;
-        const rawY = Math.sin(angle) * ry;
-        projectPositions[proj.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
-    } else if (totalProjects <= 16) {
-      // Two concentric project rings
-      const ring1Count = Math.ceil(totalProjects * 0.5);
-      const ring2Count = totalProjects - ring1Count;
+    let unplacedProjects = [...sortedProjects];
+    let projectRingIndex = 0;
 
-      sortedProjects.slice(0, ring1Count).forEach((proj, idx) => {
-        const angle = (idx / ring1Count) * Math.PI * 2 - Math.PI / 2;
-        const rawX = Math.cos(angle) * 250;
-        const rawY = Math.sin(angle) * 185;
-        projectPositions[proj.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
+    // Start project rings outside the entire capability core plus clearance buffer
+    let projRx = Math.max(260, maxCapabilityRx + 160);
+    let projRy = Math.max(185, maxCapabilityRy + 120);
 
-      sortedProjects.slice(ring1Count).forEach((proj, idx) => {
-        const angle = (idx / ring2Count) * Math.PI * 2 - Math.PI / 2 + Math.PI / ring2Count;
-        const rawX = Math.cos(angle) * 375;
-        const rawY = Math.sin(angle) * 275;
-        projectPositions[proj.id] = {
-          x: snap(rawX),
-          y: snap(rawY)
-        };
-      });
-    } else {
-      // Three concentric project rings for large repositories (e.g. 20+ projects)
-      const ring1Count = 8;
-      const ring2Count = 10;
-      const ring3Count = totalProjects - ring1Count - ring2Count;
+    while (unplacedProjects.length > 0) {
+      const perimeter = 2 * Math.PI * Math.sqrt((projRx * projRx + projRy * projRy) / 2);
+      // Project footprint width is (dim.width * 0.75) ~75px, depth 55px; safe perimeter spacing ~135px
+      const capacity = Math.max(4, Math.floor(perimeter / 135));
+      const batchCount = Math.min(unplacedProjects.length, capacity);
+      const batch = unplacedProjects.slice(0, batchCount);
+      unplacedProjects = unplacedProjects.slice(batchCount);
 
-      sortedProjects.slice(0, ring1Count).forEach((proj, idx) => {
-        const angle = (idx / ring1Count) * Math.PI * 2 - Math.PI / 2;
-        projectPositions[proj.id] = {
-          x: snap(Math.cos(angle) * 240),
-          y: snap(Math.sin(angle) * 180)
-        };
-      });
+      const angleStagger = (projectRingIndex * Math.PI) / 6;
 
-      sortedProjects.slice(ring1Count, ring1Count + ring2Count).forEach((proj, idx) => {
-        const angle = (idx / ring2Count) * Math.PI * 2 - Math.PI / 2 + Math.PI / ring2Count;
-        projectPositions[proj.id] = {
-          x: snap(Math.cos(angle) * 360),
-          y: snap(Math.sin(angle) * 265)
-        };
-      });
+      for (let i = 0; i < batch.length; i++) {
+        const proj = batch[i];
+        const pWidth = (proj.dimensions?.width || 100) * 0.75;
+        const pHeight = 55;
 
-      sortedProjects.slice(ring1Count + ring2Count).forEach((proj, idx) => {
-        const angle = (idx / Math.max(ring3Count, 1)) * Math.PI * 2 - Math.PI / 2;
-        projectPositions[proj.id] = {
-          x: snap(Math.cos(angle) * 480),
-          y: snap(Math.sin(angle) * 350)
-        };
-      });
+        const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
+        const rawX = Math.cos(angle) * projRx;
+        const rawY = Math.sin(angle) * projRy;
+
+        let candX = snap(rawX);
+        let candY = snap(rawY);
+        let candBox = { x: candX, y: candY, width: pWidth, height: pHeight };
+
+        // Deterministic collision deflection if snapped box overlaps any placed node
+        let step = 0;
+        while (placedBoxes.some(box => boxesOverlap(candBox, box, 15)) && step < 60) {
+          step++;
+          candX = snap(rawX + Math.cos(angle) * (step * GRID_SNAP_STEP));
+          candY = snap(rawY + Math.sin(angle) * (step * GRID_SNAP_STEP));
+          candBox = { x: candX, y: candY, width: pWidth, height: pHeight };
+        }
+
+        projectPositions[proj.id] = { x: candX, y: candY };
+        placedBoxes.push({ id: proj.id, type: 'project', x: candX, y: candY, width: pWidth, height: pHeight });
+      }
+
+      // Expand to next concentric project ring
+      projRx += 140;
+      projRy += 105;
+      projectRingIndex++;
     }
   }
 
