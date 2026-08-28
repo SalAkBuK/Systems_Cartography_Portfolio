@@ -243,8 +243,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
     ]
   },
   {
-    organizationId: 'independent-freelance',
-    organizationName: 'Independent / Freelance',
+    organizationId: 'salakbuk-independent-freelance',
     provenance: 'CURATED',
     technologies: [
       'Next.js',
@@ -266,7 +265,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
             name: 'Public Web Experience',
             role: 'Public-facing informational and consultation interface with responsive UI animations.',
             tech: ['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'GSAP'],
-            status: 'DELIVERED',
+            status: 'IMPLEMENTED',
             repositoryUrl: 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3',
             provenance: 'VERIFIED'
           },
@@ -274,7 +273,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
             name: 'Contact / Consultation Email Flow',
             role: 'Server-side form submission and SMTP email delivery.',
             tech: ['Next.js Route Handlers', 'Nodemailer', 'TypeScript'],
-            status: 'DELIVERED',
+            status: 'IMPLEMENTED',
             repositoryUrl: 'https://github.com/SalAkBuK/psych-websites/tree/main/website-3',
             provenance: 'VERIFIED'
           }
@@ -292,8 +291,8 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
     ],
     engineeringContributions: [
       {
-        title: 'Responsive Client Web Application Delivery',
-        description: 'Built and delivered responsive Next.js web application with structured informational sections, accessible navigation, and custom UI transitions.',
+        title: 'Responsive Client Web Application Implementation',
+        description: 'Implemented a responsive Next.js web application with structured informational sections, responsive navigation, and custom UI transitions.',
         provenance: 'VERIFIED'
       },
       {
