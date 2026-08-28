@@ -1204,3 +1204,181 @@ test('54. ownerAdditionalExperience.ts has clean UTF-8 encoding without BOM', as
   const hasBom = buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
   assert.equal(hasBom, false, 'src/data/ownerAdditionalExperience.ts must NOT have a UTF-8 BOM');
 });
+
+test('55. getExperienceChronologyKey extracts conservative single-year keys for same-calendar-year ranges', async () => {
+  const { getExperienceChronologyKey } = await import('../src/services/experienceResolver');
+
+  const structuredSameYear: any = {
+    startDate: '2025-10',
+    endDate: '2025-11',
+    yearRange: 'October 2025 - November 2025'
+  };
+  assert.equal(getExperienceChronologyKey(structuredSameYear), '2025');
+
+  const stringSameYear: any = {
+    yearRange: 'October 2025 - November 2025'
+  };
+  assert.equal(getExperienceChronologyKey(stringSameYear), '2025');
+
+  const yearOnly: any = {
+    yearRange: '2025'
+  };
+  assert.equal(getExperienceChronologyKey(yearOnly), '2025');
+});
+
+test('56. getExperienceChronologyKey keeps cross-year, present, and distinct calendar years separated', async () => {
+  const { getExperienceChronologyKey } = await import('../src/services/experienceResolver');
+
+  const crossYearStructured: any = {
+    startDate: '2024-10',
+    endDate: '2025-02',
+    yearRange: 'October 2024 - February 2025'
+  };
+  assert.equal(getExperienceChronologyKey(crossYearStructured), '2024:2025');
+
+  const crossYearString: any = {
+    yearRange: '2024 - 2025'
+  };
+  assert.equal(getExperienceChronologyKey(crossYearString), '2024:2025');
+
+  const presentStructured: any = {
+    startDate: '2025-10',
+    endDate: null,
+    yearRange: 'October 2025 - Present'
+  };
+  assert.equal(getExperienceChronologyKey(presentStructured), '2025:PRESENT');
+
+  const presentString: any = {
+    yearRange: '2025 - Present'
+  };
+  assert.equal(getExperienceChronologyKey(presentString), '2025:PRESENT');
+
+  const differentYear: any = {
+    yearRange: '2024'
+  };
+  assert.equal(getExperienceChronologyKey(differentYear), '2024');
+});
+
+test('57. Realistic LinkedIn re-import: Month-dated imported AOK role deduplicates with persistent 2025 record and retains evidence routing', () => {
+  const importedAokRole: ExperienceNode = {
+    id: 'exp-04-independent-freelance-freelance-web-developer',
+    code: 'EXP-04',
+    organization: 'Independent / Freelance',
+    role: 'Freelance Web Developer',
+    yearRange: 'October 2025 - November 2025',
+    location: 'Islamabad, Pakistan',
+    systemDomain: 'Client Web Delivery',
+    keyOutputs: ['Built client website with Next.js and Nodemailer.'],
+    systemsArchitected: [],
+    technologies: ['Next.js', 'React', 'TypeScript'],
+    gridPosition: { x: 280, y: -40 },
+    provenance: 'CURATED',
+    startDate: '2025-10',
+    endDate: '2025-11',
+    progressionGroup: undefined,
+    progressionOrder: undefined
+  };
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: [importedAokRole],
+    ownerGithubTarget: 'https://github.com/SalAkBuK'
+  });
+
+  assert.equal(resolved.length, 1, 'Only one AOK freelance record should be emitted');
+  
+  // Imported base identity wins
+  const role = resolved[0];
+  assert.equal(role.id, 'exp-04-independent-freelance-freelance-web-developer', 'Imported ID wins');
+  assert.equal(role.yearRange, 'October 2025 - November 2025', 'Imported precise yearRange wins');
+  assert.equal(role.startDate, '2025-10', 'Imported startDate wins');
+  assert.equal(role.endDate, '2025-11', 'Imported endDate wins');
+  assert.equal(role.location, 'Islamabad, Pakistan', 'Imported location wins');
+  assert.equal(role.keyOutputs[0], 'Built client website with Next.js and Nodemailer.', 'Imported keyOutputs win');
+
+  // Persistent routing metadata survives
+  assert.equal(role.progressionGroup, 'salakbuk-independent-freelance', 'Persistent progressionGroup survives to route evidence');
+  assert.equal(role.progressionOrder, 1, 'Persistent progressionOrder survives');
+
+  // Evidence attaches correctly via persistent progressionGroup
+  assert.ok(role.systemsDelivered && role.systemsDelivered.length === 1, 'Delivered systems must attach to imported AOK record');
+  assert.equal(role.systemsDelivered[0].name, 'AOK Health Solutions Website');
+  assert.ok(role.evidenceLinks && role.evidenceLinks.some(l => l.url.includes('website-3')));
+});
+
+test('58. Cross-year imported role does NOT deduplicate with persistent single-year 2025 record', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+  const { ADDITIONAL_OWNER_EXPERIENCE } = await import('../src/data/ownerAdditionalExperience');
+
+  const crossYearImport: ExperienceNode = {
+    id: 'exp-imp-cross-year',
+    code: 'EXP-01',
+    organization: 'Independent / Freelance',
+    role: 'Freelance Web Developer',
+    yearRange: 'October 2024 - February 2025',
+    location: 'Client Engagement',
+    systemDomain: 'Client Web Delivery',
+    keyOutputs: ['Cross-year engagement.'],
+    systemsArchitected: [],
+    technologies: ['React'],
+    gridPosition: { x: 0, y: 0 },
+    provenance: 'CURATED',
+    startDate: '2024-10',
+    endDate: '2025-02'
+  };
+
+  const merged = mergeExperienceSources([crossYearImport], ADDITIONAL_OWNER_EXPERIENCE);
+  assert.equal(merged.length, 2, 'Cross-year role and single-year 2025 role must both survive without collision');
+  assert.ok(merged.some(e => e.id === 'exp-imp-cross-year'));
+  assert.ok(merged.some(e => e.id === 'exp-freelance-aok-health-solutions'));
+});
+
+test('59. Current imported role (endDate: null) does NOT deduplicate with historical 2025 record', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+  const { ADDITIONAL_OWNER_EXPERIENCE } = await import('../src/data/ownerAdditionalExperience');
+
+  const currentImport: ExperienceNode = {
+    id: 'exp-imp-current',
+    code: 'EXP-01',
+    organization: 'Independent / Freelance',
+    role: 'Freelance Web Developer',
+    yearRange: 'October 2025 - Present',
+    location: 'Client Engagement',
+    systemDomain: 'Client Web Delivery',
+    keyOutputs: ['Ongoing freelance engagement.'],
+    systemsArchitected: [],
+    technologies: ['React'],
+    gridPosition: { x: 0, y: 0 },
+    provenance: 'CURATED',
+    startDate: '2025-10',
+    endDate: null
+  };
+
+  const merged = mergeExperienceSources([currentImport], ADDITIONAL_OWNER_EXPERIENCE);
+  assert.equal(merged.length, 2, 'Ongoing role (PRESENT) and historical 2025 role must both survive without collision');
+});
+
+test('60. Different historical year does NOT deduplicate with 2025 record', async () => {
+  const { mergeExperienceSources } = await import('../src/services/experienceResolver');
+  const { ADDITIONAL_OWNER_EXPERIENCE } = await import('../src/data/ownerAdditionalExperience');
+
+  const year2024Import: ExperienceNode = {
+    id: 'exp-imp-2024',
+    code: 'EXP-01',
+    organization: 'Independent / Freelance',
+    role: 'Freelance Web Developer',
+    yearRange: '2024',
+    location: 'Client Engagement',
+    systemDomain: 'Client Web Delivery',
+    keyOutputs: ['2024 engagement.'],
+    systemsArchitected: [],
+    technologies: ['React'],
+    gridPosition: { x: 0, y: 0 },
+    provenance: 'CURATED',
+    startDate: '2024-01',
+    endDate: '2024-12'
+  };
+
+  const merged = mergeExperienceSources([year2024Import], ADDITIONAL_OWNER_EXPERIENCE);
+  assert.equal(merged.length, 2, '2024 role and 2025 role must both survive without collision');
+});
+
