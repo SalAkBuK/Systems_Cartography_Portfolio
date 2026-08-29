@@ -20,13 +20,15 @@ import {
   deriveDockState,
   resolveReleaseOutcome,
   stepSettleTransition,
+  isDetachedPlacementMotionSafe,
+  ORBITAL_CLEARANCE_SAMPLE_COUNT,
   type ProjectDockRuntimeMap,
 } from '../src/utils/projectDocking.ts';
 import { project3DToIso } from '../src/utils/isometricProjection.ts';
-import { getTopologyProjectDimensions } from '../src/utils/projectTopologyGeometry.ts';
+import { getTopologyProjectDimensions, getTopologyProjectVisualBounds } from '../src/utils/projectTopologyGeometry.ts';
 import { assembleTopologyLayout, getNodeBounds, checkAABBOverlap } from '../src/utils/topologyLayout.ts';
 import { getOrbitalProjectPositionAtPhase, isOrbitPauseConditionActive, type OrbitPauseState } from '../src/utils/orbitMotion.ts';
-import { checkCollisions } from '../src/utils/collision.ts';
+import { checkCollisions, findNearestValidGridPosition } from '../src/utils/collision.ts';
 import { GITHUB_SNAPSHOT } from '../src/data/githubSnapshot.generated.ts';
 import { ProjectData, InfrastructureSkill } from '../src/types.ts';
 
@@ -459,4 +461,190 @@ test('real committed snapshot: redock target for any project resolves to that pr
 test('real committed snapshot: ASSEMBLE source path clears dock-runtime state for all projects (18/18 return to canonical membership)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   assert.ok(content.includes('setProjectDockState({});'), 'The canonical-restore routine must clear the ENTIRE dock-runtime map at once (not per-project), covering all 18 real projects uniformly');
+});
+
+// ---------------------------------------------------------------------------
+// Issue 1 (review round 2): no new node drag may begin during an active
+// settle transition — one node interaction/settle transition at a time.
+// ---------------------------------------------------------------------------
+
+test('TopologyCanvas.tsx: all four node drag-start handlers (skill mouse/touch, project mouse/touch) check activeDockTransitionProjectId before starting a drag', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const starts = [...content.matchAll(/on(?:MouseDown|TouchStart)=\{\(e\) => \{/g)];
+  assert.ok(starts.length >= 4, 'expected at least the four inline node drag-start handlers (canvas pan uses named function references, not inline arrows, so it is not counted here)');
+
+  let guardedHandlerCount = 0;
+  for (const match of starts) {
+    const idx = match.index!;
+    const window = content.slice(idx, idx + 700);
+    const setDraggingIdx = window.indexOf('setDraggingNode(');
+    if (setDraggingIdx === -1) continue; // not a drag-start handler
+    const guardIdx = window.indexOf('if (activeDockTransitionProjectId) return;');
+    assert.ok(guardIdx !== -1 && guardIdx < setDraggingIdx, `Drag-start handler at file offset ${idx} must check activeDockTransitionProjectId BEFORE calling setDraggingNode`);
+    guardedHandlerCount++;
+  }
+  assert.equal(guardedHandlerCount, 4, 'Exactly four node drag-start handlers must exist and all must be guarded');
+});
+
+test('deriveDockState/architecture: settle transitions and draggingNode are mutually exclusive by construction (only one node interaction exists at a time)', () => {
+  // This is an architectural invariant proven by the source guard above plus
+  // the fact that starting a settle transition (startSettleTransition) is
+  // only ever called from the release path AFTER setDraggingNode(null) — so a
+  // settle transition and an active draggingNode never coexist for the
+  // SAME gesture, and the guard above prevents a DIFFERENT node from
+  // starting a new draggingNode while one is settling.
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const releaseIdx = content.indexOf('const processRelease = () => {');
+  const nextEffectIdx = content.indexOf('const handleWindowMouseMove', releaseIdx);
+  const releaseBlock = content.slice(releaseIdx, nextEffectIdx === -1 ? undefined : nextEffectIdx);
+  const startSettleIdx = releaseBlock.indexOf('startSettleTransition(');
+  const finalNullIdx = releaseBlock.lastIndexOf('setDraggingNode(null);');
+  assert.ok(startSettleIdx !== -1 && finalNullIdx !== -1);
+  assert.ok(startSettleIdx < finalNullIdx, 'A settle transition is started before the drag session itself is cleared, and no new drag can begin in between (single-threaded event handling + the guard above)');
+});
+
+// ---------------------------------------------------------------------------
+// Issue 2 (review round 2): motion-safe detached placement. Demonstrates the
+// ACTUAL delayed-collision bug — a spot that is collision-free at drop time
+// can still be swept through later by a docked project traversing the full
+// orbit — and proves the new validator rejects it while ordinary current-
+// position collision checking alone would have accepted it.
+// ---------------------------------------------------------------------------
+
+function buildSmallOrbitScenario() {
+  const projects = generateMockProjects(5);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const slot0 = orbitGeometry.slots.find(s => s.projectId === projects[0].id)!;
+
+  // Positions "right now" (frozen orbit phase = 0, i.e. ordinary docked
+  // membership at rest) — matches how effectiveProjectPositions looks at the
+  // instant of a drop, since the orbit is paused throughout any drag.
+  const currentPositions: Record<string, { x: number; y: number }> = {};
+  for (const slot of orbitGeometry.slots) {
+    const p = projects.find(pr => pr.id === slot.projectId)!;
+    currentPositions[p.id] = getOrbitalProjectPositionAtPhase(p, slot, orbitGeometry, 0);
+  }
+
+  // The candidate detached project: same shape as the mocks, a distinct id.
+  const candidateProject = { ...generateMockProjects(1)[0], id: 'project-detached-candidate' };
+
+  // Because every project shares the same phase and the same ellipse, a
+  // rotationally-symmetric ring of identically-sized projects means ANY point
+  // exactly on the shared ellipse is, over a full revolution, eventually
+  // occupied by EVERY project — not just one. So rather than hand-deriving a
+  // "safe right now" angle (which depends on exact packing geometry), find
+  // one empirically: project[0]'s own position at some non-zero sampled phase
+  // that happens to be clear of every OTHER project's CURRENT (phase-0)
+  // position. This is exactly the real-world scenario: the ring has moved
+  // since the projects were last at rest, and the user drops a project into
+  // a gap that looks clear right now.
+  let candidateOrigin: { x: number; y: number } | null = null;
+  let dangerousSampleIndex = -1;
+  for (let s = 1; s < ORBITAL_CLEARANCE_SAMPLE_COUNT; s++) {
+    const phase = (s / ORBITAL_CLEARANCE_SAMPLE_COUNT) * 2 * Math.PI;
+    const origin = getOrbitalProjectPositionAtPhase(candidateProject, slot0, orbitGeometry, phase);
+    const check = checkCollisions('project', candidateProject.id, origin, currentPositions, {}, projects, []);
+    if (!check.hasCollision) {
+      candidateOrigin = origin;
+      dangerousSampleIndex = s;
+      break;
+    }
+  }
+  assert.ok(candidateOrigin, 'test setup: must find at least one sampled phase where the candidate is current-safe');
+
+  const movingProjects = new Map(projects.map(p => [p.id, p]));
+
+  return { projects, skills, orbitGeometry, currentPositions, candidateProject, candidateOrigin: candidateOrigin!, movingProjects, dangerousSampleIndex };
+}
+
+test('delayed-collision regression: a candidate that is collision-free RIGHT NOW is still rejected because a docked project sweeps through it later', () => {
+  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, movingProjects } = buildSmallOrbitScenario();
+
+  // 1. Ordinary CURRENT-position collision checking alone accepts it.
+  const currentCheck = checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []);
+  assert.equal(currentCheck.hasCollision, false, 'The candidate must be genuinely collision-free against the CURRENT (phase-frozen) orbit positions');
+
+  // 2. Future-orbit motion safety rejects it, because project[0] occupies
+  // overlapping visual bounds at a later sampled phase (PI/2).
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, movingProjects);
+  assert.equal(isSafe, false, 'A point exactly on the shared ellipse must be rejected — every docked project eventually sweeps through every point on the track');
+});
+
+test('delayed-collision regression: a sufficiently separated detached position is accepted as motion-safe', () => {
+  const { orbitGeometry, candidateProject, movingProjects } = buildSmallOrbitScenario();
+  // Far outside the entire orbit in every direction.
+  const farAwayOrigin = {
+    x: orbitGeometry.centerIso.x + orbitGeometry.radiusX * 20,
+    y: orbitGeometry.centerIso.y + orbitGeometry.radiusY * 20,
+  };
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, farAwayOrigin, orbitGeometry, movingProjects);
+  assert.equal(isSafe, true, 'A position far outside the entire orbit must never be rejected');
+});
+
+test('delayed-collision regression: the moving set is exactly what the caller supplies — with no projects left orbiting, nothing can ever be swept', () => {
+  // With a ring of identically-sized, evenly-spaced projects sharing one
+  // phase, ANY point on the shared ellipse is eventually reachable by EVERY
+  // project over a full revolution (not just one) — so this function's
+  // exclusion contract cannot be demonstrated by removing a single mover from
+  // a symmetric ring. What it CAN prove directly: the function trusts the
+  // caller's moving set completely rather than re-deriving it from
+  // orbitGeometry itself, so an empty moving set (as if every other project
+  // were also persisted-detached) makes any candidate — including the exact
+  // dangerous one above — trivially motion-safe.
+  const { candidateProject, candidateOrigin, orbitGeometry } = buildSmallOrbitScenario();
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, new Map());
+  assert.equal(isSafe, true, 'An empty moving set must never reject any candidate');
+});
+
+test('TopologyCanvas.tsx: the moving-projects set built for orbital-clearance validation excludes both the project being dropped and every OTHER persisted-detached project', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const movingIdx = content.indexOf('const movingProjects = new Map<string, ProjectData>();');
+  assert.ok(movingIdx !== -1, 'the moving-projects construction must exist');
+  const movingBlock = content.slice(movingIdx, content.indexOf('const isCandidateValid', movingIdx));
+  assert.ok(movingBlock.includes("if (p.id === draggingNode.id) continue;"), 'must exclude the project currently being dropped');
+  assert.ok(movingBlock.includes("resolveProjectDockState(projectDockState, p.id) === 'detached') continue;"), 'must exclude every other project that is itself persisted-detached (stationary, already covered by ordinary collision checks)');
+});
+
+// ---------------------------------------------------------------------------
+// Search resolution: the EXISTING findNearestValidGridPosition expanding-ring
+// search is reused, not duplicated — isCandidateValid is an additional gate.
+// ---------------------------------------------------------------------------
+
+test('search resolution: findNearestValidGridPosition rejects a current-safe-but-future-unsafe candidate and continues through the EXISTING search to a position safe on BOTH counts', () => {
+  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, movingProjects } = buildSmallOrbitScenario();
+
+  const isCandidateValid = (pos: { x: number; y: number }) =>
+    isDetachedPlacementMotionSafe(candidateProject, pos, orbitGeometry, movingProjects);
+
+  // Sanity: the naive candidate is current-safe but motion-UNsafe (same fact
+  // proven above), so acceptance must come from continuing the ring search.
+  assert.equal(checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []).hasCollision, false);
+  assert.equal(isCandidateValid(candidateOrigin), false);
+
+  const resolved = findNearestValidGridPosition(
+    'project', candidateProject.id, candidateOrigin,
+    currentPositions, {}, projects, [],
+    25, false, // grid snapping disabled to keep the arithmetic exact for this test
+    isCandidateValid
+  );
+
+  assert.equal(resolved.wasAdjusted, true, 'The resolver must move off the naive candidate');
+  assert.equal(resolved.wasAdjustedForValidatorOnly, true, 'The shift must be attributed to the validator, not an ordinary current-node collision (no real node was in the way right now)');
+
+  // The FINAL position returned by the SAME existing search must satisfy BOTH
+  // conditions — proving no second, independent search algorithm was needed.
+  const finalCollision = checkCollisions('project', candidateProject.id, { x: resolved.x, y: resolved.y }, currentPositions, {}, projects, []);
+  assert.equal(finalCollision.hasCollision, false, 'Final position must remain collision-free against current nodes');
+  assert.equal(isCandidateValid({ x: resolved.x, y: resolved.y }), true, 'Final position must be motion-safe against the future orbital sweep');
+});
+
+test('search resolution: an ordinary candidate with no orbital-clearance concern is unaffected — isCandidateValid is a pure additive gate, default behavior unchanged', () => {
+  const { projects, currentPositions } = buildSmallOrbitScenario();
+  const farAwayProject = { ...generateMockProjects(1)[0], id: 'project-far-away' };
+  const farAwayRawPos = { x: 100000, y: 100000 }; // nowhere near anything
+  const withoutValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true);
+  const withAlwaysTrueValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true, () => true);
+  assert.deepEqual(withoutValidator, withAlwaysTrueValidator, 'Supplying an always-true validator must be indistinguishable from omitting it entirely');
+  assert.equal(withoutValidator.wasAdjusted, false);
 });

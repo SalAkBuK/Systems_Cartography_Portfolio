@@ -124,11 +124,26 @@ export interface ResolvedPosition {
   wasAdjusted: boolean;
   collidingId: string | null;
   collidingWith: string | null;
+  /**
+   * True when the FIRST-CHOICE snapped candidate was already collision-free
+   * against every current node, and was shifted purely because the optional
+   * `isCandidateValid` predicate rejected it (e.g. PR23's future-orbital-
+   * sweep motion-safety check on a detached project drop). Lets the caller
+   * distinguish "moved because of a real node in the way right now" from
+   * "moved because this spot will be swept through later" without guessing.
+   */
+  wasAdjustedForValidatorOnly?: boolean;
 }
 
 /**
  * Snaps raw coordinates to architectural grid increments (25px by default)
  * and uses an expanding spiral search to find the nearest non-overlapping grid slot.
+ *
+ * `isCandidateValid`, if provided, is an ADDITIONAL acceptance gate evaluated
+ * alongside the ordinary collision check — a candidate must be both
+ * collision-free AND pass this predicate to be accepted. Omitting it (the
+ * default for every existing caller, including all skill placement) leaves
+ * behavior completely unchanged.
  */
 export const findNearestValidGridPosition = (
   dragType: 'project' | 'skill',
@@ -139,7 +154,8 @@ export const findNearestValidGridPosition = (
   projectsList: ProjectData[] = PROJECTS,
   skillsList: InfrastructureSkill[] = INFRASTRUCTURE_SKILLS,
   gridStep: number = GRID_SNAP_STEP,
-  snapEnabled: boolean = true
+  snapEnabled: boolean = true,
+  isCandidateValid?: (pos: { x: number; y: number }) => boolean
 ): ResolvedPosition => {
   // Compute initial snapped coordinates
   const baseSnapX = snapEnabled ? Math.round(rawPos.x / gridStep) * gridStep : Math.round(rawPos.x);
@@ -155,8 +171,9 @@ export const findNearestValidGridPosition = (
     projectsList,
     skillsList
   );
+  const initialValidatorOk = !isCandidateValid || isCandidateValid({ x: baseSnapX, y: baseSnapY });
 
-  if (!initialCheck.hasCollision) {
+  if (!initialCheck.hasCollision && initialValidatorOk) {
     return {
       x: baseSnapX,
       y: baseSnapY,
@@ -165,6 +182,8 @@ export const findNearestValidGridPosition = (
       collidingWith: null
     };
   }
+
+  const initialRejectedByValidatorOnly = !initialCheck.hasCollision && !initialValidatorOk;
 
   // Expanding concentric ring search on grid increments
   const maxRings = 14;
@@ -196,13 +215,14 @@ export const findNearestValidGridPosition = (
         projectsList,
         skillsList
       );
-      if (!check.hasCollision) {
+      if (!check.hasCollision && (!isCandidateValid || isCandidateValid({ x: cand.x, y: cand.y }))) {
         return {
           x: cand.x,
           y: cand.y,
           wasAdjusted: true,
           collidingId: initialCheck.collidingId,
-          collidingWith: initialCheck.collidingWith
+          collidingWith: initialCheck.collidingWith,
+          wasAdjustedForValidatorOnly: initialRejectedByValidatorOnly
         };
       }
     }
@@ -214,6 +234,7 @@ export const findNearestValidGridPosition = (
     y: baseSnapY,
     wasAdjusted: true,
     collidingId: initialCheck.collidingId,
-    collidingWith: initialCheck.collidingWith
+    collidingWith: initialCheck.collidingWith,
+    wasAdjustedForValidatorOnly: initialRejectedByValidatorOnly
   };
 };
