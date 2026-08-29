@@ -94,6 +94,7 @@ import {
   deriveDockState,
   resolveReleaseOutcome,
   stepSettleTransition,
+  isDetachedPlacementMotionSafe,
   REDOCK_DURATION_MS,
   ABORTED_PULL_RETURN_MS,
   type ProjectDockState,
@@ -846,16 +847,38 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         setTimeout(() => setSnapNotice(null), 1800);
       } else {
         // Ordinary free placement: existing grid-snap/collision resolution,
-        // persisted as a detached custom position.
+        // persisted as a detached custom position. ADDITIONALLY validated
+        // against the future orbital sweep — every project that will still be
+        // docked (i.e. NOT this one and NOT any other already-detached
+        // project, both of which are stationary and already covered by the
+        // ordinary current-position collision check above) keeps orbiting the
+        // full ellipse, so a spot that's clear right now can still be swept
+        // through later. isCandidateValid is an ADDITIONAL gate on top of the
+        // existing expanding grid search — never a second search algorithm.
+        const movingProjects = new Map<string, ProjectData>();
+        for (const p of projects) {
+          if (p.id === draggingNode.id) continue;
+          if (resolveProjectDockState(projectDockState, p.id) === 'detached') continue;
+          movingProjects.set(p.id, p);
+        }
+        const isCandidateValid = project
+          ? (pos: { x: number; y: number }) =>
+              isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, movingProjects)
+          : undefined;
+
         const resolved = findNearestValidGridPosition(
           'project', draggingNode.id, rawPos,
           effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills,
-          GRID_SNAP_STEP, gridSnapEnabled
+          GRID_SNAP_STEP, gridSnapEnabled,
+          isCandidateValid
         );
         const finalPos = { x: resolved.x, y: resolved.y };
         setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
         setProjectDockState(prev => ({ ...prev, [draggingNode.id]: { state: 'detached' } }));
-        if (resolved.wasAdjusted) {
+        if (resolved.wasAdjustedForValidatorOnly) {
+          setSnapNotice({ message: 'ORBITAL CLEARANCE // PLACEMENT SHIFTED', type: 'collision' });
+          setTimeout(() => setSnapNotice(null), 2500);
+        } else if (resolved.wasAdjusted) {
           setSnapNotice({ message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`, type: 'collision' });
           setTimeout(() => setSnapNotice(null), 2500);
         } else if (gridSnapEnabled) {
@@ -890,7 +913,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, [
     draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions,
     gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills,
-    projectsById, animatedCanonicalProjectPositions, projectDockState, startSettleTransition
+    projectsById, animatedCanonicalProjectPositions, projectDockState, startSettleTransition,
+    staticOrbitalLattice
   ]);
 
   // Handle Pan & Drag on canvas surface
@@ -1469,6 +1493,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={skill.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
+                  // PR23: one node interaction/settle transition at a time — a
+                  // new drag must never start while another project is mid-settle.
+                  if (activeDockTransitionProjectId) return;
                   setDraggingNode({
                     type: 'skill',
                     id: skill.id,
@@ -1481,6 +1508,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
+                  if (activeDockTransitionProjectId) return;
                   if (e.touches.length === 1) {
                     setDraggingNode({
                       type: 'skill',
@@ -1815,6 +1843,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={project.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
+                  // PR23: one node interaction/settle transition at a time — a
+                  // new drag must never start while another project is mid-settle
+                  // (the settle is only 120-180ms; just let it finish).
+                  if (activeDockTransitionProjectId) return;
                   const startPos = { x: originX, y: originY };
                   const persisted = resolveProjectDockState(projectDockState, project.id);
                   setDraggingNode({
@@ -1837,6 +1869,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
+                  if (activeDockTransitionProjectId) return;
                   if (e.touches.length === 1) {
                     const startPos = { x: originX, y: originY };
                     const persisted = resolveProjectDockState(projectDockState, project.id);

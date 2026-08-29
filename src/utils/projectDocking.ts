@@ -5,7 +5,14 @@
 // component evaluates each pointer-move tick — no simulation of any kind.
 import { projectIsoTo3D } from './isometricProjection';
 import { project3DToIso } from './isometricProjection';
-import { getTopologyProjectDimensions, type ProjectDimensionsSource } from './projectTopologyGeometry';
+import {
+  getTopologyProjectDimensions,
+  getTopologyProjectVisualBounds,
+  type ProjectDimensionsSource,
+  type ProjectVisualBoundsSource
+} from './projectTopologyGeometry';
+import { checkAABBOverlap, type StaticOrbitGeometry } from './topologyLayout';
+import { getOrbitalProjectPositionAtPhase } from './orbitMotion';
 
 // ---------------------------------------------------------------------------
 // Product constants (initial values; tune here, not scattered through the component)
@@ -235,4 +242,50 @@ export function stepSettleTransition(
   }
   const t = easeOutCubic(elapsed / transition.durationMs);
   return { position: lerpPoint(transition.fromPos, transition.toPos, t), progress: t, isComplete: false };
+}
+
+// ---------------------------------------------------------------------------
+// Motion-safe detached placement: a detached project sits fixed while the
+// rest of the ring keeps orbiting (PR22), so a free-drop that is collision-
+// free RIGHT NOW can still be swept through later by a docked project
+// traversing that angular location. This mirrors PR22's own motion-safety
+// sweep (same 72-sample/5-degree resolution, same visual/callout envelopes,
+// same checkAABBOverlap) but applied to ONE stationary candidate against the
+// full future orbit, instead of validating the orbit's own construction.
+// ---------------------------------------------------------------------------
+
+/** Matches PR22's accepted motion-safety sweep resolution (5-degree increments). */
+export const ORBITAL_CLEARANCE_SAMPLE_COUNT = 72;
+
+/**
+ * True if `candidateOrigin` (a project about to be dropped as detached) never
+ * overlaps any currently-DOCKED project's full visual/callout envelope at any
+ * sampled phase across one complete revolution. `movingProjects` must contain
+ * ONLY the projects that will actually keep orbiting — the candidate itself
+ * and every OTHER already-detached project must be excluded by the caller
+ * (they are stationary and already covered by ordinary current-position
+ * collision checks, not this sweep).
+ */
+export function isDetachedPlacementMotionSafe(
+  candidateProject: ProjectVisualBoundsSource,
+  candidateOrigin: { x: number; y: number },
+  orbitGeometry: StaticOrbitGeometry,
+  movingProjects: Map<string, ProjectVisualBoundsSource>,
+  sampleCount: number = ORBITAL_CLEARANCE_SAMPLE_COUNT
+): boolean {
+  const candidateBox = getTopologyProjectVisualBounds(candidateProject, candidateOrigin);
+
+  for (let s = 0; s < sampleCount; s++) {
+    const phase = (s / sampleCount) * 2 * Math.PI;
+    for (const slot of orbitGeometry.slots) {
+      const movingProject = movingProjects.get(slot.projectId);
+      if (!movingProject) continue; // not currently orbiting (excluded/self/detached) — skip
+      const movingOrigin = getOrbitalProjectPositionAtPhase(movingProject, slot, orbitGeometry, phase);
+      const movingBox = getTopologyProjectVisualBounds(movingProject, movingOrigin);
+      if (checkAABBOverlap(candidateBox, movingBox, 0)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
