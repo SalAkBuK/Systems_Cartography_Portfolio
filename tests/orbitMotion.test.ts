@@ -303,7 +303,6 @@ const idleState: OrbitPauseState = {
   prefersReducedMotion: false,
   isCompact: false,
   isExperienceSelected: false,
-  isDockingTransitionActive: false,
 };
 
 test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
@@ -311,23 +310,59 @@ test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
 });
 
 const pauseTriggeringFields: Array<keyof OrbitPauseState> = [
-  'isProjectHovered',
-  'isSkillHovered',
-  'isProjectSelected',
-  'isSkillSelected',
-  'isNodeDragging',
-  'isCanvasPanning',
   'isDocumentHidden',
   'prefersReducedMotion',
   'isCompact',
-  'isExperienceSelected',
-  'isDockingTransitionActive',
 ];
 
 for (const field of pauseTriggeringFields) {
   test(`isOrbitPauseConditionActive: ${field} alone pauses the entire orbit`, () => {
     const state: OrbitPauseState = { ...idleState, [field]: true };
     assert.equal(isOrbitPauseConditionActive(state), true);
+  });
+}
+
+const nonPausingInteractionFields: Array<keyof OrbitPauseState> = [
+  'isProjectHovered',
+  'isSkillHovered',
+  'isProjectSelected',
+  'isSkillSelected',
+  'isExperienceSelected',
+  'isCanvasPanning',
+  'isNodeDragging',
+];
+
+for (const field of nonPausingInteractionFields) {
+  test(`isOrbitPauseConditionActive: ${field} alone does not pause the orbit`, () => {
+    assert.equal(isOrbitPauseConditionActive({ ...idleState, [field]: true }), false);
+  });
+}
+
+const nonPausingInteractionCombinations: Array<{
+  name: string;
+  state: Partial<OrbitPauseState>;
+}> = [
+  {
+    name: 'canvas pan + project hover',
+    state: { isCanvasPanning: true, isProjectHovered: true },
+  },
+  {
+    name: 'canvas pan + skill hover',
+    state: { isCanvasPanning: true, isSkillHovered: true },
+  },
+  {
+    name: 'selection + hover',
+    state: { isProjectSelected: true, isProjectHovered: true },
+  },
+  {
+    name: 'node drag + selection',
+    state: { isNodeDragging: true, isProjectSelected: true },
+  },
+];
+
+for (const { name, state } of nonPausingInteractionCombinations) {
+  test(`isOrbitPauseConditionActive: ${name} does not pause the orbit`, () => {
+    assert.equal(isOrbitPauseConditionActive({ ...idleState, ...state }), false);
   });
 }
 
@@ -351,15 +386,16 @@ test('ORBIT_PERIOD_MS is within the specified 90-150s neighborhood (target 120s)
 
 function extractOrbitClockEffect(content: string): string {
   const startIdx = content.indexOf('const orbitClockRef = useRef<OrbitClockState>');
-  const endIdx = content.indexOf('}, [isOrbitRunning]);', startIdx);
+  const dependencyList = '}, [isOrbitRunning, orbitRateMultiplier]);';
+  const endIdx = content.indexOf(dependencyList, startIdx);
   assert.ok(startIdx !== -1 && endIdx !== -1, 'orbit clock effect block must be present');
-  return content.slice(startIdx, endIdx + '}, [isOrbitRunning]);'.length);
+  return content.slice(startIdx, endIdx + dependencyList.length);
 }
 
-test('TopologyCanvas.tsx: the orbit RAF effect is keyed on isOrbitRunning, not a mount-once ([]) effect', () => {
+test('TopologyCanvas.tsx: the orbit RAF effect is keyed on running state and shared rate, not a mount-once ([]) effect', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
-  assert.ok(block.endsWith('}, [isOrbitRunning]);'), 'Effect must re-run whenever isOrbitRunning changes (start/stop the loop), not run once for the whole component lifetime');
+  assert.ok(block.endsWith('}, [isOrbitRunning, orbitRateMultiplier]);'), 'Effect must restart on pause/resume or shared-rate boundaries, not run once for the component lifetime');
 });
 
 test('TopologyCanvas.tsx: the paused branch returns before scheduling any requestAnimationFrame — zero repeating callbacks while paused', () => {
@@ -381,10 +417,10 @@ test('TopologyCanvas.tsx: pausing clears the timestamp baseline but preserves th
   const block = extractOrbitClockEffect(content);
   const pausedBranchIdx = block.indexOf('if (!isOrbitRunning) {');
   const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
-  const pausedBranchBlock = block.slice(pausedBranchIdx, pausedReturnIdx);
+  const baselineBlock = block.slice(block.indexOf('useEffect(() => {'), pausedReturnIdx);
 
-  assert.ok(pausedBranchBlock.includes('phase: orbitClockRef.current.phase'), 'Pausing must preserve the current phase, not reset it to 0');
-  assert.ok(pausedBranchBlock.includes('lastTimestamp: null'), 'Pausing must clear the timestamp baseline so resume does not catch up');
+  assert.ok(baselineBlock.includes('rebaselineOrbitClock(orbitClockRef.current)'), 'Pause/rate boundaries must preserve phase while clearing the timestamp baseline');
+  assert.ok(!baselineBlock.includes('setOrbitPhase(0)'), 'Pause/rate boundaries must never reset phase to zero');
 });
 
 test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimationFrame chain and cancels it on cleanup', () => {

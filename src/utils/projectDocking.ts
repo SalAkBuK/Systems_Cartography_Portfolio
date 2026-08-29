@@ -361,10 +361,24 @@ export function resolveOrbitReleaseAction(
 // pull returning a single project to its current ring position, a detach
 // redistributing the remaining N-1 docked projects, or a reinsertion
 // redistributing N+1. All three are the exact same mechanism — a map of
-// projectId -> {from, to} positions interpolated by ONE shared eased
+// projectId -> {from, to} SLOT DESCRIPTORS interpolated by ONE shared eased
 // progress value — so there is exactly one transition system, not several
 // competing ones. One short-lived transition at a time; no per-project
 // persistent loop.
+//
+// PR24 (continuous machine): the autonomous orbit no longer pauses for a
+// reflow, so a `to` position can never be a frozen snapshot taken at commit
+// time — by the time the reflow finishes, the live phase has moved on, and
+// a frozen target would produce a visible jump the instant the reflow hands
+// off to the normal dynamic orbit formula. Instead, every endpoint is a
+// SLOT descriptor (index, count) — or, for the just-released project's
+// starting point only, a fixed world position, since a project mid-drag
+// isn't on the ellipse formula at all — resolved into an actual position
+// fresh on EVERY frame against whatever the live phase is at that instant.
+// Both `from` and `to` share the same live phase each frame, so the
+// interpolation is between two points of the SAME rotating frame: smooth
+// throughout, and exactly equal to the post-reflow dynamic position at
+// progress===1 by construction (identical project/index/count/phase inputs).
 // ---------------------------------------------------------------------------
 
 function easeOutCubic(t: number): number {
@@ -372,9 +386,110 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - clamped, 3);
 }
 
+/**
+ * A reflow endpoint is either pinned to an exact world position — used ONLY
+ * for the actively-released project's starting point, wherever the pointer
+ * left it — or tied to a ring slot (index, count) resolved against the LIVE
+ * orbit phase every frame via getDynamicOrbitalPosition, never a frozen
+ * snapshot.
+ */
+export type OrbitReflowEndpoint =
+  | { kind: 'fixed'; position: { x: number; y: number } }
+  | { kind: 'slot'; index: number; count: number };
+
+export interface OrbitReflowEntry {
+  from: OrbitReflowEndpoint;
+  to: OrbitReflowEndpoint;
+}
+
+/** Per-gesture reflow plan: WHERE each affected project starts and ends, in
+ * slot terms — resolved to actual positions fresh every frame, never
+ * memoized as fixed coordinates. */
+export type OrbitReflowPlan = Record<string, OrbitReflowEntry>;
+
+/**
+ * Builds a reflow plan from the previous and next docked orders. Every
+ * project's `to` is its slot in nextOrder. Its `from` is a fixed override
+ * (the just-released project's exact drag position) when supplied, else its
+ * slot in previousOrder — so an untouched project's `from` and `to` are the
+ * SAME slot when membership/order doesn't change for it (aborted-pull
+ * return: zero visible motion for every project except the one released),
+ * and genuinely different slots when a detach/reinsertion redistributes it.
+ */
+export function buildOrbitReflowPlan(
+  previousOrder: string[],
+  nextOrder: string[],
+  fixedFromOverrides: Record<string, { x: number; y: number }> = {}
+): OrbitReflowPlan {
+  const plan: OrbitReflowPlan = {};
+  const nextCount = nextOrder.length;
+  const previousCount = previousOrder.length;
+  for (let i = 0; i < nextCount; i++) {
+    const id = nextOrder[i];
+    const to: OrbitReflowEndpoint = { kind: 'slot', index: i, count: nextCount };
+    const override = fixedFromOverrides[id];
+    let from: OrbitReflowEndpoint;
+    if (override) {
+      from = { kind: 'fixed', position: override };
+    } else {
+      const previousIndex = previousOrder.indexOf(id);
+      from = previousIndex === -1
+        ? to // no known previous slot (shouldn't normally happen): no visible motion
+        : { kind: 'slot', index: previousIndex, count: previousCount };
+    }
+    plan[id] = { from, to };
+  }
+  return plan;
+}
+
+/** Resolves one endpoint to an actual position against the live phase. */
+export function resolveOrbitReflowEndpoint(
+  endpoint: OrbitReflowEndpoint,
+  project: ProjectDimensionsSource,
+  orbitGeometry: OrbitEllipseGeometry,
+  livePhase: number
+): { x: number; y: number } {
+  return endpoint.kind === 'fixed'
+    ? endpoint.position
+    : getDynamicOrbitalPosition(project, endpoint.index, endpoint.count, orbitGeometry, livePhase);
+}
+
+/** Resolves every entry in a plan to interpolated positions at one progress
+ * value, all against the SAME live phase — the moving-frame interpolation
+ * that keeps a continuously-advancing orbit from ever producing a jump. */
+export function resolveOrbitReflowPositions(
+  plan: OrbitReflowPlan,
+  progress: number,
+  livePhase: number,
+  orbitGeometry: OrbitEllipseGeometry,
+  resolveProject: (id: string) => ProjectDimensionsSource | undefined
+): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  for (const id of Object.keys(plan)) {
+    const project = resolveProject(id);
+    if (!project) continue;
+    const { from, to } = plan[id];
+    // Resolve only the endpoint(s) actually needed at the boundaries — and
+    // return them directly rather than through lerpPoint's arithmetic — so
+    // progress 0/1 are EXACTLY the `from`/`to` positions, never off by a
+    // floating-point rounding epsilon. This is what makes the reflow-
+    // completion handoff to the live dynamic orbit formula a true zero-jump,
+    // not just a visually-imperceptible one.
+    if (progress <= 0) {
+      positions[id] = resolveOrbitReflowEndpoint(from, project, orbitGeometry, livePhase);
+    } else if (progress >= 1) {
+      positions[id] = resolveOrbitReflowEndpoint(to, project, orbitGeometry, livePhase);
+    } else {
+      const fromPos = resolveOrbitReflowEndpoint(from, project, orbitGeometry, livePhase);
+      const toPos = resolveOrbitReflowEndpoint(to, project, orbitGeometry, livePhase);
+      positions[id] = lerpPoint(fromPos, toPos, progress);
+    }
+  }
+  return positions;
+}
+
 export interface OrbitReflowTransition {
-  fromPositions: Record<string, { x: number; y: number }>;
-  toPositions: Record<string, { x: number; y: number }>;
+  plan: OrbitReflowPlan;
   durationMs: number;
   /** null until the first animation-frame timestamp establishes the baseline. */
   startTimestamp: number | null;
@@ -388,30 +503,42 @@ export interface OrbitReflowStepResult {
 
 /**
  * One elapsed-time-based step of a shared reflow transition. Distance-per-
- * frame is never fixed — every affected project's position is purely a
+ * frame is never fixed — every affected project's progress is purely a
  * function of (timestamp - startTimestamp) against durationMs, using the
  * SAME eased progress value for all of them, so frame-rate variance cannot
  * change perceived speed and no project ever lags behind another. Ease-out
- * only: no overshoot, no bounce, no spring.
+ * only: no overshoot, no bounce, no spring. `livePhase` must be read fresh
+ * (e.g. from orbitPhaseRef.current) on every call — never memoized —
+ * because the autonomous orbit keeps advancing throughout the transition.
  */
 export function stepOrbitReflow(
   transition: OrbitReflowTransition,
-  timestamp: number
+  timestamp: number,
+  livePhase: number,
+  orbitGeometry: OrbitEllipseGeometry,
+  resolveProject: (id: string) => ProjectDimensionsSource | undefined
 ): OrbitReflowStepResult {
   if (transition.startTimestamp === null) {
-    return { positions: transition.fromPositions, progress: 0, isComplete: false };
+    return {
+      positions: resolveOrbitReflowPositions(transition.plan, 0, livePhase, orbitGeometry, resolveProject),
+      progress: 0,
+      isComplete: false,
+    };
   }
   const elapsed = timestamp - transition.startTimestamp;
   if (elapsed >= transition.durationMs) {
-    return { positions: transition.toPositions, progress: 1, isComplete: true };
+    return {
+      positions: resolveOrbitReflowPositions(transition.plan, 1, livePhase, orbitGeometry, resolveProject),
+      progress: 1,
+      isComplete: true,
+    };
   }
   const t = easeOutCubic(elapsed / transition.durationMs);
-  const positions: Record<string, { x: number; y: number }> = {};
-  for (const id of Object.keys(transition.toPositions)) {
-    const from = transition.fromPositions[id] ?? transition.toPositions[id];
-    positions[id] = lerpPoint(from, transition.toPositions[id], t);
-  }
-  return { positions, progress: t, isComplete: false };
+  return {
+    positions: resolveOrbitReflowPositions(transition.plan, t, livePhase, orbitGeometry, resolveProject),
+    progress: t,
+    isComplete: false,
+  };
 }
 
 // ---------------------------------------------------------------------------

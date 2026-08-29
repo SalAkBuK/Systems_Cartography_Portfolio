@@ -25,10 +25,14 @@ import {
   deriveDockState,
   resolveOrbitReleaseAction,
   stepOrbitReflow,
+  buildOrbitReflowPlan,
+  resolveOrbitReflowEndpoint,
+  resolveOrbitReflowPositions,
   isDetachedPlacementMotionSafe,
   ORBITAL_CLEARANCE_SAMPLE_COUNT,
   type ProjectDockRuntimeMap,
   type OrbitReflowTransition,
+  type OrbitReflowPlan,
 } from '../src/utils/projectDocking.ts';
 import { project3DToIso } from '../src/utils/isometricProjection.ts';
 import { getTopologyProjectDimensions, getTopologyProjectVisualBounds } from '../src/utils/projectTopologyGeometry.ts';
@@ -496,38 +500,61 @@ test('getDynamicOrbitalPosition: reinserting a project (N-1 -> N) yields exact 2
 
 // ---------------------------------------------------------------------------
 // Shared orbital reflow transition (stepOrbitReflow) — ONE eased progress
-// value applied to every affected project's position at once.
+// value applied to every affected project's position at once. PR24: targets
+// are SLOT descriptors resolved against a live phase every call, never
+// frozen positions — these fixture helpers use 'fixed' endpoints (which
+// ignore project/orbitGeometry/livePhase entirely) to isolate and test the
+// pure timing/easing/shared-progress mechanics independent of geometry.
 // ---------------------------------------------------------------------------
 
-test('stepOrbitReflow: elapsed-time based ease-out with no overshoot, reaching exactly toPositions at/after the duration', () => {
+const dummyProject = {};
+const dummyOrbitGeometry = { centerIso: { x: 0, y: 0 }, radiusX: 100, radiusY: 60 };
+const resolveDummyProject = () => dummyProject;
+
+function fixedPlan(
+  entries: Record<string, { from: { x: number; y: number }; to: { x: number; y: number } }>
+): OrbitReflowPlan {
+  const plan: OrbitReflowPlan = {};
+  for (const id of Object.keys(entries)) {
+    plan[id] = {
+      from: { kind: 'fixed', position: entries[id].from },
+      to: { kind: 'fixed', position: entries[id].to },
+    };
+  }
+  return plan;
+}
+
+test('stepOrbitReflow: elapsed-time based ease-out with no overshoot, reaching exactly the `to` endpoint at/after the duration', () => {
   const transition: OrbitReflowTransition = {
-    fromPositions: { a: { x: 0, y: 0 } },
-    toPositions: { a: { x: 100, y: 0 } },
+    plan: fixedPlan({ a: { from: { x: 0, y: 0 }, to: { x: 100, y: 0 } } }),
     durationMs: ABORTED_PULL_RETURN_MS,
     startTimestamp: 1000,
   };
-  const midStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS / 2);
+  const midStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS / 2, 0, dummyOrbitGeometry, resolveDummyProject);
   assert.ok(midStep.positions.a.x > 0 && midStep.positions.a.x < 100, 'must be strictly between start and end mid-flight');
   assert.ok(!midStep.isComplete);
 
-  const overStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS + 50);
+  const overStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS + 50, 0, dummyOrbitGeometry, resolveDummyProject);
   assert.equal(overStep.isComplete, true);
-  assert.deepEqual(overStep.positions, transition.toPositions);
+  assert.deepEqual(overStep.positions, { a: { x: 100, y: 0 } });
 
   for (let t = 0; t <= ABORTED_PULL_RETURN_MS; t += 10) {
-    const step = stepOrbitReflow(transition, 1000 + t);
+    const step = stepOrbitReflow(transition, 1000 + t, 0, dummyOrbitGeometry, resolveDummyProject);
     assert.ok(step.positions.a.x >= -1e-6 && step.positions.a.x <= 100 + 1e-6, `overshoot detected at t=${t}: x=${step.positions.a.x}`);
   }
 });
 
 test('stepOrbitReflow: every affected project shares the EXACT SAME eased progress value — no project ever lags behind another', () => {
   const transition: OrbitReflowTransition = {
-    fromPositions: { a: { x: 0, y: 0 }, b: { x: 0, y: 100 }, c: { x: -50, y: -50 } },
-    toPositions: { a: { x: 200, y: 0 }, b: { x: 0, y: 400 }, c: { x: 150, y: -50 } },
+    plan: fixedPlan({
+      a: { from: { x: 0, y: 0 }, to: { x: 200, y: 0 } },
+      b: { from: { x: 0, y: 100 }, to: { x: 0, y: 400 } },
+      c: { from: { x: -50, y: -50 }, to: { x: 150, y: -50 } },
+    }),
     durationMs: ORBIT_REFLOW_DURATION_MS,
     startTimestamp: 0,
   };
-  const step = stepOrbitReflow(transition, ORBIT_REFLOW_DURATION_MS * 0.4);
+  const step = stepOrbitReflow(transition, ORBIT_REFLOW_DURATION_MS * 0.4, 0, dummyOrbitGeometry, resolveDummyProject);
   const tA = (step.positions.a.x - 0) / (200 - 0);
   const tB = (step.positions.b.y - 100) / (400 - 100);
   const tC = (step.positions.c.x - (-50)) / (150 - (-50));
@@ -535,17 +562,79 @@ test('stepOrbitReflow: every affected project shares the EXACT SAME eased progre
   assert.ok(Math.abs(tA - step.progress) < 1e-9, 'per-project fraction must equal the single shared progress value');
 });
 
-test('stepOrbitReflow: with no startTimestamp yet (first tick), holds fromPositions with zero progress rather than jumping ahead', () => {
+test('stepOrbitReflow: with no startTimestamp yet (first tick), holds the `from` endpoint with zero progress rather than jumping ahead', () => {
   const transition: OrbitReflowTransition = {
-    fromPositions: { a: { x: 5, y: 5 } },
-    toPositions: { a: { x: 500, y: 500 } },
+    plan: fixedPlan({ a: { from: { x: 5, y: 5 }, to: { x: 500, y: 500 } } }),
     durationMs: 220,
     startTimestamp: null,
   };
-  const result = stepOrbitReflow(transition, 12345);
-  assert.deepEqual(result.positions, transition.fromPositions);
+  const result = stepOrbitReflow(transition, 12345, 0, dummyOrbitGeometry, resolveDummyProject);
+  assert.deepEqual(result.positions, { a: { x: 5, y: 5 } });
   assert.equal(result.progress, 0);
   assert.equal(result.isComplete, false);
+});
+
+// ---------------------------------------------------------------------------
+// PR24 moving-frame reflow: 'slot' endpoints are resolved against the LIVE
+// phase every call, never a snapshot — this is what lets the autonomous
+// orbit keep advancing throughout a reflow with zero discontinuity at handoff.
+// ---------------------------------------------------------------------------
+
+test('buildOrbitReflowPlan: an untouched project keeps the SAME slot (from === to) when membership/order does not change for it', () => {
+  const plan = buildOrbitReflowPlan(['a', 'b', 'c'], ['a', 'b', 'c'], { b: { x: 42, y: 7 } });
+  assert.deepEqual(plan.a, { from: { kind: 'slot', index: 0, count: 3 }, to: { kind: 'slot', index: 0, count: 3 } });
+  assert.deepEqual(plan.c, { from: { kind: 'slot', index: 2, count: 3 }, to: { kind: 'slot', index: 2, count: 3 } });
+  assert.deepEqual(plan.b, { from: { kind: 'fixed', position: { x: 42, y: 7 } }, to: { kind: 'slot', index: 1, count: 3 } });
+});
+
+test('buildOrbitReflowPlan: a detach (18 -> 17) gives every remaining project its old and new slot, excludes the departing id entirely', () => {
+  const previous = ['a', 'b', 'c', 'd'];
+  const next = ['a', 'c', 'd']; // b detached
+  const plan = buildOrbitReflowPlan(previous, next, {});
+  assert.equal(Object.keys(plan).length, 3, 'the departing project must not appear in the plan at all');
+  assert.deepEqual(plan.a, { from: { kind: 'slot', index: 0, count: 4 }, to: { kind: 'slot', index: 0, count: 3 } });
+  assert.deepEqual(plan.c, { from: { kind: 'slot', index: 2, count: 4 }, to: { kind: 'slot', index: 1, count: 3 } });
+  assert.deepEqual(plan.d, { from: { kind: 'slot', index: 3, count: 4 }, to: { kind: 'slot', index: 2, count: 3 } });
+});
+
+test('buildOrbitReflowPlan: a reinsertion (17 -> 18) gives the returning project a fixed drag-position `from` and every other project its old/new slot', () => {
+  const previous = ['a', 'c', 'd'];
+  const next = ['a', 'b', 'c', 'd']; // b reinserted at index 1
+  const plan = buildOrbitReflowPlan(previous, next, { b: { x: 11, y: -3 } });
+  assert.deepEqual(plan.b, { from: { kind: 'fixed', position: { x: 11, y: -3 } }, to: { kind: 'slot', index: 1, count: 4 } });
+  assert.deepEqual(plan.a, { from: { kind: 'slot', index: 0, count: 3 }, to: { kind: 'slot', index: 0, count: 4 } });
+  assert.deepEqual(plan.d, { from: { kind: 'slot', index: 2, count: 3 }, to: { kind: 'slot', index: 3, count: 4 } });
+});
+
+test('resolveOrbitReflowEndpoint: a slot endpoint tracks the live phase; a fixed endpoint ignores it entirely', () => {
+  const geometry = { centerIso: { x: 0, y: 0 }, radiusX: 100, radiusY: 100 };
+  const project = {};
+  const atPhaseZero = resolveOrbitReflowEndpoint({ kind: 'slot', index: 0, count: 4 }, project, geometry, 0);
+  const atPhaseHalfPi = resolveOrbitReflowEndpoint({ kind: 'slot', index: 0, count: 4 }, project, geometry, Math.PI / 2);
+  assert.notDeepEqual(atPhaseZero, atPhaseHalfPi, 'a slot endpoint must move with the live phase');
+
+  const fixed = { kind: 'fixed' as const, position: { x: 7, y: 9 } };
+  assert.deepEqual(resolveOrbitReflowEndpoint(fixed, project, geometry, 0), { x: 7, y: 9 });
+  assert.deepEqual(resolveOrbitReflowEndpoint(fixed, project, geometry, Math.PI), { x: 7, y: 9 });
+});
+
+test('resolveOrbitReflowPositions/stepOrbitReflow: completion at progress=1 against a given live phase EXACTLY matches getDynamicOrbitalPosition at that same phase — zero-jump handoff', () => {
+  const geometry = { centerIso: { x: 0, y: 0 }, radiusX: 120, radiusY: 80 };
+  const project = {};
+  const previous = ['a', 'b', 'c', 'd'];
+  const next = ['a', 'c', 'd'];
+  const plan = buildOrbitReflowPlan(previous, next, {});
+
+  for (const livePhaseAtCompletion of [0, 1.2345, Math.PI, 5.9]) {
+    const transition: OrbitReflowTransition = { plan, durationMs: ORBIT_REFLOW_DURATION_MS, startTimestamp: 0 };
+    const result = stepOrbitReflow(transition, ORBIT_REFLOW_DURATION_MS + 1, livePhaseAtCompletion, geometry, () => project);
+    assert.ok(result.isComplete);
+    for (const id of next) {
+      const i = next.indexOf(id);
+      const expected = getDynamicOrbitalPosition(project, i, next.length, geometry, livePhaseAtCompletion);
+      assert.deepEqual(result.positions[id], expected, `project ${id} must land EXACTLY on the live dynamic position at handoff`);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -692,22 +781,23 @@ test('search saturation: an always-false validator is never represented as a val
 // Orbit integration: pause conditions
 // ---------------------------------------------------------------------------
 
-test('isOrbitPauseConditionActive: an active orbital reflow/settle transition pauses the orbit', () => {
+test('isOrbitPauseConditionActive: OrbitPauseState no longer carries a reflow/docking-transition field at all — a committed detach/reinsertion never pauses the orbit', () => {
   const state: OrbitPauseState = {
     isProjectHovered: false, isSkillHovered: false, isProjectSelected: false, isSkillSelected: false,
     isNodeDragging: false, isCanvasPanning: false, isDocumentHidden: false, prefersReducedMotion: false,
-    isCompact: false, isExperienceSelected: false, isDockingTransitionActive: true,
+    isCompact: false, isExperienceSelected: false,
   };
-  assert.equal(isOrbitPauseConditionActive(state), true);
+  assert.equal(isOrbitPauseConditionActive(state), false);
+  assert.ok(!('isDockingTransitionActive' in state));
 });
 
-test('TopologyCanvas.tsx: orbitPauseState is not derived from the mere existence of detached/interactively-reordered projects — idle membership changes do not themselves stop the orbit', () => {
+test('TopologyCanvas.tsx: orbitPauseState is not derived from the mere existence of detached/interactively-reordered projects, nor from an active reflow — PR24 keeps the ring continuous through all of it', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const pauseStateIdx = content.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
   const pauseStateBlock = content.slice(pauseStateIdx, content.indexOf('}), [', pauseStateIdx));
   assert.ok(!pauseStateBlock.includes('projectDockState'), 'orbitPauseState must not pause merely because some project is detached at rest');
   assert.ok(!pauseStateBlock.includes('interactiveOrbitOrder'), 'orbitPauseState must not pause merely because membership/order has been visitor-modified');
-  assert.ok(pauseStateBlock.includes('isOrbitReflowActive'), 'orbitPauseState must pause during an active shared orbital reflow');
+  assert.ok(!pauseStateBlock.includes('isOrbitReflowActive'), 'orbitPauseState must not pause during an active shared orbital reflow — the ring keeps advancing through it');
 });
 
 // ---------------------------------------------------------------------------
