@@ -354,3 +354,53 @@ test('26. TopTelemetryBar OWNER PROJECTS and CONTACT use increased compact typog
   assert.ok(telemetrySource.includes('text-[11.5px] lg:text-[9.5px]'), 'Public repos count must use text-[11.5px] on compact');
   assert.ok(telemetrySource.includes('min-h-[36px]'), 'Action buttons must have >= 36px touch targets on compact');
 });
+
+// ---------------------------------------------------------------------------
+// 27. Sidebar Sticky Project List Header - Black Brutalist Style & Solid Background
+// ---------------------------------------------------------------------------
+test('27. Sidebar sticky project list header uses solid black background (bg-[#15150F]) without parent opacity', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  
+  // Extract project list header snippet
+  const headerStart = railSource.indexOf('Fast Project Jump List');
+  assert.ok(headerStart !== -1, 'Fast Project Jump List comment must exist');
+  const snippet = railSource.substring(headerStart, headerStart + 350);
+
+  assert.ok(snippet.includes('bg-[#15150F]'), 'Sticky project list header must use solid bg-[#15150F]');
+  assert.ok(snippet.includes('sticky top-0 z-20'), 'Sticky project list header must retain sticky top-0 z-20 positioning');
+  assert.ok(!snippet.includes('opacity-60 uppercase flex justify-between items-center sticky'), 'Header container must not apply whole-container opacity');
+});
+
+// ---------------------------------------------------------------------------
+// 28. Sidebar Sticky Project List Header - Accent Lime and Khaki Labels
+// ---------------------------------------------------------------------------
+test('28. Sticky project list header uses accent lime text for OWNER PROJECTS and readable TIER', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  assert.ok(railSource.includes('<span className="text-[#C3E54E]">OWNER PROJECTS ({filteredProjects.length})</span>'), 'OWNER PROJECTS must use text-[#C3E54E]');
+  assert.ok(railSource.includes('TIER</span>'), 'TIER label must be present and readable');
+});
+
+// ---------------------------------------------------------------------------
+// 29. Compact Drawer Header - Hides INDX Badge Below lg
+// ---------------------------------------------------------------------------
+test('29. Compact drawer header hides decorative INDX badge below lg while desktop shows it at lg+', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  assert.ok(railSource.includes('hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
+});
+
+// ---------------------------------------------------------------------------
+// 30. Compact Drawer Header - Displays CLOSE Button Below lg
+// ---------------------------------------------------------------------------
+test('30. Compact drawer header displays internal CLOSE control below lg', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  assert.ok(railSource.includes('className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] bg-[#15150F] text-[#D4CDA4] hover:text-[#C3E54E] text-[11px] font-bold font-mono border border-[#15150F] cursor-pointer whitespace-nowrap shrink-0"'), 'CLOSE button must be lg:hidden with whitespace-nowrap and shrink-0');
+});
+
+// ---------------------------------------------------------------------------
+// 31. Compact Drawer Header - Non-wrapping Title Presentation
+// ---------------------------------------------------------------------------
+test('31. Compact drawer header title and button use whitespace-nowrap preventing row wrapping', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  assert.ok(railSource.includes('Owner Technical Index'), 'Title must be Owner Technical Index');
+  assert.ok(railSource.includes('text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
+});

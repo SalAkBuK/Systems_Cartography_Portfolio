@@ -88,19 +88,19 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
       `}
     >
       {/* Technical Index Header */}
-      <div className="p-3 border-b border-[#15150F] bg-[#CBC59B]/50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-[12px] lg:text-[11px] font-bold uppercase tracking-tighter opacity-70">
+      <div className="p-3 border-b border-[#15150F] bg-[#CBC59B]/50 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap">
             Owner Technical Index
           </h2>
-          <span className="text-[10px] lg:text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
+          <span className="hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap">
             INDX // 00-05
           </span>
         </div>
         <button
           type="button"
           onClick={() => setIsMobileOpen(false)}
-          className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] bg-[#15150F] text-[#D4CDA4] hover:text-[#C3E54E] text-[11px] font-bold font-mono border border-[#15150F] cursor-pointer"
+          className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] bg-[#15150F] text-[#D4CDA4] hover:text-[#C3E54E] text-[11px] font-bold font-mono border border-[#15150F] cursor-pointer whitespace-nowrap shrink-0"
           aria-label="Close system index"
         >
           <X size={13} />
@@ -202,9 +202,9 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
 
       {/* Fast Project Jump List */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#15150F]/30 flex flex-col min-h-32">
-        <div className="px-3 py-1.5 lg:py-1 bg-[#CBC59B]/80 text-[10px] lg:text-[8px] font-bold tracking-widest opacity-60 uppercase flex justify-between items-center sticky top-0 z-10 border-b border-[#15150F]/20">
-          <span>OWNER PROJECTS ({filteredProjects.length})</span>
-          <span>TIER</span>
+        <div className="px-3 py-1.5 lg:py-1 bg-[#15150F] text-[#D4CDA4] text-[10px] lg:text-[8px] font-bold tracking-widest uppercase flex justify-between items-center sticky top-0 z-20 border-b border-[#15150F]">
+          <span className="text-[#C3E54E]">OWNER PROJECTS ({filteredProjects.length})</span>
+          <span className="opacity-80">TIER</span>
         </div>
 
         {filteredProjects.map((p) => {
