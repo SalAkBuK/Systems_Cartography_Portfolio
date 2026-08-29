@@ -335,6 +335,7 @@ export default function App() {
               selectedSkillId={selectedSkillId}
               onSelectSkill={handleSelectSkill}
               selectedExperienceId={selectedExperienceId}
+              onClearSelection={handleClearSelection}
               searchQuery={searchQuery}
               topologyViewMode={topologyViewMode}
               viewport={viewport}
