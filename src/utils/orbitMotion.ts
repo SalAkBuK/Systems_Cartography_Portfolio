@@ -9,7 +9,7 @@ import type { StaticOrbitGeometry, StaticOrbitSlot } from './topologyLayout';
 /** Full revolution period. 90-150s is the acceptable neighborhood; 120s is deliberate/architectural, not flashy. */
 export const ORBIT_PERIOD_MS = 120_000;
 
-/** How long after the last transient interaction clears before motion resumes. */
+/** How long after a genuine system/reflow pause clears before motion resumes. */
 export const ORBIT_RESUME_DELAY_MS = 800;
 
 /** One shared runtime rate for the whole ring. Zero is an explicit user pause. */
@@ -148,10 +148,9 @@ export function getDynamicOrbitalPosition(
 }
 
 /**
- * Every interaction/accessibility condition is modeled in one state object.
- * Conditions that hold the ring motionless form one flat OR; canvas panning
- * suppresses only incidental hover pauses while all other conditions remain
- * authoritative.
+ * Interaction, system, and accessibility state stays observable in one object,
+ * but only the four machine-level authorities below may stop the orbit. Hover,
+ * selection, focus, canvas pan, and node drag deliberately do not participate.
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -159,7 +158,7 @@ export interface OrbitPauseState {
   isProjectSelected: boolean;
   isSkillSelected: boolean;
   isNodeDragging: boolean;
-  /** Viewport panning is independent motion and suppresses incidental hover pauses. */
+  /** Viewport panning is independent motion and never pauses the orbit. */
   isCanvasPanning: boolean;
   isDocumentHidden: boolean;
   prefersReducedMotion: boolean;
@@ -170,19 +169,10 @@ export interface OrbitPauseState {
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
-  const isHoverPause = !state.isCanvasPanning && (
-    state.isProjectHovered || state.isSkillHovered
-  );
-
   return (
-    isHoverPause ||
-    state.isProjectSelected ||
-    state.isSkillSelected ||
-    state.isNodeDragging ||
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
     state.isCompact ||
-    state.isExperienceSelected ||
     state.isDockingTransitionActive
   );
 }

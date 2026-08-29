@@ -311,15 +311,9 @@ test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
 });
 
 const pauseTriggeringFields: Array<keyof OrbitPauseState> = [
-  'isProjectHovered',
-  'isSkillHovered',
-  'isProjectSelected',
-  'isSkillSelected',
-  'isNodeDragging',
   'isDocumentHidden',
   'prefersReducedMotion',
   'isCompact',
-  'isExperienceSelected',
   'isDockingTransitionActive',
 ];
 
@@ -330,41 +324,49 @@ for (const field of pauseTriggeringFields) {
   });
 }
 
-test('isOrbitPauseConditionActive: background canvas panning alone does not pause the orbit', () => {
-  assert.equal(isOrbitPauseConditionActive({ ...idleState, isCanvasPanning: true }), false);
-});
+const nonPausingInteractionFields: Array<keyof OrbitPauseState> = [
+  'isProjectHovered',
+  'isSkillHovered',
+  'isProjectSelected',
+  'isSkillSelected',
+  'isExperienceSelected',
+  'isCanvasPanning',
+  'isNodeDragging',
+];
 
-test('isOrbitPauseConditionActive: background pan suppresses incidental project hover pause', () => {
-  assert.equal(isOrbitPauseConditionActive({
-    ...idleState,
-    isCanvasPanning: true,
-    isProjectHovered: true,
-  }), false);
-});
+for (const field of nonPausingInteractionFields) {
+  test(`isOrbitPauseConditionActive: ${field} alone does not pause the orbit`, () => {
+    assert.equal(isOrbitPauseConditionActive({ ...idleState, [field]: true }), false);
+  });
+}
 
-test('isOrbitPauseConditionActive: background pan suppresses incidental skill hover pause', () => {
-  assert.equal(isOrbitPauseConditionActive({
-    ...idleState,
-    isCanvasPanning: true,
-    isSkillHovered: true,
-  }), false);
-});
+const nonPausingInteractionCombinations: Array<{
+  name: string;
+  state: Partial<OrbitPauseState>;
+}> = [
+  {
+    name: 'canvas pan + project hover',
+    state: { isCanvasPanning: true, isProjectHovered: true },
+  },
+  {
+    name: 'canvas pan + skill hover',
+    state: { isCanvasPanning: true, isSkillHovered: true },
+  },
+  {
+    name: 'selection + hover',
+    state: { isProjectSelected: true, isProjectHovered: true },
+  },
+  {
+    name: 'node drag + selection',
+    state: { isNodeDragging: true, isProjectSelected: true },
+  },
+];
 
-test('isOrbitPauseConditionActive: node drag still pauses during canvas pan', () => {
-  assert.equal(isOrbitPauseConditionActive({
-    ...idleState,
-    isCanvasPanning: true,
-    isNodeDragging: true,
-  }), true);
-});
-
-test('isOrbitPauseConditionActive: project selection still pauses during canvas pan', () => {
-  assert.equal(isOrbitPauseConditionActive({
-    ...idleState,
-    isCanvasPanning: true,
-    isProjectSelected: true,
-  }), true);
-});
+for (const { name, state } of nonPausingInteractionCombinations) {
+  test(`isOrbitPauseConditionActive: ${name} does not pause the orbit`, () => {
+    assert.equal(isOrbitPauseConditionActive({ ...idleState, ...state }), false);
+  });
+}
 
 test('ORBIT_RESUME_DELAY_MS is within the specified 600-1000ms neighborhood (target ~800ms)', () => {
   assert.ok(ORBIT_RESUME_DELAY_MS >= 600 && ORBIT_RESUME_DELAY_MS <= 1000);
