@@ -170,14 +170,20 @@ test('every non-pause rate retains its exact value during node drag', () => {
 
 test('desktop non-compact TopologyCanvas renders accessible orbit controls with explicit active telemetry', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const bottomLeftIndex = source.indexOf('Bottom-Left Controls & Status');
+  const controlsIndex = source.indexOf('id="orbit-rate-controls"');
+
+  assert.ok(bottomLeftIndex !== -1, 'Bottom-Left Controls & Status marker must exist');
+  assert.ok(controlsIndex !== -1, 'id="orbit-rate-controls" must exist');
+  assert.ok(controlsIndex > bottomLeftIndex, 'orbit-rate-controls must occur AFTER the Bottom-Left Controls & Status marker');
+
   const controls = source.substring(
     source.indexOf('Desktop autonomous-orbit rate console'),
-    source.indexOf('Screen-positioned focus status')
+    source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
   assert.ok(controls.includes('id="orbit-rate-controls"'));
   assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'Runtime availability authorities must gate the control markup');
-  assert.ok(controls.includes('hidden lg:flex absolute top-3 left-1/2'), 'Rate controls must be hidden on compact viewports');
   assert.ok(controls.includes("orbitRateMultiplier === 0 ? 'ORBIT // PAUSED'"), 'User pause must be textually explicit');
   assert.ok(controls.includes('`ORBIT RATE // ${orbitRateMultiplier}×`'), 'Active running rate must be textually explicit');
   assert.ok(controls.includes('aria-label="Autonomous orbit rate"'));
@@ -189,7 +195,7 @@ test('orbit controls do not render when the actual canvas container is compact',
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
     source.indexOf('Desktop autonomous-orbit rate console'),
-    source.indexOf('Screen-positioned focus status')
+    source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
   assert.ok(source.includes('const isCompactViewport = containerDimensions.width < 1024;'));
@@ -200,7 +206,7 @@ test('orbit controls do not render under reduced motion', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
     source.indexOf('Desktop autonomous-orbit rate console'),
-    source.indexOf('Screen-positioned focus status')
+    source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
   assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'prefersReducedMotion must prevent control creation');
