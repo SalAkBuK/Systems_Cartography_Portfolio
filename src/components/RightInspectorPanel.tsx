@@ -123,6 +123,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
     }
   }, [selectedProject, selectedSkill, selectedExperience, selectedSubsystem]);
 
+  // Reset project inspector sub-tab to overview whenever selected project identity changes
+  React.useEffect(() => {
+    setActiveTab('overview');
+  }, [selectedProject?.id]);
+
   // Shared generic progression grouping used by Professional Experience index/detail views
   const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
 
