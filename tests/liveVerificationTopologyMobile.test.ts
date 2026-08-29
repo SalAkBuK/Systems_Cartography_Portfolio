@@ -559,7 +559,7 @@ test('Test Q: TopTelemetryBar source code contains OWNER PROJECTS in brutalist b
 // ---------------------------------------------------------------------------
 // TEST R: TopologyCanvas duplicate Zoom In removal, lg breakpoint, and control rail clearance
 // ---------------------------------------------------------------------------
-test('Test R: TopologyCanvas has exactly 1 Zoom In button, hides telemetry on < lg, and has bottom-14 clearance', () => {
+test('Test R: TopologyCanvas has exactly 1 Zoom In button, hides telemetry on < lg, uses w < 1024 in fitAll, and has bottom-14 clearance', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/TopologyCanvas.tsx'), 'utf8');
   const zoomInMatches = source.match(/title="Zoom In \(\+\)"/g) || [];
   assert.equal(zoomInMatches.length, 1, 'Must have exactly 1 Zoom In button');
@@ -571,6 +571,10 @@ test('Test R: TopologyCanvas has exactly 1 Zoom In button, hides telemetry on < 
 
   // Verify floating controls rail uses bottom-14 clearance on compact viewports
   assert.ok(source.includes('bottom-14 lg:bottom-4'), 'Control rail must stay above collapsed bottom sheet on < lg');
+
+  // Verify fitAll aligns with unified <lg compact breakpoint (1024px)
+  assert.ok(source.includes('w < 1024'), 'fitAll must use w < 1024 compact breakpoint');
+  assert.ok(!source.includes('w < 768'), 'fitAll must not contain stale w < 768 boundary');
 });
 
 // ---------------------------------------------------------------------------
