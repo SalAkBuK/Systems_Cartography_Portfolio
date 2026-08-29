@@ -145,6 +145,15 @@ export default function App() {
     setActiveView('experience');
   }, [selectedExperienceId]);
 
+  // Clear Selection (Deselect objects without altering viewport or active navigation view)
+  const handleClearSelection = useCallback(() => {
+    setSelectedProjectId(null);
+    setSelectedSkillId(null);
+    setSelectedExperienceId(null);
+    setSelectedSubsystem(null);
+    setDrilledProjectId(null);
+  }, []);
+
   // Reset View
   const handleResetView = useCallback(() => {
     setViewport({ x: 0, y: 0, zoom: 1 });
@@ -322,6 +331,7 @@ export default function App() {
           onDrillIntoProject={handleDrillIntoProject}
           onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
           onOpenContact={() => handleNavViewChange('contact')}
+          onClearSelection={handleClearSelection}
           projects={projects}
           skills={skills}
           experience={experience}

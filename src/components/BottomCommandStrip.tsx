@@ -43,7 +43,7 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
   }, []);
 
   return (
-    <div className="flex flex-col select-none z-30 shrink-0">
+    <div className="hidden lg:flex flex-col select-none z-30 shrink-0">
       {/* 1. Primary Operating Command Strip */}
       <footer className="h-10 border-t border-[#15150F] flex items-center px-4 text-[9px] uppercase gap-4 sm:gap-6 font-bold bg-[#CBC59B] text-[#15150F] overflow-x-auto whitespace-nowrap justify-between">
         <div className="flex items-center gap-4 sm:gap-6">

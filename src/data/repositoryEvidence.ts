@@ -24,8 +24,8 @@ const subsystem = (
   dimensions: { width: 48, height: 26, depth: 34 }
 });
 
-const evidenceByRepository: Record<string, Evidence> = {
-  'towerdesk-backend-clean': {
+export const evidenceByRepository: Record<string, Evidence> = {
+  'towerdesk-backend': {
     problem: 'Coordinate multi-tenant property operations while enforcing organization, building, role, owner, and provider boundaries.',
     solution: 'A modular NestJS API backed by Prisma/PostgreSQL, with guarded REST workflows, persisted realtime notifications, optional background jobs, and storage/email adapters.',
     architectureNotes: 'Repository README: controllers expose guarded REST routes; services contain workflows; repositories wrap Prisma; shared integrations live under src/infra; API and worker bootstraps are separate.',
@@ -42,7 +42,7 @@ const evidenceByRepository: Record<string, Evidence> = {
     ],
     resilienceTesting: 'Repository evidence: Jest integration/e2e coverage, an autocannon load-test script, and a Socket.IO notification smoke script are provided. The README says the implementation should be reviewed before production use.'
   },
-  'tower-desk-clean': {
+  'tower-desk': {
     problem: 'Provide role-specific building and property workflows against a separate TowerDesk API without exposing server credentials in the browser.',
     solution: 'A Next.js App Router dashboard with role-aware routes, typed API/query layers, persisted session state, realtime hooks, and server-side proxy routes for platform-only calls.',
     architectureNotes: 'Repository README: app routes and dashboards sit above feature/UI components and a shared API, query, auth, RBAC, utility, and type layer; selected platform calls use Next.js server routes.',
@@ -56,9 +56,9 @@ const evidenceByRepository: Record<string, Evidence> = {
       { decision: 'Use server routes for privileged platform calls', rationale: 'The platform API key belongs on the server boundary.', tradeoff: 'Those workflows require additional runtime environment configuration.' },
       { decision: 'Split server state from session state', rationale: 'Query caching and persisted authentication have different lifecycles.', tradeoff: 'The repository notes that local-storage token persistence needs review for high-risk deployments.' }
     ],
-    resilienceTesting: 'Repository evidence: Vitest unit tests and Playwright e2e tests are configured. The sanitized README reports 60 unit-test files and 249 passing tests at its latest verification, while also disclosing remaining moderate audit findings.'
+    resilienceTesting: 'Repository evidence: Vitest unit tests and Playwright e2e tests are configured, with lint and TypeScript typecheck scripts.'
   },
-  'towerdesk-mobile-showcase': {
+  'towerdesk-mobile-app': {
     problem: 'Support property and concierge workflows across resident, owner, management, staff, and provider roles on mobile.',
     solution: 'An Expo Router application with guarded role workspaces, shared modal workflows, typed REST clients, secure token handling, notification capabilities, and realtime messaging.',
     architectureNotes: 'Repository README: route guards and app-state contexts organize role workspaces above a typed REST service layer with token refresh and domain clients.',
@@ -68,9 +68,9 @@ const evidenceByRepository: Record<string, Evidence> = {
       subsystem('tdm-device', 'Device Services', 'frontend', 'Integrate secure storage and mobile capabilities', 'Expo modules provide SecureStore, notifications, files, images, documents, and browser handoffs.', ['Expo SecureStore', 'Expo Notifications'], 0, 38)
     ],
     keyDecisions: [
-      { decision: 'Publish a sanitized showcase repository', rationale: 'The public code excludes production configuration, real contracts, credentials, and original history.', tradeoff: 'A reviewer cannot reproduce production integrations from this repository alone.' }
+      { decision: 'Multi-role mobile workspace isolation', rationale: 'Support distinct operational user roles (resident, owner, management, employee, provider) in a single mobile codebase.', tradeoff: 'Requires structured route guards and modular navigation state.' }
     ],
-    resilienceTesting: 'Repository evidence: Jest/jest-expo is configured for selected workflow coverage, with lint and TypeScript type-check scripts available. The README does not claim production reliability metrics.'
+    resilienceTesting: 'Repository evidence: Jest/jest-expo is configured for selected workflow coverage, with lint and TypeScript type-check scripts available.'
   },
   'pillcheck-public': {
     problem: 'Help patients confirm scheduled medication and escalate late or missed doses to caregivers.',
@@ -141,12 +141,13 @@ const evidenceByRepository: Record<string, Evidence> = {
 
 // Aliases mapping canonical original repositories to evidence records and presentation clusters
 export const REPOSITORY_CANONICAL_CLUSTERS: Record<string, string> = {
-  'towerdesk-backend': 'towerdesk-backend-clean',
-  'towerdesk-backend-clean': 'towerdesk-backend-clean',
-  'tower-desk': 'tower-desk-clean',
-  'tower-desk-clean': 'tower-desk-clean',
-  'binghatti-concierge-app-rn-expo': 'towerdesk-mobile-showcase',
-  'towerdesk-mobile-showcase': 'towerdesk-mobile-showcase',
+  'towerdesk-backend': 'towerdesk-backend',
+  'towerdesk-backend-clean': 'towerdesk-backend',
+  'tower-desk': 'tower-desk',
+  'tower-desk-clean': 'tower-desk',
+  'towerdesk-mobile-app': 'towerdesk-mobile-app',
+  'binghatti-concierge-app-rn-expo': 'towerdesk-mobile-app',
+  'towerdesk-mobile-showcase': 'towerdesk-mobile-app',
   'worthy-crm': 'worthy-crm',
   'remapp-scraper': 'remapp-scraper'
 };

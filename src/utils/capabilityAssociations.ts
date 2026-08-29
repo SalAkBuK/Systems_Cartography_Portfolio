@@ -1,6 +1,6 @@
 import { ExperienceNode, InfrastructureSkill, ProjectData, SystemCategory } from '../types';
 import { getRepositoryEvidence } from '../data/repositoryEvidence';
-import { formatIsoYearMonth } from './portfolioUtils';
+import { formatIsoYearMonth, isProjectLinkedToExperience } from './portfolioUtils';
 
 /**
  * Explicit canonical normalization dictionary.
@@ -482,3 +482,27 @@ export const RECOGNIZED_CAPABILITY_TAXONOMY: Record<string, { category: SystemCa
   'Go': { category: 'backend', titleSuffix: 'Systems & Concurrent Services' },
   'Rust': { category: 'backend', titleSuffix: 'Systems Architecture' }
 };
+
+/**
+ * Pure helper deriving the set of InfrastructureSkill IDs used by projects linked to an ExperienceNode.
+ * Uses canonical association logic and projectUsesCapability.
+ */
+export function getCapabilitiesLinkedToExperience(
+  exp: ExperienceNode,
+  projects: ProjectData[],
+  skills: InfrastructureSkill[]
+): Set<string> {
+  const linkedSkillIds = new Set<string>();
+  if (!exp || !Array.isArray(projects) || !Array.isArray(skills)) {
+    return linkedSkillIds;
+  }
+
+  const linkedProjects = projects.filter(p => isProjectLinkedToExperience(p, exp));
+  for (const skill of skills) {
+    if (linkedProjects.some(p => projectUsesCapability(p, skill))) {
+      linkedSkillIds.add(skill.id);
+    }
+  }
+
+  return linkedSkillIds;
+}

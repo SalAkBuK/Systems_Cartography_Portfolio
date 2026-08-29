@@ -36,7 +36,7 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
-import { groupExperienceByProgression } from '../utils/portfolioUtils';
+import { groupExperienceByProgression, resolveProjectFromEvidenceKey } from '../utils/portfolioUtils';
 import { 
   projectUsesCapability, 
   getCapabilityProfessionalHistory, 
@@ -84,6 +84,7 @@ interface RightInspectorPanelProps {
   onDrillIntoProject: (id: string) => void;
   onOpenCaseStudy: () => void;
   onOpenContact: () => void;
+  onClearSelection?: () => void;
   projects?: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
@@ -102,33 +103,49 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   onDrillIntoProject,
   onOpenCaseStudy,
   onOpenContact,
+  onClearSelection,
   projects = PROJECTS,
   skills = INFRASTRUCTURE_SKILLS,
   experience = EXPERIENCE_HISTORY,
   operator = OPERATOR_METADATA
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'architecture' | 'metrics' | 'manifest'>('overview');
+  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
   const activeOperator = operator || OPERATOR_METADATA;
   const uniqueOrganizations = Array.from(
     new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean).length;
 
+  // Auto-expand mobile sheet on active selection
+  React.useEffect(() => {
+    if (selectedProject || selectedSkill || selectedExperience || selectedSubsystem) {
+      setIsMobileExpanded(true);
+    }
+  }, [selectedProject, selectedSkill, selectedExperience, selectedSubsystem]);
+
   // Shared generic progression grouping used by Professional Experience index/detail views
   const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
 
   return (
-    <aside className="w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden h-72 lg:h-full">
-      {/* Inspector Title Bar */}
-      <div className="p-3 bg-[#CBC59B]/60 border-b border-[#15150F] flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Terminal size={12} className="text-[#15150F]" />
-          <span className="text-[10px] font-bold tracking-widest uppercase">
+    <aside 
+      id="right-inspector-panel"
+      className={`w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t-2 lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden transition-all duration-200 ${
+        isMobileExpanded 
+          ? 'fixed bottom-0 left-0 right-0 z-30 h-[62vh] max-h-[75vh] shadow-[0_-6px_20px_rgba(21,21,15,0.45)] lg:static lg:h-full lg:shadow-none' 
+          : 'fixed bottom-0 left-0 right-0 z-30 h-11 lg:static lg:h-full'
+      }`}
+    >
+      {/* Inspector Title Bar (Desktop + Mobile Sheet Bar) */}
+      <div className="p-2 sm:p-3 bg-[#CBC59B]/80 border-b border-[#15150F] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <Terminal size={12} className="text-[#15150F] shrink-0" />
+          <span className="text-[10px] font-bold tracking-widest uppercase truncate">
             {selectedProject 
-              ? `INSPECTOR // ${selectedProject.code}` 
+              ? `INSPECTOR // ${selectedProject.code} · ${selectedProject.title}` 
               : selectedSkill 
-              ? `CAPABILITY // ${selectedSkill.code}`
+              ? `CAPABILITY // ${selectedSkill.code} · ${selectedSkill.name}`
               : selectedExperience
-              ? `BUILD LOG // ${selectedExperience.code}`
+              ? `BUILD LOG // ${selectedExperience.code} · ${selectedExperience.organization}`
               : activeView === 'identity'
               ? 'OPERATOR // PROFILE CONSOLE'
               : activeView === 'projects'
@@ -140,9 +157,35 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
               : 'SYSTEM // SYSTEM OVERVIEW'}
           </span>
         </div>
-        <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
-          LIVE TELEMETRY
-        </span>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden sm:inline-block text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+            LIVE TELEMETRY
+          </span>
+
+          {/* Mobile Sheet Controls */}
+          <div className="flex items-center gap-1 lg:hidden">
+            <button
+              onClick={() => setIsMobileExpanded(prev => !prev)}
+              className="px-2 py-0.5 bg-[#15150F] text-[#C3E54E] text-[8.5px] font-bold border border-[#15150F] flex items-center gap-0.5 cursor-pointer"
+              title={isMobileExpanded ? 'Minimize inspector' : 'Expand inspector'}
+            >
+              <span>{isMobileExpanded ? '↓ MINIMIZE' : '↑ EXPAND'}</span>
+            </button>
+            {(selectedProject || selectedSkill || selectedExperience || selectedSubsystem) && (
+              <button
+                onClick={() => {
+                  setIsMobileExpanded(false);
+                  onClearSelection?.();
+                }}
+                className="px-1.5 py-0.5 bg-[#CBC59B] text-[#15150F] text-[8.5px] font-bold border border-[#15150F] cursor-pointer hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+                title="Clear Selection"
+              >
+                ✕ CLEAR
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Sub-Tabs for Projects */}
@@ -760,15 +803,19 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                             ))}
                           </div>
                         )}
-                        {arch.linkedProjectId && (
-                          <button
-                            onClick={() => onSelectProject(arch.linkedProjectId!)}
-                            className="mt-1 flex items-center justify-between px-2 py-1 bg-[#CBC59B] border border-[#15150F] text-[8.5px] font-bold hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors cursor-pointer text-left"
-                          >
-                            <span>INSPECT ARCHITECTURE REPO: {arch.linkedProjectId}</span>
-                            <ArrowUpRight size={10} />
-                          </button>
-                        )}
+                        {arch.linkedProjectId && (() => {
+                          const resolved = resolveProjectFromEvidenceKey(projects, arch.linkedProjectId);
+                          if (!resolved) return null;
+                          return (
+                            <button
+                              onClick={() => onSelectProject(resolved.id)}
+                              className="mt-1 flex items-center justify-between px-2 py-1 bg-[#CBC59B] border border-[#15150F] text-[8.5px] font-bold hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors cursor-pointer text-left"
+                            >
+                              <span>INSPECT ARCHITECTURE REPO: {resolved.title}</span>
+                              <ArrowUpRight size={10} />
+                            </button>
+                          );
+                        })()}
                       </div>
                     ))
                   ) : (
@@ -856,17 +903,21 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                                     </span>
                                   ))}
                                 </div>
-                                {sfc.linkedProjectId && (
-                                  <div className="pl-3 mt-1">
-                                    <button
-                                      onClick={() => onSelectProject(sfc.linkedProjectId!)}
-                                      className="flex items-center gap-1 px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] text-[7.5px] font-bold transition-colors cursor-pointer"
-                                    >
-                                      <span>INSPECT {sfc.linkedProjectId}</span>
-                                      <ArrowUpRight size={9} />
-                                    </button>
-                                  </div>
-                                )}
+                                {sfc.linkedProjectId && (() => {
+                                  const resolved = resolveProjectFromEvidenceKey(projects, sfc.linkedProjectId);
+                                  if (!resolved) return null;
+                                  return (
+                                    <div className="pl-3 mt-1">
+                                      <button
+                                        onClick={() => onSelectProject(resolved.id)}
+                                        className="flex items-center gap-1 px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] text-[7.5px] font-bold transition-colors cursor-pointer"
+                                      >
+                                        <span>INSPECT {resolved.title}</span>
+                                        <ArrowUpRight size={9} />
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             ))}
                           </div>
@@ -965,15 +1016,25 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                       </div>
                       {link.note && <p className="text-[8.5px] text-[#5C5946]">{link.note}</p>}
                       <div className="flex items-center gap-1.5 mt-1">
-                        {link.projectId && (
-                          <button
-                            onClick={() => onSelectProject(link.projectId!)}
-                            className="flex-1 py-1 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] font-bold text-[8px] tracking-wider transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <span>INSPECT ON TOPOLOGY</span>
-                            <ArrowUpRight size={10} />
-                          </button>
-                        )}
+                        {link.projectId && (() => {
+                          const resolved = resolveProjectFromEvidenceKey(projects, link.projectId);
+                          if (!resolved) {
+                            return (
+                              <span className="flex-1 py-1 text-[7.5px] font-mono text-[#5C5946] italic text-center">
+                                REPOSITORY NOT IN CURRENT SNAPSHOT
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={() => onSelectProject(resolved.id)}
+                              className="flex-1 py-1 bg-[#15150F] text-[#C3E54E] hover:bg-[#2A2920] font-bold text-[8px] tracking-wider transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <span>INSPECT ON TOPOLOGY</span>
+                              <ArrowUpRight size={10} />
+                            </button>
+                          );
+                        })()}
                         {link.url && (
                           <a
                             href={link.url}

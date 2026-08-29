@@ -56,7 +56,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
           'Relational Multi-Tenant Data Layer (PostgreSQL / Prisma)',
           'WebSocket Realtime Notification Gateway (/notifications namespace)'
         ],
-        linkedProjectId: 'towerdesk-backend-clean',
+        linkedProjectId: 'towerdesk-backend',
         technologies: ['NestJS', 'TypeScript', 'Prisma', 'PostgreSQL', 'Socket.IO', 'BullMQ', 'Redis'],
         provenance: 'CURATED'
       }
@@ -68,41 +68,41 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
         id: 'sys-towerdesk-platform',
         name: 'TowerDesk Platform',
         tagline: 'Multi-tenant property management, concierge workflows, and realtime tenant communication platform.',
-        status: 'FRONTEND SHOWCASE // ORIGINAL BACKEND RETIRED',
+        status: 'IMPLEMENTED PLATFORM',
         description: 'Multi-surface property management platform comprising a modular NestJS API, role-scoped Next.js admin dashboard, and cross-platform Expo mobile client.',
         surfaces: [
           {
             name: 'Backend Platform',
             role: 'Modular monolith API with guarded REST endpoints, multi-tenant authorization, Prisma data layer, BullMQ worker runtime, and Socket.IO realtime gateway.',
             tech: ['NestJS', 'TypeScript', 'Prisma', 'PostgreSQL', 'Socket.IO', 'Passport JWT', 'Argon2', 'BullMQ', 'Redis'],
-            status: 'ORIGINAL BACKEND RETIRED',
-            linkedProjectId: 'towerdesk-backend-clean',
-            repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-backend-clean',
+            status: 'IMPLEMENTED',
+            linkedProjectId: 'towerdesk-backend',
+            repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-backend',
             provenance: 'CURATED'
           },
           {
             name: 'Web / Admin Dashboard',
             role: 'Role-scoped operational dashboard for platform superadmins, organization admins, building managers, service providers, and unit owners.',
             tech: ['Next.js App Router', 'React 19', 'TypeScript', 'TanStack Query', 'Zustand', 'Socket.IO Client', 'Tailwind CSS'],
-            status: 'FRONTEND SHOWCASE',
-            linkedProjectId: 'tower-desk-clean',
-            repositoryUrl: 'https://github.com/SalAkBuK/tower-desk-clean',
+            status: 'IMPLEMENTED',
+            linkedProjectId: 'tower-desk',
+            repositoryUrl: 'https://github.com/SalAkBuK/tower-desk',
             provenance: 'CURATED'
           },
           {
             name: 'Mobile Application',
             role: 'Cross-platform concierge app for residents, owners, management, and staff with secure token storage, notifications, and modular maturity (API-backed auth/requests, hybrid visitors, mock amenities).',
             tech: ['React Native', 'Expo Router', 'TypeScript', 'Expo SecureStore', 'Expo Notifications', 'AsyncStorage'],
-            status: 'SHOWCASE REPOSITORY',
-            linkedProjectId: 'towerdesk-mobile-showcase',
-            repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-mobile-showcase',
+            status: 'IMPLEMENTED',
+            linkedProjectId: 'towerdesk-mobile-app',
+            repositoryUrl: 'https://github.com/SalAkBuK/towerdesk-mobile-app',
             provenance: 'CURATED'
           }
         ],
         linkedProjectIds: [
-          'towerdesk-backend-clean',
-          'tower-desk-clean',
-          'towerdesk-mobile-showcase'
+          'towerdesk-backend',
+          'tower-desk',
+          'towerdesk-mobile-app'
         ],
         technologies: [
           'NestJS',
@@ -185,7 +185,7 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
     infrastructureOperations: [
       {
         area: 'Cloud Infrastructure Lifecycle',
-        details: 'Original backend AWS infrastructure (EC2, RDS, SES) was retired following AWS account decommission; public presence is preserved through sanitized repositories and frontend showcase builds.',
+        details: 'Original backend AWS infrastructure (EC2, RDS, SES) was retired following AWS account decommission; public presence is preserved through active repositories and application builds.',
         status: 'ORIGINAL BACKEND RETIRED // AWS DECOMMISSIONED',
         provenance: 'CURATED'
       },
@@ -206,24 +206,24 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
     // 5. EVIDENCE LINKS
     evidenceLinks: [
       {
-        label: 'TowerDesk Backend (Showcase)',
+        label: 'TowerDesk Backend (Repository Evidence)',
         type: 'repository',
-        projectId: 'towerdesk-backend-clean',
-        url: 'https://github.com/SalAkBuK/towerdesk-backend-clean',
-        note: 'Sanitized showcase of guarded NestJS / Prisma modular monolith API'
+        projectId: 'towerdesk-backend',
+        url: 'https://github.com/SalAkBuK/towerdesk-backend',
+        note: 'Guarded NestJS / Prisma modular monolith API with Socket.IO and BullMQ worker'
       },
       {
-        label: 'TowerDesk Web Application (Showcase)',
+        label: 'TowerDesk Web Application (Repository Evidence)',
         type: 'repository',
-        projectId: 'tower-desk-clean',
-        url: 'https://github.com/SalAkBuK/tower-desk-clean',
+        projectId: 'tower-desk',
+        url: 'https://github.com/SalAkBuK/tower-desk',
         note: 'Next.js App Router dashboard with role-based operational workspaces'
       },
       {
-        label: 'TowerDesk Mobile (Showcase)',
+        label: 'TowerDesk Mobile (Repository Evidence)',
         type: 'repository',
-        projectId: 'towerdesk-mobile-showcase',
-        url: 'https://github.com/SalAkBuK/towerdesk-mobile-showcase',
+        projectId: 'towerdesk-mobile-app',
+        url: 'https://github.com/SalAkBuK/towerdesk-mobile-app',
         note: 'Expo Router mobile client with multi-role concierge workspaces'
       },
       {
