@@ -1754,7 +1754,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
-        {/* Orbital Field Guides: subtle drafting-style guide ellipse and registration ticks */}
+        {/* Orbital Field Guides: subtle drafting-style guide ellipse, registration ticks, and tier annotations */}
         <g id="orbital-field-guides" pointerEvents="none" className="pointer-events-none" opacity={0.25}>
           <ellipse
             cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
@@ -1793,6 +1793,32 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               />
             );
           })}
+
+          {/* Static Hierarchy Drafting Annotations */}
+          <text
+            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
+            y={staticOrbitalLattice.orbitGeometry.centerIso.y - 120}
+            fontSize="8"
+            fontWeight="bold"
+            fill="#5C5946"
+            fontFamily="monospace"
+            letterSpacing="1.2"
+            textAnchor="middle"
+          >
+            RING 01 // CAPABILITY NUCLEUS
+          </text>
+          <text
+            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
+            y={staticOrbitalLattice.orbitGeometry.centerIso.y - staticOrbitalLattice.orbitGeometry.radiusY - 14}
+            fontSize="8"
+            fontWeight="bold"
+            fill="#5C5946"
+            fontFamily="monospace"
+            letterSpacing="1.2"
+            textAnchor="middle"
+          >
+            RING 02 // DEPLOYED SYSTEMS
+          </text>
         </g>
 
         {/* Cable / Routing Connections Layer */}
