@@ -273,18 +273,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Auto-fit function to center and fit all topology nodes (mobile and desktop aware)
+  // Auto-fit function to center and fit all topology nodes (compact <lg and desktop aware)
   const fitAll = useCallback(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
-    const isNarrow = w < 768;
-    const targetW = isNarrow ? 560 : 640;
-    const targetH = isNarrow ? 400 : 460;
-    const minZoom = isNarrow ? 0.35 : 0.50;
-    const fitRatio = Math.min(w / targetW, h / targetH) * (isNarrow ? 0.92 : 0.95);
+    const isCompact = w < 1024;
+    const targetW = isCompact ? 560 : 640;
+    const targetH = isCompact ? 400 : 460;
+    const minZoom = isCompact ? 0.35 : 0.50;
+    const fitRatio = Math.min(w / targetW, h / targetH) * (isCompact ? 0.92 : 0.95);
     const fitZoom = Math.min(Math.max(fitRatio, minZoom), 1.2);
-    setViewport({ x: 0, y: isNarrow ? 0 : 10, zoom: Number(fitZoom.toFixed(2)) });
+    setViewport({ x: 0, y: isCompact ? 0 : 10, zoom: Number(fitZoom.toFixed(2)) });
   }, [setViewport]);
 
   // Initial mount auto-fit
