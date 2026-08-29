@@ -1,0 +1,477 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  assembleTopologyLayout,
+  getNodeBounds,
+  checkAABBOverlap,
+  computeFitViewport,
+} from '../src/utils/topologyLayout.ts';
+import { project3DToIso } from '../src/utils/isometricProjection.ts';
+import {
+  getTopologyProjectDimensions,
+  getTopologyProjectVisualBounds,
+  ORBIT_PROJECT_SCALE,
+} from '../src/utils/projectTopologyGeometry.ts';
+import { getNodeBounds as collisionGetNodeBounds } from '../src/utils/collision.ts';
+import { ProjectData, InfrastructureSkill } from '../src/types.ts';
+
+function generateMockSkills(count: number): InfrastructureSkill[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `skill-${String(i + 1).padStart(3, '0')}`,
+    code: `CAP-${String(i + 1).padStart(2, '0')}`,
+    name: `Capability ${i + 1}`,
+    category: 'infrastructure' as const,
+    yearsActive: 3,
+    proficiencyScore: 90,
+    primaryUseCases: ['Distributed Systems'],
+    technicalHighlights: ['High throughput'],
+    samplePattern: 'Event Driven',
+    systemCount: 2,
+    usedInProjects: [],
+    gridPosition: { x: 0, y: 0 }
+  }));
+}
+
+function generateMockProjects(count: number, customWidths?: number[]): ProjectData[] {
+  return Array.from({ length: count }, (_, i) => {
+    const w = customWidths && customWidths[i % customWidths.length] ? customWidths[i % customWidths.length] : 100;
+    return {
+      id: `project-${String(i + 1).padStart(3, '0')}`,
+      code: `SYS-${String(i + 1).padStart(2, '0')}`,
+      title: `System Component ${i + 1}`,
+      summary: 'Synthetic summary',
+      problem: 'Synthetic problem',
+      solution: 'Synthetic solution',
+      architectureNotes: 'Synthetic notes',
+      status: 'ACTIVE' as const,
+      year: '2025',
+      tagline: 'Synthetic test component',
+      accentColor: '#C3E54E',
+      category: 'fullstack' as const,
+      techStack: ['TypeScript'],
+      infrastructureDeps: [],
+      subsystems: [],
+      dimensions: { width: w, height: 60, levels: 2 },
+      gridPosition: { x: 0, y: 0 },
+      verifiedFacts: [],
+      metrics: [],
+      keyDecisions: [],
+      resilienceTesting: 'Chaos tested',
+      links: { github: 'https://github.com/mock' }
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 1-3. Deterministic slot assignment, array-order independence, N -> N slots
+// ---------------------------------------------------------------------------
+
+test('staticOrbitalLattice: deterministic slot assignment across repeated invocations', () => {
+  const projects = generateMockProjects(18);
+  const skills = generateMockSkills(6);
+  const layout1 = assembleTopologyLayout(projects, skills);
+  const layout2 = assembleTopologyLayout(projects, skills);
+  assert.deepEqual(layout1.orbitGeometry, layout2.orbitGeometry, 'Orbit geometry must be 100% deterministic');
+});
+
+test('staticOrbitalLattice: shuffled input array order does not change slot assignment', () => {
+  const projects = generateMockProjects(18);
+  const skills = generateMockSkills(6);
+  const standard = assembleTopologyLayout(projects, skills);
+  const shuffled = assembleTopologyLayout([...projects].reverse(), [...skills].reverse());
+  assert.deepEqual(standard.orbitGeometry, shuffled.orbitGeometry, 'Shuffling input order must not change orbit geometry');
+});
+
+test('staticOrbitalLattice: N projects produce exactly N unique slots', () => {
+  for (const n of [1, 5, 18, 40]) {
+    const projects = generateMockProjects(n);
+    const skills = generateMockSkills(6);
+    const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+    assert.equal(orbitGeometry.slots.length, n, `Expected ${n} slots`);
+    const uniqueProjectIds = new Set(orbitGeometry.slots.map(s => s.projectId));
+    assert.equal(uniqueProjectIds.size, n, 'Every slot must reference a unique project');
+    const uniqueSlotIndexes = new Set(orbitGeometry.slots.map(s => s.slotIndex));
+    assert.equal(uniqueSlotIndexes.size, n, 'slotIndex values must be unique');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 4. Exactly ONE project ellipse — proven against ACTUAL rendered positions,
+// not just the internal StaticOrbitSlot algebra.
+// ---------------------------------------------------------------------------
+
+test('staticOrbitalLattice: all project slots lie on exactly one shared ellipse (single radiusX/radiusY, single center)', () => {
+  const projects = generateMockProjects(18);
+  const skills = generateMockSkills(6);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  assert.equal(typeof orbitGeometry.radiusX, 'number');
+  assert.equal(typeof orbitGeometry.radiusY, 'number');
+
+  // Every slot's iso position must satisfy the ellipse equation for the SAME
+  // center/radiusX/radiusY (proving there is no second ring with a different radius).
+  for (const slot of orbitGeometry.slots) {
+    const dx = (slot.isoX - orbitGeometry.centerIso.x) / orbitGeometry.radiusX;
+    const dy = (slot.isoY - orbitGeometry.centerIso.y) / orbitGeometry.radiusY;
+    const ellipseResidual = dx * dx + dy * dy;
+    assert.ok(Math.abs(ellipseResidual - 1) < 1e-6, `Slot ${slot.projectId} does not lie on the canonical ellipse (residual ${ellipseResidual})`);
+  }
+});
+
+test('staticOrbitalLattice: the ACTUAL stored/rendered project center — not just slot algebra — lies exactly on the ellipse', () => {
+  const projects = generateMockProjects(18);
+  const skills = generateMockSkills(6);
+  const { projectPositions, orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  for (const slot of orbitGeometry.slots) {
+    // 1. Read the actual canonical position that rendering/collision/drag would use.
+    const origin = projectPositions[slot.projectId];
+    assert.ok(origin, `projectPositions missing for ${slot.projectId}`);
+
+    // 2. Calculate the actual rendered project center using the SAME shared dimensions helper.
+    const project = projects.find(p => p.id === slot.projectId)!;
+    const dims = getTopologyProjectDimensions(project);
+    const actualCenter = { x: origin.x + dims.width / 2, y: origin.y + dims.depth / 2 };
+
+    // 3. Project that center through the canonical isometric projection.
+    const actualIso = project3DToIso(actualCenter.x, actualCenter.y, 0);
+
+    // 4. It must equal the slot's isoX/isoY within floating-point tolerance —
+    // proving the STORED position (not merely the internal slot bookkeeping)
+    // renders exactly where the ellipse says it should.
+    assert.ok(Math.abs(actualIso.x - slot.isoX) < 1e-6, `${slot.projectId} actual iso.x ${actualIso.x} != slot.isoX ${slot.isoX}`);
+    assert.ok(Math.abs(actualIso.y - slot.isoY) < 1e-6, `${slot.projectId} actual iso.y ${actualIso.y} != slot.isoY ${slot.isoY}`);
+
+    // 5. And that point must itself satisfy the shared ellipse equation.
+    const dx = (actualIso.x - orbitGeometry.centerIso.x) / orbitGeometry.radiusX;
+    const dy = (actualIso.y - orbitGeometry.centerIso.y) / orbitGeometry.radiusY;
+    const residual = dx * dx + dy * dy;
+    assert.ok(Math.abs(residual - 1) < 1e-6, `${slot.projectId} actual rendered center does not satisfy the ellipse equation (residual ${residual})`);
+  }
+});
+
+test('staticOrbitalLattice: canonical project positions are continuous (NOT grid-snapped), unlike capability positions', () => {
+  const projects = generateMockProjects(11); // odd count unlikely to land on grid multiples by coincidence
+  const skills = generateMockSkills(5);
+  const { projectPositions, skillPositions } = assembleTopologyLayout(projects, skills);
+
+  const GRID_SNAP_STEP_LOCAL = 25;
+  const anyProjectUnsnapped = Object.values(projectPositions).some(
+    pos => Math.abs(pos.x) % GRID_SNAP_STEP_LOCAL !== 0 || Math.abs(pos.y) % GRID_SNAP_STEP_LOCAL !== 0
+  );
+  assert.ok(anyProjectUnsnapped, 'Canonical project orbit positions must be continuous, not forced onto the grid');
+
+  Object.values(skillPositions).forEach(pos => {
+    assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP_LOCAL, 0, 'Capability positions remain grid-snapped');
+    assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP_LOCAL, 0, 'Capability positions remain grid-snapped');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Approximately 2π/N angular spacing
+// ---------------------------------------------------------------------------
+
+test('staticOrbitalLattice: slots are evenly distributed at ~2π/N angular spacing with no per-slot stagger', () => {
+  const n = 18;
+  const projects = generateMockProjects(n);
+  const skills = generateMockSkills(6);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  const expectedSpacing = (2 * Math.PI) / n;
+  const sortedAngles = orbitGeometry.slots.map(s => s.angle).sort((a, b) => a - b);
+  for (let i = 1; i < sortedAngles.length; i++) {
+    const spacing = sortedAngles[i] - sortedAngles[i - 1];
+    assert.ok(Math.abs(spacing - expectedSpacing) < 1e-9, `Angular spacing ${spacing} deviates from expected ${expectedSpacing}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 6-7. Ellipse clears capability core; adjacent RENDERED VISUAL envelopes
+// (structure + callout card, not just the ground footprint) do not overlap.
+//
+// Note: VERIFIED_PROJECTS/VERIFIED_SKILLS in src/data/verifiedPortfolioData.ts
+// are an intentional empty placeholder in this repo (the deployed app resolves
+// real topology data from the committed src/data/githubSnapshot.generated.ts
+// instead) — asserting overlap-freedom against that empty array would be
+// vacuously true and is NOT a real-portfolio regression. See
+// tests/staticOrbitalLatticeSnapshot.test.ts for the actual committed-data test.
+// ---------------------------------------------------------------------------
+
+test('staticOrbitalLattice: pathological wide-width dataset resolves on one ellipse with zero VISUAL envelope overlap', () => {
+  const projects = generateMockProjects(30, [100, 250, 180, 320, 140]);
+  const skills = generateMockSkills(12);
+  const { projectPositions, skillPositions, orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  assert.equal(orbitGeometry.slots.length, 30);
+
+  const skillIsoBoxes = skills.map(s => {
+    const bounds = getNodeBounds('skill', skillPositions[s.id], 48, 48);
+    const corners = [
+      project3DToIso(bounds.minX, bounds.minY, 0),
+      project3DToIso(bounds.maxX, bounds.minY, 0),
+      project3DToIso(bounds.maxX, bounds.maxY, 0),
+      project3DToIso(bounds.minX, bounds.maxY, 0),
+    ];
+    return {
+      id: s.id,
+      minX: Math.min(...corners.map(c => c.x)), maxX: Math.max(...corners.map(c => c.x)),
+      minY: Math.min(...corners.map(c => c.y)), maxY: Math.max(...corners.map(c => c.y)),
+    };
+  });
+  const projectVisualBoxes = projects.map(p => ({
+    id: p.id,
+    ...getTopologyProjectVisualBounds(p, projectPositions[p.id]),
+  }));
+
+  for (let i = 0; i < projectVisualBoxes.length; i++) {
+    for (let j = i + 1; j < projectVisualBoxes.length; j++) {
+      assert.equal(checkAABBOverlap(projectVisualBoxes[i], projectVisualBoxes[j], 0), false, `${projectVisualBoxes[i].id} visual envelope overlaps ${projectVisualBoxes[j].id}`);
+    }
+  }
+  for (const pb of projectVisualBoxes) {
+    for (const sb of skillIsoBoxes) {
+      assert.equal(checkAABBOverlap(pb, sb, 0), false, `${pb.id} visual envelope invades capability ${sb.id}`);
+    }
+  }
+});
+
+test('staticOrbitalLattice: synthetic long/wrapping titles do not cause callout card overlap between adjacent orbit slots', () => {
+  const longTitleProjects = generateMockProjects(20).map((p, i) => ({
+    ...p,
+    title: i % 2 === 0
+      ? 'An Extremely Long Two Line Wrapping Project Title Example'
+      : `System Component ${i + 1}`,
+  }));
+  const skills = generateMockSkills(8);
+  const { projectPositions } = assembleTopologyLayout(longTitleProjects, skills);
+
+  const visualBoxes = longTitleProjects.map(p => ({
+    id: p.id,
+    ...getTopologyProjectVisualBounds(p, projectPositions[p.id]),
+  }));
+
+  for (let i = 0; i < visualBoxes.length; i++) {
+    for (let j = i + 1; j < visualBoxes.length; j++) {
+      assert.equal(checkAABBOverlap(visualBoxes[i], visualBoxes[j], 0), false, `${visualBoxes[i].id} callout envelope overlaps ${visualBoxes[j].id}`);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 8. Orbit center derives from capability visual center (not raw world origin)
+// ---------------------------------------------------------------------------
+
+test('staticOrbitalLattice: orbit center is the isometric visual center of the capability core, not raw world (0,0)', () => {
+  const projects = generateMockProjects(10);
+  const skills = generateMockSkills(9); // multi-ring capability core, off-center in iso space
+  const { skillPositions, orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  const isoCorners: { x: number; y: number }[] = [];
+  Object.values(skillPositions).forEach(pos => {
+    const bounds = getNodeBounds('skill', pos, 48, 48);
+    isoCorners.push(project3DToIso(bounds.minX, bounds.minY, 0));
+    isoCorners.push(project3DToIso(bounds.maxX, bounds.minY, 0));
+    isoCorners.push(project3DToIso(bounds.maxX, bounds.maxY, 0));
+    isoCorners.push(project3DToIso(bounds.minX, bounds.maxY, 0));
+  });
+  const expectedCenterX = (Math.min(...isoCorners.map(c => c.x)) + Math.max(...isoCorners.map(c => c.x))) / 2;
+  const expectedCenterY = (Math.min(...isoCorners.map(c => c.y)) + Math.max(...isoCorners.map(c => c.y))) / 2;
+
+  assert.ok(Math.abs(orbitGeometry.centerIso.x - expectedCenterX) < 1e-6);
+  assert.ok(Math.abs(orbitGeometry.centerIso.y - expectedCenterY) < 1e-6);
+});
+
+// ---------------------------------------------------------------------------
+// 15. Project geometry scale consistency across rendering / layout / collision
+// ---------------------------------------------------------------------------
+
+test('projectTopologyGeometry: getTopologyProjectDimensions applies ORBIT_PROJECT_SCALE by default and matches the formula exactly', () => {
+  const project = { dimensions: { width: 200, height: 80, levels: 2 } };
+  const dims = getTopologyProjectDimensions(project);
+  assert.equal(dims.width, 200 * 0.75 * ORBIT_PROJECT_SCALE);
+  assert.equal(dims.depth, 55 * ORBIT_PROJECT_SCALE);
+  assert.equal(dims.height, 80 * 0.75 * ORBIT_PROJECT_SCALE);
+});
+
+test('projectTopologyGeometry: collision.ts getNodeBounds uses the exact same shared dimensions as the layout engine', () => {
+  const project = generateMockProjects(1)[0];
+  const dims = getTopologyProjectDimensions(project);
+  const pos = { x: 100, y: 200 };
+  const collisionBounds = collisionGetNodeBounds('project', project.id, pos, [project]);
+  // collision.ts adds a 14px clearance PADDING on top of the shared footprint
+  assert.equal(collisionBounds.minX, pos.x - 14);
+  assert.equal(collisionBounds.maxX, pos.x + dims.width + 14);
+  assert.equal(collisionBounds.minY, pos.y - 14);
+  assert.equal(collisionBounds.maxY, pos.y + dims.depth + 14);
+});
+
+// ---------------------------------------------------------------------------
+// 10-14, 16. Component-level wiring that can only be verified structurally
+// (position precedence, canonical-vs-filtered slot source, no motion/docking)
+// ---------------------------------------------------------------------------
+
+test('TopologyCanvas.tsx: static orbital lattice is computed from full projects/activeSkills, never filteredProjects', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const latticeIdx = content.indexOf('const staticOrbitalLattice = useMemo(');
+  assert.ok(latticeIdx !== -1, 'staticOrbitalLattice memo must exist');
+  const latticeBlock = content.slice(latticeIdx, content.indexOf(');', latticeIdx) + 2);
+  assert.ok(latticeBlock.includes('assembleTopologyLayout(projects, activeSkills)'), 'Lattice must be computed from full projects/activeSkills');
+  assert.ok(!latticeBlock.includes('filteredProjects'), 'Lattice computation must not depend on filteredProjects');
+  assert.ok(!latticeBlock.includes('topologyViewMode'), 'Lattice computation must not depend on topologyViewMode');
+  assert.ok(!latticeBlock.includes('selectedExperienceId'), 'Lattice computation must not depend on selectedExperienceId');
+});
+
+test('TopologyCanvas.tsx: position precedence is drag > custom/manual > canonical lattice > gridPosition fallback', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  // getProjectPos: drag branch returns first, then effective (lattice+custom) map, then raw gridPosition
+  const getProjectPosIdx = content.indexOf('const getProjectPos = useCallback(');
+  const getProjectPosBlock = content.slice(getProjectPosIdx, content.indexOf('}, [draggingNode, effectiveProjectPositions]);', getProjectPosIdx));
+  const dragCheckIdx = getProjectPosBlock.indexOf("draggingNode?.type === 'project'");
+  const effectiveFallbackIdx = getProjectPosBlock.indexOf('effectiveProjectPositions[project.id] || project.gridPosition');
+  assert.ok(dragCheckIdx !== -1 && effectiveFallbackIdx !== -1 && dragCheckIdx < effectiveFallbackIdx, 'Drag position must be checked before the canonical/custom fallback');
+
+  // effectiveProjectPositions: lattice spread first, custom spread second (custom wins on key collision)
+  assert.ok(
+    content.includes('{ ...staticOrbitalLattice.projectPositions, ...customProjectPositions }'),
+    'Custom positions must be layered on top of (spread after) the canonical lattice'
+  );
+  assert.ok(
+    content.includes('{ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }'),
+    'Custom skill positions must be layered on top of (spread after) the canonical lattice'
+  );
+});
+
+test('TopologyCanvas.tsx: collision and snap-resolution read from effective (canonical+custom) positions, never raw custom state alone', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+
+  const findNearestCalls = content.split('findNearestValidGridPosition(').length - 1;
+  const checkCollisionsCalls = content.split('checkCollisions(').length - 1;
+  assert.ok(findNearestCalls >= 3, 'findNearestValidGridPosition must be called at multiple resolution points');
+  assert.ok(checkCollisionsCalls >= 1, 'checkCollisions must be called for live collision preview');
+
+  // No call site may pass the raw (lattice-less) custom position maps directly.
+  assert.ok(
+    !content.includes('draggingNode.currentPos,\n      customProjectPositions,') &&
+    !content.includes('draggingNode.currentPos,\n            customProjectPositions,'),
+    'Collision/snap resolution must not read raw customProjectPositions directly (must use effectiveProjectPositions)'
+  );
+});
+
+test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts: zero autonomous motion, zero magnetic/docking implementation', () => {
+  const forbidden = [
+    'orbitPhase',
+    'requestAnimationFrame',
+    'setInterval(',
+    'dockState',
+    'detaching',
+    'detached',
+    'capturing',
+    'magnetic resistance',
+    'capture radius',
+    'spring animation',
+    'redocking',
+  ];
+  const files = [
+    'src/components/TopologyCanvas.tsx',
+    'src/utils/topologyLayout.ts',
+    'src/utils/projectTopologyGeometry.ts',
+    'src/utils/isometricProjection.ts',
+  ];
+  for (const file of files) {
+    const content = fs.readFileSync(path.resolve(file), 'utf8');
+    for (const token of forbidden) {
+      assert.ok(!content.includes(token), `${file} must not contain "${token}"`);
+    }
+  }
+});
+
+test('TopologyCanvas.tsx: renders exactly one static orbit ellipse track element', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const ellipseMatches = content.match(/<ellipse/g) || [];
+  assert.equal(ellipseMatches.length, 1, 'Exactly one <ellipse> element (the static orbit track) must be rendered');
+  assert.ok(content.includes('staticOrbitalLattice.orbitGeometry.radiusX'), 'Orbit track must use canonical radiusX');
+  assert.ok(content.includes('staticOrbitalLattice.orbitGeometry.radiusY'), 'Orbit track must use canonical radiusY');
+});
+
+test('ASSEMBLE restores canonical lattice by clearing overrides rather than copying coordinates into custom state', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const handleAssembleIdx = content.indexOf('const handleAssemble = useCallback(');
+  const handleAssembleBlock = content.slice(handleAssembleIdx, content.indexOf('}, []);', handleAssembleIdx));
+  assert.ok(handleAssembleBlock.includes('setCustomProjectPositions({});'), 'ASSEMBLE must clear custom project positions');
+  assert.ok(handleAssembleBlock.includes('setCustomSkillPositions({});'), 'ASSEMBLE must clear custom skill positions');
+  assert.ok(!handleAssembleBlock.includes('setCustomProjectPositions(projectPositions);'), 'ASSEMBLE must not copy lattice coordinates into custom state');
+});
+
+// ---------------------------------------------------------------------------
+// Callout geometry centralization: no duplicated magic 132/28/38 in the renderer
+// ---------------------------------------------------------------------------
+
+test('TopologyCanvas.tsx: callout card geometry reads from shared PROJECT_CALLOUT_* constants, not duplicated magic numbers', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  assert.ok(content.includes('PROJECT_CALLOUT_WIDTH'), 'Callout width must come from the shared constant');
+  assert.ok(content.includes('PROJECT_CALLOUT_SINGLE_HEIGHT') && content.includes('PROJECT_CALLOUT_DOUBLE_HEIGHT'), 'Callout heights must come from shared constants');
+  assert.ok(!content.includes('const cardWidth = 132'), 'cardWidth must not re-declare the magic literal locally');
+  assert.ok(!content.includes('cardHeight = isTwoLines ? 38 : 28'), 'cardHeight must not re-declare magic literals locally');
+});
+
+// ---------------------------------------------------------------------------
+// Gap 4: FIT ALL must frame the complete rendered lattice at every required
+// viewport size, using a pure (DOM-free) fit calculation.
+// ---------------------------------------------------------------------------
+
+test('computeFitViewport: fitted content never exceeds the usable viewport at any required target size', () => {
+  // A representative real-scale lattice bounds (18 projects, 24 skills; see
+  // tests/staticOrbitalLatticeSnapshot.test.ts for the actual committed data).
+  const projects = generateMockProjects(18, [100, 120, 140, 160]);
+  const skills = generateMockSkills(24);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const bounds = orbitGeometry.visualBounds;
+  const boundsWidth = bounds.maxX - bounds.minX;
+  const boundsHeight = bounds.maxY - bounds.minY;
+
+  const targets: Array<{ w: number; h: number }> = [
+    { w: 390, h: 844 },
+    { w: 768, h: 1024 },
+    { w: 1024, h: 768 },
+    { w: 1440, h: 900 },
+    { w: 1920, h: 1080 },
+  ];
+
+  for (const { w, h } of targets) {
+    const isCompact = w < 1024;
+    const { zoom } = computeFitViewport(bounds, w, h, {
+      paddingFactor: isCompact ? 0.92 : 0.95,
+      minZoom: isCompact ? 0.15 : 0.20,
+      maxZoom: 1.2,
+    });
+    const fittedWidth = boundsWidth * zoom;
+    const fittedHeight = boundsHeight * zoom;
+    assert.ok(fittedWidth <= w + 1e-6, `${w}x${h}: fitted width ${fittedWidth.toFixed(1)} exceeds viewport width ${w} (zoom ${zoom})`);
+    assert.ok(fittedHeight <= h + 1e-6, `${w}x${h}: fitted height ${fittedHeight.toFixed(1)} exceeds viewport height ${h} (zoom ${zoom})`);
+  }
+});
+
+test('computeFitViewport: minZoom floor does not bind for a realistic lattice at the smallest required viewport (390x844)', () => {
+  const projects = generateMockProjects(18, [100, 120, 140, 160]);
+  const skills = generateMockSkills(24);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  const naturalFit = computeFitViewport(orbitGeometry.visualBounds, 390, 844, { minZoom: 0, maxZoom: 100, paddingFactor: 0.92 });
+  const clampedFit = computeFitViewport(orbitGeometry.visualBounds, 390, 844, { minZoom: 0.15, maxZoom: 1.2, paddingFactor: 0.92 });
+  assert.ok(
+    Math.abs(naturalFit.zoom - clampedFit.zoom) < 1e-6,
+    `minZoom floor (0.15) incorrectly overrode the natural fit ratio (${naturalFit.zoom} vs clamped ${clampedFit.zoom}) — this would clip content`
+  );
+});
+
+test('computeFitViewport: centers the bounds midpoint (pure, DOM-free)', () => {
+  const bounds = { minX: -100, maxX: 300, minY: -50, maxY: 150 };
+  const { zoom, x, y } = computeFitViewport(bounds, 800, 600, { paddingFactor: 1, minZoom: 0, maxZoom: 100 });
+  const midX = (bounds.minX + bounds.maxX) / 2;
+  const midY = (bounds.minY + bounds.maxY) / 2;
+  assert.ok(Math.abs(x - (-midX * zoom)) < 1e-6);
+  assert.ok(Math.abs(y - (-midY * zoom)) < 1e-6);
+});

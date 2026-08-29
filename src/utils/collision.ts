@@ -3,6 +3,7 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+import { getTopologyProjectDimensions } from './projectTopologyGeometry';
 
 export const GRID_SNAP_STEP = 25; // 25-unit architectural grid step
 
@@ -27,8 +28,7 @@ export const getNodeBounds = (
 
   if (type === 'project') {
     const proj = projectsList.find(p => p.id === id);
-    const width = (proj?.dimensions.width || 100) * 0.75;
-    const depth = 55;
+    const { width, depth } = getTopologyProjectDimensions(proj);
     return {
       minX: pos.x - PADDING,
       maxX: pos.x + width + PADDING,

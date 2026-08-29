@@ -16,6 +16,7 @@ import { getCapabilityCoreTechnology } from '../src/utils/capabilityAssociations
 import { matchesProjectClassification } from '../src/utils/portfolioUtils.ts';
 import { VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 import { GRID_SNAP_STEP } from '../src/utils/collision.ts';
+import { getTopologyProjectDimensions } from '../src/utils/projectTopologyGeometry.ts';
 import { ProjectData, InfrastructureSkill } from '../src/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -531,10 +532,12 @@ test('18. assembleTopologyLayout: Stable sorting ensures shuffled input order do
 test('19. assembleTopologyLayout: Verified portfolio layout has zero overlaps and correct inner/outer separation', () => {
   const { projectPositions, skillPositions } = assembleTopologyLayout(VERIFIED_PROJECTS, VERIFIED_SKILLS);
 
-  // Assert all coordinates snapped
+  // Capability (skill) positions remain grid-snapped. Canonical project orbit
+  // positions are intentionally continuous (exact ellipse coordinates, not
+  // grid-snapped) — see tests/staticOrbitalLattice.test.ts for that contract.
   Object.values(projectPositions).forEach(pos => {
-    assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0);
-    assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP, 0);
+    assert.ok(Number.isFinite(pos.x));
+    assert.ok(Number.isFinite(pos.y));
   });
   Object.values(skillPositions).forEach(pos => {
     assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0);
@@ -550,7 +553,7 @@ test('19. assembleTopologyLayout: Verified portfolio layout has zero overlaps an
   const projectBoxes = VERIFIED_PROJECTS.map(p => ({
     id: p.id,
     type: 'project' as const,
-    ...getNodeBounds('project', projectPositions[p.id], (p.dimensions?.width || 100) * 0.75, 55)
+    ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
   }));
 
   // Assert zero skill-to-skill overlap
@@ -631,8 +634,8 @@ for (const sCount of skillCounts) {
         assert.ok(pos, `Project ${p.id} position missing`);
         assert.ok(Number.isFinite(pos.x));
         assert.ok(Number.isFinite(pos.y));
-        assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0, `Project ${p.id} x must be multiple of ${GRID_SNAP_STEP}`);
-        assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP, 0, `Project ${p.id} y must be multiple of ${GRID_SNAP_STEP}`);
+        // Canonical project orbit positions are intentionally continuous
+        // (exact ellipse coordinates), not grid-snapped like capabilities.
       });
 
       const skillBoxes = mockSkills.map(s => ({
@@ -644,7 +647,7 @@ for (const sCount of skillCounts) {
       const projectBoxes = mockProjects.map(p => ({
         id: p.id,
         type: 'project' as const,
-        ...getNodeBounds('project', projectPositions[p.id], (p.dimensions?.width || 100) * 0.75, 55)
+        ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
       }));
 
       // 4. Assert zero capability overlap
@@ -708,15 +711,14 @@ test('20. assembleTopologyLayout: Pathological dataset with large variable proje
   const projectBoxes = pathologicalProjects.map(p => ({
     id: p.id,
     type: 'project' as const,
-    ...getNodeBounds('project', projectPositions[p.id], p.dimensions.width * 0.75, 55)
+    ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
   }));
 
-  // Assert all coordinates finite and snapped
+  // Assert all coordinates finite. Canonical project orbit positions are
+  // intentionally continuous (exact ellipse coordinates), not grid-snapped.
   Object.values(projectPositions).forEach(pos => {
     assert.ok(Number.isFinite(pos.x));
     assert.ok(Number.isFinite(pos.y));
-    assert.equal(Math.abs(pos.x) % GRID_SNAP_STEP, 0);
-    assert.equal(Math.abs(pos.y) % GRID_SNAP_STEP, 0);
   });
 
   // Zero project-to-project collisions

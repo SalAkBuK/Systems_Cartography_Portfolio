@@ -58,8 +58,28 @@ import {
   wrapCalloutTitle,
   getConduitPresentationState,
   getTopologyNodeEmphasis,
-  getNodeEmphasisClassName
+  getNodeEmphasisClassName,
+  computeFitViewport
 } from '../utils/topologyLayout';
+import {
+  ISO_COS,
+  ISO_SIN,
+  project3DToIso,
+  projectIsoTo3D
+} from '../utils/isometricProjection';
+import {
+  getTopologyProjectDimensions,
+  PROJECT_CALLOUT_WIDTH,
+  PROJECT_CALLOUT_SINGLE_HEIGHT,
+  PROJECT_CALLOUT_DOUBLE_HEIGHT,
+  PROJECT_CALLOUT_SINGLE_Y,
+  PROJECT_CALLOUT_DOUBLE_Y
+} from '../utils/projectTopologyGeometry';
+
+// Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
+// tests) import the isometric projection helpers from this component file. The
+// canonical implementation lives in ../utils/isometricProjection.
+export { ISO_COS, ISO_SIN, project3DToIso, projectIsoTo3D };
 
 interface TopologyCanvasProps {
   selectedProjectId: string | null;
@@ -76,27 +96,6 @@ interface TopologyCanvasProps {
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
 }
-
-// Math helpers for Isometric Axonometric Projection
-// 30 degree axonometric angle: cos(30°) ≈ 0.8660254, sin(30°) = 0.5
-const ISO_COS = 0.86602540378;
-const ISO_SIN = 0.5;
-
-export const project3DToIso = (x: number, y: number, z: number = 0): { x: number; y: number } => {
-  return {
-    x: (x - y) * ISO_COS,
-    y: (x + y) * ISO_SIN - z,
-  };
-};
-
-export const projectIsoTo3D = (isoX: number, isoY: number): { x: number; y: number } => {
-  const term1 = isoX / ISO_COS;
-  const term2 = isoY / ISO_SIN;
-  return {
-    x: 0.5 * (term1 + term2),
-    y: 0.5 * (term2 - term1),
-  };
-};
 
 export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedProjectId,
@@ -116,6 +115,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
+  // Static orbital lattice: deterministic collision-free ring layout used as the
+  // canonical default for every node's position. Computed from the full (unfiltered)
+  // project/skill sets so search filtering never perturbs slot allocation, and is
+  // independent of topologyViewMode / selectedExperienceId so geometry never shifts
+  // between view modes or under the Professional Experience filter.
+  const staticOrbitalLattice = useMemo(
+    () => assembleTopologyLayout(projects, activeSkills),
+    [projects, activeSkills]
+  );
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -126,6 +135,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // Custom dragged positions for 3D project structures and skill nodes
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [customSkillPositions, setCustomSkillPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  // Effective position maps: static orbital lattice as the base layer, with any
+  // manually dragged/assembled positions layered on top. Passed to collision &
+  // snap-resolution so they always agree with what is actually rendered, instead
+  // of resolving un-dragged neighbors against stale authored gridPosition data.
+  const effectiveProjectPositions = useMemo(
+    () => ({ ...staticOrbitalLattice.projectPositions, ...customProjectPositions }),
+    [staticOrbitalLattice, customProjectPositions]
+  );
+  const effectiveSkillPositions = useMemo(
+    () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
+    [staticOrbitalLattice, customSkillPositions]
+  );
 
   // Grid snap state (enabled by default)
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
@@ -147,15 +169,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (draggingNode?.type === 'project' && draggingNode.id === project.id) {
       return draggingNode.currentPos;
     }
-    return customProjectPositions[project.id] || project.gridPosition;
-  }, [draggingNode, customProjectPositions]);
+    return effectiveProjectPositions[project.id] || project.gridPosition;
+  }, [draggingNode, effectiveProjectPositions]);
 
   const getSkillPos = useCallback((skill: InfrastructureSkill) => {
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
       return draggingNode.currentPos;
     }
-    return customSkillPositions[skill.id] || skill.gridPosition;
-  }, [draggingNode, customSkillPositions]);
+    return effectiveSkillPositions[skill.id] || skill.gridPosition;
+  }, [draggingNode, effectiveSkillPositions]);
 
   // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -212,14 +234,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setTimeout(() => setSnapNotice(null), 2400);
   }, []);
 
-  // Instant Deterministic Schematic Layout Assembler
+  // Restores the canonical static orbital lattice by clearing manual overrides.
+  // The lattice is now the default fallback itself (see staticOrbitalLattice above),
+  // so ASSEMBLE no longer needs to copy coordinates into custom state.
   const handleAssemble = useCallback(() => {
-    const { projectPositions, skillPositions } = assembleTopologyLayout(projects, activeSkills);
-    setCustomProjectPositions(projectPositions);
-    setCustomSkillPositions(skillPositions);
-    setSnapNotice({ message: 'TOPOLOGY ASSEMBLED // SCHEMATIC LAYOUT APPLIED', type: 'snap' });
+    setCustomProjectPositions({});
+    setCustomSkillPositions({});
+    setSnapNotice({ message: 'TOPOLOGY RESTORED // CANONICAL ORBITAL LATTICE', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, [projects, activeSkills]);
+  }, []);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
@@ -233,14 +256,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.type,
       draggingNode.id,
       draggingNode.currentPos,
-      customProjectPositions,
-      customSkillPositions,
+      effectiveProjectPositions,
+      effectiveSkillPositions,
       projects,
       activeSkills,
       GRID_SNAP_STEP,
       gridSnapEnabled
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills, gridSnapEnabled]);
+  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills, gridSnapEnabled]);
 
   // Real-time raw collision warning if directly hovering over another node
   const liveCollision = useMemo(() => {
@@ -249,12 +272,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.type,
       draggingNode.id,
       draggingNode.currentPos,
-      customProjectPositions,
-      customSkillPositions,
+      effectiveProjectPositions,
+      effectiveSkillPositions,
       projects,
       activeSkills
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills]);
+  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
 
   // Update container size on resize
   useEffect(() => {
@@ -274,19 +297,25 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Auto-fit function to center and fit all topology nodes (compact <lg and desktop aware)
+  // Auto-fit function to center and fit the actual static orbital lattice bounds
+  // (compact <lg and desktop aware). Frames the real ellipse + capability core +
+  // every rendered project/callout envelope, so nothing clips. minZoom here is
+  // only a last-resort safety floor against pathological (near-zero) layouts —
+  // it must stay low enough to never bind for realistic project counts, since a
+  // binding floor would silently defeat the fit it's supposed to protect. This
+  // is independent of the manual wheel/keyboard zoom floor (0.45) used elsewhere.
   const fitAll = useCallback(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
     const isCompact = w < 1024;
-    const targetW = isCompact ? 560 : 640;
-    const targetH = isCompact ? 400 : 460;
-    const minZoom = isCompact ? 0.35 : 0.50;
-    const fitRatio = Math.min(w / targetW, h / targetH) * (isCompact ? 0.92 : 0.95);
-    const fitZoom = Math.min(Math.max(fitRatio, minZoom), 1.2);
-    setViewport({ x: 0, y: isCompact ? 0 : 10, zoom: Number(fitZoom.toFixed(2)) });
-  }, [setViewport]);
+    const { zoom, x, y } = computeFitViewport(staticOrbitalLattice.orbitGeometry.visualBounds, w, h, {
+      paddingFactor: isCompact ? 0.92 : 0.95,
+      minZoom: isCompact ? 0.15 : 0.20,
+      maxZoom: 1.2,
+    });
+    setViewport({ x, y, zoom });
+  }, [setViewport, staticOrbitalLattice]);
 
   // Initial mount auto-fit
   const initializedRef = useRef(false);
@@ -378,8 +407,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.type,
             draggingNode.id,
             draggingNode.currentPos,
-            customProjectPositions,
-            customSkillPositions,
+            effectiveProjectPositions,
+            effectiveSkillPositions,
             projects,
             activeSkills,
             GRID_SNAP_STEP,
@@ -454,8 +483,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.type,
             draggingNode.id,
             draggingNode.currentPos,
-            customProjectPositions,
-            customSkillPositions,
+            effectiveProjectPositions,
+            effectiveSkillPositions,
             projects,
             activeSkills,
             GRID_SNAP_STEP,
@@ -499,7 +528,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
     };
-  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
+  }, [draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
 
   // Handle Pan & Drag on canvas surface
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -599,8 +628,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const isDraggingThisProj = draggingNode?.type === 'project' && draggingNode.id === project.id;
       const projectPos = getProjectPos(project);
       
-      const pWidth = (project.dimensions?.width || 100) * 0.75;
-      const pDepth = 55;
+      const { width: pWidth, depth: pDepth } = getTopologyProjectDimensions(project);
 
       activeSkills.forEach(skill => {
         // Check if project and skill are connected using centralized predicate
@@ -897,7 +925,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             handleAssemble();
           }}
           className="hidden lg:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
-          title="Apply Deterministic Multi-Ring Schematic Layout"
+          title="Restore Canonical Static Orbital Lattice"
         >
           <Layers size={12} />
           <span>ASSEMBLE</span>
@@ -1044,6 +1072,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               </g>
             );
           })}
+        </g>
+
+        {/* Static Orbit Track: subtle drafting-style guide for the single project ellipse */}
+        <g id="static-orbit-track" className="pointer-events-none" opacity={0.2}>
+          <ellipse
+            cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
+            cy={staticOrbitalLattice.orbitGeometry.centerIso.y}
+            rx={staticOrbitalLattice.orbitGeometry.radiusX}
+            ry={staticOrbitalLattice.orbitGeometry.radiusY}
+            fill="none"
+            stroke="#15150F"
+            strokeWidth="0.8"
+            strokeDasharray="6 6"
+          />
         </g>
 
         {/* Cable / Routing Connections Layer */}
@@ -1201,8 +1243,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               // Project structure footprint
               if (draggingNode.type === 'project') {
                 const proj = projects.find(p => p.id === draggingNode.id);
-                const w = (proj?.dimensions.width || 100) * 0.75;
-                const d = 55;
+                const { width: w, depth: d } = getTopologyProjectDimensions(proj);
 
                 const p0 = project3DToIso(dragResolution.x, dragResolution.y, 0);
                 const p1 = project3DToIso(dragResolution.x + w, dragResolution.y, 0);
@@ -1357,9 +1398,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const projectPos = getProjectPos(project);
             const originX = projectPos.x;
             const originY = projectPos.y;
-            const width = project.dimensions.width * 0.75;
-            const depth = 55;
-            const height = project.dimensions.height * 0.75;
+            const { width, depth, height } = getTopologyProjectDimensions(project);
             const levels = project.dimensions.levels;
 
             // Compute 3D corners for the base slab
@@ -1529,9 +1568,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 {(() => {
                   const titleLines = wrapCalloutTitle(project.title, 20, 2);
                   const isTwoLines = titleLines.length > 1;
-                  const cardWidth = 132;
-                  const cardHeight = isTwoLines ? 38 : 28;
-                  const cardY = isTwoLines ? -15 : -12;
+                  const cardWidth = PROJECT_CALLOUT_WIDTH;
+                  const cardHeight = isTwoLines ? PROJECT_CALLOUT_DOUBLE_HEIGHT : PROJECT_CALLOUT_SINGLE_HEIGHT;
+                  const cardY = isTwoLines ? PROJECT_CALLOUT_DOUBLE_Y : PROJECT_CALLOUT_SINGLE_Y;
 
                   return (
                     <g transform={`translate(${p3_top.x - 8}, ${p3_top.y - 30})`}>
