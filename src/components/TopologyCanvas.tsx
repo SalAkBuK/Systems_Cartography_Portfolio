@@ -83,6 +83,23 @@ import {
   type OrbitClockState,
   type OrbitPauseState
 } from '../utils/orbitMotion';
+import {
+  resolveProjectDockState,
+  getProjectVisualCenterIso,
+  hasCrossedDetachThreshold,
+  computeResistedWorldOrigin,
+  computeFreeWorldOrigin,
+  computeCaptureAttraction,
+  computeMagneticRenderPosition,
+  deriveDockState,
+  resolveReleaseOutcome,
+  stepSettleTransition,
+  REDOCK_DURATION_MS,
+  ABORTED_PULL_RETURN_MS,
+  type ProjectDockState,
+  type ProjectDockRuntimeMap,
+  type SettleTransition
+} from '../utils/projectDocking';
 
 // Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
 // tests) import the isometric projection helpers from this component file. The
@@ -148,7 +165,17 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
   const [snapNotice, setSnapNotice] = useState<{ message: string; type: 'snap' | 'collision' } | null>(null);
 
-  // Active node drag state with live position tracking
+  // Active node drag state with live position tracking. PR23 adds project-only
+  // magnetic docking fields (undefined for skills, which keep PR21's plain
+  // free-drag behavior untouched): `crossedDetachThreshold` is a sticky
+  // per-gesture flag (see projectDocking.ts's deriveDockState), `breakaway`
+  // is the pointer/position baseline captured exactly once — either at
+  // gesture start (already-detached project) or at the instant the detach
+  // threshold is crossed (docked project pulled loose) — so free-drag math
+  // never has to reference the original gesture start again, and `rawPos` is
+  // the pointer-derived position BEFORE any magnetic capture blend is applied
+  // (tracked separately so attraction preview never corrupts the real drag
+  // position — see PR23 spec section 20).
   const [draggingNode, setDraggingNode] = useState<{
     type: 'project' | 'skill';
     id: string;
@@ -157,7 +184,25 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     startNodePos: { x: number; y: number };
     currentPos: { x: number; y: number };
     hasMoved: boolean;
+    crossedDetachThreshold?: boolean;
+    breakaway?: { clientX: number; clientY: number; worldPos: { x: number; y: number } };
+    rawPos?: { x: number; y: number };
   } | null>(null);
+
+  // PR23: runtime-only project docking state. Sparse — an absent entry means
+  // docked. Never written to ProjectData/GITHUB_SNAPSHOT/src/data.
+  const [projectDockState, setProjectDockState] = useState<ProjectDockRuntimeMap>({});
+
+  // PR23: the single short-lived settle-animation transition (aborted-pull
+  // return OR redock settle — same mechanism, different duration). At most
+  // one project may be settling at a time. `dockTransitionRef` is the
+  // interpolation source of truth for the RAF loop; `activeDockTransitionProjectId`
+  // is the reactive flag that starts/stops that loop and feeds the orbit
+  // pause state; `dockTransitionRenderPos` is the position the render layer
+  // actually reads each frame.
+  const dockTransitionRef = useRef<(SettleTransition & { projectId: string }) | null>(null);
+  const [activeDockTransitionProjectId, setActiveDockTransitionProjectId] = useState<string | null>(null);
+  const [dockTransitionRenderPos, setDockTransitionRenderPos] = useState<{ x: number; y: number } | null>(null);
 
   // ---------------------------------------------------------------------------
   // PR22: Orbital motion. ONE shared phase drives every canonical (non-custom)
@@ -201,10 +246,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     prefersReducedMotion,
     isCompact: isCompactViewport,
     isExperienceSelected: Boolean(selectedExperienceId),
+    isDockingTransitionActive: Boolean(activeDockTransitionProjectId),
   }), [
     hoveredProjectId, hoveredSkillId, selectedProjectId, selectedSkillId,
     draggingNode, isDragging, isDocumentHidden, prefersReducedMotion,
-    isCompactViewport, selectedExperienceId
+    isCompactViewport, selectedExperienceId, activeDockTransitionProjectId
   ]);
   const isPauseConditionActive = useMemo(
     () => isOrbitPauseConditionActive(orbitPauseState),
@@ -288,13 +334,94 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     [staticOrbitalLattice, customSkillPositions]
   );
 
+  // PR23: cancels any in-flight settle transition without finalizing it —
+  // used by ASSEMBLE/RESET, which resolve every project to canonical docked
+  // membership through their own explicit state clearing instead.
+  const cancelDockTransition = useCallback(() => {
+    dockTransitionRef.current = null;
+    setActiveDockTransitionProjectId(null);
+    setDockTransitionRenderPos(null);
+  }, []);
+
+  // Starts (or, under reduced motion, instantly finalizes) the settle
+  // animation that carries a project from its current rendered position to
+  // `toPos` — used for both an aborted pull (returns to the reserved slot)
+  // and a valid magnetic redock (also the reserved slot). Finalization always
+  // clears both the custom position override and the dock-runtime exception,
+  // which is a safe no-op when either was never set (e.g. an aborted pull
+  // never wrote a custom position in the first place).
+  const finalizeProjectAsDocked = useCallback((projectId: string) => {
+    setCustomProjectPositions(prev => {
+      if (!(projectId in prev)) return prev;
+      const next = { ...prev };
+      delete next[projectId];
+      return next;
+    });
+    setProjectDockState(prev => {
+      if (!(projectId in prev)) return prev;
+      const next = { ...prev };
+      delete next[projectId];
+      return next;
+    });
+  }, []);
+
+  const startSettleTransition = useCallback((
+    projectId: string,
+    fromPos: { x: number; y: number },
+    toPos: { x: number; y: number },
+    durationMs: number
+  ) => {
+    if (prefersReducedMotion) {
+      finalizeProjectAsDocked(projectId);
+      return;
+    }
+    dockTransitionRef.current = { projectId, fromPos, toPos, durationMs, startTimestamp: null };
+    setActiveDockTransitionProjectId(projectId);
+    setDockTransitionRenderPos(fromPos);
+  }, [prefersReducedMotion, finalizeProjectAsDocked]);
+
+  // The ONE short-lived docking-settle RAF loop — alive only while an actual
+  // transition is in progress (never a persistent per-project loop), gated
+  // exactly like the PR22 orbit clock. Elapsed-time based via
+  // stepSettleTransition, so frame-rate variance cannot change perceived speed.
+  useEffect(() => {
+    if (!activeDockTransitionProjectId) return;
+
+    let rafId: number;
+    const tick = (timestamp: number) => {
+      const transition = dockTransitionRef.current;
+      if (!transition) return;
+
+      const result = stepSettleTransition(transition, timestamp);
+      if (transition.startTimestamp === null) {
+        dockTransitionRef.current = { ...transition, startTimestamp: timestamp };
+      }
+      setDockTransitionRenderPos(result.position);
+
+      if (result.isComplete) {
+        const finishedProjectId = transition.projectId;
+        dockTransitionRef.current = null;
+        setActiveDockTransitionProjectId(null);
+        setDockTransitionRenderPos(null);
+        finalizeProjectAsDocked(finishedProjectId);
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [activeDockTransitionProjectId, finalizeProjectAsDocked]);
+
   // Synchronized node position getters for 100% frame-accurate alignment
   const getProjectPos = useCallback((project: ProjectData) => {
     if (draggingNode?.type === 'project' && draggingNode.id === project.id) {
       return draggingNode.currentPos;
     }
+    if (activeDockTransitionProjectId === project.id && dockTransitionRenderPos) {
+      return dockTransitionRenderPos;
+    }
     return effectiveProjectPositions[project.id] || project.gridPosition;
-  }, [draggingNode, effectiveProjectPositions]);
+  }, [draggingNode, effectiveProjectPositions, activeDockTransitionProjectId, dockTransitionRenderPos]);
 
   const getSkillPos = useCallback((skill: InfrastructureSkill) => {
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
@@ -302,6 +429,43 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     }
     return effectiveSkillPositions[skill.id] || skill.gridPosition;
   }, [draggingNode, effectiveSkillPositions]);
+
+  // PR23: derives the actively-dragged project's magnetic dock state, distance/
+  // attraction to its own reserved slot, and whether that slot is currently
+  // blocked by another detached project. This is the single source both the
+  // live tether/marker rendering and the mouseup release decision read from —
+  // it never invents a second, disagreeing notion of "how close is capture."
+  const activeDockingPreview = useMemo(() => {
+    if (!draggingNode || draggingNode.type !== 'project') return null;
+    const project = projectsById.get(draggingNode.id);
+    const reservedOrigin = animatedCanonicalProjectPositions[draggingNode.id];
+    if (!project || !reservedOrigin) return null;
+
+    const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
+    const crossed = draggingNode.crossedDetachThreshold ?? false;
+    const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
+
+    let attraction = computeCaptureAttraction(Infinity);
+    if (crossed || persisted === 'detached') {
+      const rawCenter = getProjectVisualCenterIso(project, rawPos);
+      const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
+      const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
+      attraction = computeCaptureAttraction(distanceIso);
+    }
+
+    const dockState = deriveDockState({
+      persistedState: persisted,
+      isDragging: true,
+      hasCrossedThresholdThisGesture: crossed,
+      isWithinCaptureRadius: attraction.isWithinCaptureRadius,
+    });
+
+    const isBlocked = dockState === 'capturing'
+      ? checkCollisions('project', draggingNode.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills).hasCollision
+      : false;
+
+    return { project, reservedOrigin, dockState, attraction, isBlocked, rawPos };
+  }, [draggingNode, projectsById, animatedCanonicalProjectPositions, projectDockState, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
 
   // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -361,13 +525,25 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setOrbitPhase(0);
   }, []);
 
-  const resetAllPositions = useCallback(() => {
+  // PR23: ASSEMBLE/RESET both mean "restore complete canonical orbital
+  // system" — cancel any active drag, cancel any in-flight settle animation
+  // (no 18-project physics pass, this is instant), clear every custom
+  // position AND every dock-runtime exception so all projects become docked,
+  // then reset phase to 0. Motion resumes only if PR22's pause rules allow it.
+  const restoreCanonicalDockMembership = useCallback(() => {
+    setDraggingNode(null);
+    cancelDockTransition();
     setCustomProjectPositions({});
     setCustomSkillPositions({});
+    setProjectDockState({});
     resetOrbitPhaseToCanonical();
+  }, [cancelDockTransition, resetOrbitPhaseToCanonical]);
+
+  const resetAllPositions = useCallback(() => {
+    restoreCanonicalDockMembership();
     setSnapNotice({ message: 'TOPOLOGY POSITIONS RESET TO DEFAULT', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, [resetOrbitPhaseToCanonical]);
+  }, [restoreCanonicalDockMembership]);
 
   // Restores the canonical static orbital lattice by clearing manual overrides
   // and resetting the shared orbit phase to 0. The lattice is now the default
@@ -375,12 +551,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // above), so ASSEMBLE no longer needs to copy coordinates into custom state.
   // No snapping/tweening animation for the restore itself — a future PR may add one.
   const handleAssemble = useCallback(() => {
-    setCustomProjectPositions({});
-    setCustomSkillPositions({});
-    resetOrbitPhaseToCanonical();
+    restoreCanonicalDockMembership();
     setSnapNotice({ message: 'TOPOLOGY RESTORED // CANONICAL ORBITAL LATTICE', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, [resetOrbitPhaseToCanonical]);
+  }, [restoreCanonicalDockMembership]);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
@@ -509,158 +683,198 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     });
   }, [projects, searchQuery]);
 
-  // Global window mousemove & mouseup listeners for buttery smooth dragging with snap collision resolution
+  // Global window mousemove & mouseup listeners for buttery smooth dragging
+  // with snap/collision resolution (skills) or magnetic docking mechanics
+  // (projects). Mouse and touch share the exact same pure calculations —
+  // processMove/processRelease only differ in how they read the pointer
+  // coordinate from the native event.
   useEffect(() => {
     if (!draggingNode) return;
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const deltaScreenX = (e.clientX - draggingNode.startClientX) / viewport.zoom;
-      const deltaScreenY = (e.clientY - draggingNode.startClientY) / viewport.zoom;
-      
+    const processMove = (clientX: number, clientY: number) => {
+      const deltaScreenX = (clientX - draggingNode.startClientX) / viewport.zoom;
+      const deltaScreenY = (clientY - draggingNode.startClientY) / viewport.zoom;
       const moved = Math.hypot(deltaScreenX, deltaScreenY) > 3;
 
-      const delta3D = projectIsoTo3D(deltaScreenX, deltaScreenY);
-      const newPos = {
-        x: Math.round(draggingNode.startNodePos.x + delta3D.x),
-        y: Math.round(draggingNode.startNodePos.y + delta3D.y),
-      };
-
-      setDraggingNode(prev => prev ? {
-        ...prev,
-        currentPos: newPos,
-        hasMoved: prev.hasMoved || moved,
-      } : null);
-
-      if (draggingNode.type === 'project') {
-        setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
-      } else if (draggingNode.type === 'skill') {
+      if (draggingNode.type === 'skill') {
+        const delta3D = projectIsoTo3D(deltaScreenX, deltaScreenY);
+        const newPos = {
+          x: Math.round(draggingNode.startNodePos.x + delta3D.x),
+          y: Math.round(draggingNode.startNodePos.y + delta3D.y),
+        };
+        setDraggingNode(prev => prev ? { ...prev, currentPos: newPos, hasMoved: prev.hasMoved || moved } : null);
         setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
+        return;
       }
-    };
 
-    const handleWindowMouseUp = () => {
-      if (draggingNode) {
-        if (!draggingNode.hasMoved) {
-          if (draggingNode.type === 'project') {
-            onSelectProject(draggingNode.id);
-          } else if (draggingNode.type === 'skill') {
-            onSelectSkill(draggingNode.id);
+      // PROJECT: magnetic docking mechanics. No customProjectPositions write
+      // during the gesture — the whole in-progress pull/drag/capture lives in
+      // draggingNode; a persistent override is only ever written on release.
+      setDraggingNode(prev => {
+        if (!prev || prev.type !== 'project') return prev;
+
+        let crossedDetachThreshold = prev.crossedDetachThreshold ?? false;
+        let breakaway = prev.breakaway;
+        let rawPos: { x: number; y: number };
+
+        if (!crossedDetachThreshold) {
+          if (hasCrossedDetachThreshold(deltaScreenX, deltaScreenY)) {
+            // Breakaway: capture the exact resisted position and pointer
+            // baseline ONCE, so free drag continues from here with zero jump.
+            crossedDetachThreshold = true;
+            const positionAtCrossing = computeResistedWorldOrigin(prev.startNodePos, deltaScreenX, deltaScreenY);
+            breakaway = { clientX, clientY, worldPos: positionAtCrossing };
+            rawPos = positionAtCrossing;
+          } else {
+            rawPos = computeResistedWorldOrigin(prev.startNodePos, deltaScreenX, deltaScreenY);
           }
         } else {
-          // Resolve snap & collision avoidance on drop
-          const resolved = findNearestValidGridPosition(
-            draggingNode.type,
-            draggingNode.id,
-            draggingNode.currentPos,
-            effectiveProjectPositions,
-            effectiveSkillPositions,
-            projects,
-            activeSkills,
-            GRID_SNAP_STEP,
-            gridSnapEnabled
-          );
+          const baseline = breakaway!;
+          const freeDeltaX = (clientX - baseline.clientX) / viewport.zoom;
+          const freeDeltaY = (clientY - baseline.clientY) / viewport.zoom;
+          rawPos = computeFreeWorldOrigin(baseline.worldPos, freeDeltaX, freeDeltaY);
+        }
 
-          const finalPos = { x: resolved.x, y: resolved.y };
-
-          if (draggingNode.type === 'project') {
-            setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          } else if (draggingNode.type === 'skill') {
-            setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
+        // Magnetic capture preview: only once free of resistance, blend the
+        // RENDERED position toward the (live, phase-frozen-by-pause) reserved
+        // slot without ever touching rawPos itself — and never if the target
+        // is currently blocked by another detached project.
+        let renderedPos = rawPos;
+        if (crossedDetachThreshold) {
+          const project = projectsById.get(prev.id);
+          const reservedOrigin = animatedCanonicalProjectPositions[prev.id];
+          if (project && reservedOrigin) {
+            const rawCenter = getProjectVisualCenterIso(project, rawPos);
+            const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
+            const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
+            const attraction = computeCaptureAttraction(distanceIso);
+            if (attraction.isWithinCaptureRadius) {
+              const blocked = checkCollisions(
+                'project', prev.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills
+              ).hasCollision;
+              if (!blocked) {
+                renderedPos = computeMagneticRenderPosition(rawPos, reservedOrigin, attraction.strength);
+              }
+            }
           }
+        }
 
+        return {
+          ...prev,
+          crossedDetachThreshold,
+          breakaway,
+          rawPos,
+          currentPos: renderedPos,
+          hasMoved: prev.hasMoved || moved,
+        };
+      });
+    };
+
+    const processRelease = () => {
+      if (!draggingNode) return;
+
+      if (draggingNode.type === 'skill') {
+        if (!draggingNode.hasMoved) {
+          onSelectSkill(draggingNode.id);
+        } else {
+          const resolved = findNearestValidGridPosition(
+            'skill', draggingNode.id, draggingNode.currentPos,
+            effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills,
+            GRID_SNAP_STEP, gridSnapEnabled
+          );
+          const finalPos = { x: resolved.x, y: resolved.y };
+          setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
           if (resolved.wasAdjusted) {
-            setSnapNotice({
-              message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`,
-              type: 'collision',
-            });
+            setSnapNotice({ message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`, type: 'collision' });
             setTimeout(() => setSnapNotice(null), 2500);
           } else if (gridSnapEnabled) {
-            setSnapNotice({
-              message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`,
-              type: 'snap',
-            });
+            setSnapNotice({ message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`, type: 'snap' });
             setTimeout(() => setSnapNotice(null), 1800);
           }
         }
         setDraggingNode(null);
+        return;
       }
+
+      // PROJECT
+      if (!draggingNode.hasMoved) {
+        // A true click survives untouched: select, dock state unchanged.
+        onSelectProject(draggingNode.id);
+        setDraggingNode(null);
+        return;
+      }
+
+      const project = projectsById.get(draggingNode.id);
+      const reservedOrigin = animatedCanonicalProjectPositions[draggingNode.id];
+      const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
+      const crossed = draggingNode.crossedDetachThreshold ?? false;
+      const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
+
+      let attraction = computeCaptureAttraction(Infinity);
+      if ((crossed || persisted === 'detached') && project && reservedOrigin) {
+        const rawCenter = getProjectVisualCenterIso(project, rawPos);
+        const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
+        const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
+        attraction = computeCaptureAttraction(distanceIso);
+      }
+
+      const dockStateAtRelease = deriveDockState({
+        persistedState: persisted,
+        isDragging: true,
+        hasCrossedThresholdThisGesture: crossed,
+        isWithinCaptureRadius: attraction.isWithinCaptureRadius,
+      });
+
+      const isBlocked = dockStateAtRelease === 'capturing' && reservedOrigin
+        ? checkCollisions('project', draggingNode.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills).hasCollision
+        : false;
+
+      const outcome = resolveReleaseOutcome(dockStateAtRelease, isBlocked);
+
+      if (outcome === 'docked' && reservedOrigin) {
+        // Magnetic dock has drop priority — this branch runs BEFORE any grid
+        // snap is even considered. Aborted pull and valid redock share the
+        // same settle mechanism; only the duration differs.
+        const duration = dockStateAtRelease === 'detaching' ? ABORTED_PULL_RETURN_MS : REDOCK_DURATION_MS;
+        startSettleTransition(draggingNode.id, draggingNode.currentPos, reservedOrigin, duration);
+        setSnapNotice({
+          message: dockStateAtRelease === 'detaching'
+            ? 'MAGNETIC RELEASE // RETURNING TO SLOT'
+            : 'DOCK TARGET ACQUIRED // REDOCKING',
+          type: 'snap',
+        });
+        setTimeout(() => setSnapNotice(null), 1800);
+      } else {
+        // Ordinary free placement: existing grid-snap/collision resolution,
+        // persisted as a detached custom position.
+        const resolved = findNearestValidGridPosition(
+          'project', draggingNode.id, rawPos,
+          effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills,
+          GRID_SNAP_STEP, gridSnapEnabled
+        );
+        const finalPos = { x: resolved.x, y: resolved.y };
+        setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
+        setProjectDockState(prev => ({ ...prev, [draggingNode.id]: { state: 'detached' } }));
+        if (resolved.wasAdjusted) {
+          setSnapNotice({ message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`, type: 'collision' });
+          setTimeout(() => setSnapNotice(null), 2500);
+        } else if (gridSnapEnabled) {
+          setSnapNotice({ message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`, type: 'snap' });
+          setTimeout(() => setSnapNotice(null), 1800);
+        }
+      }
+
+      setDraggingNode(null);
     };
 
+    const handleWindowMouseMove = (e: MouseEvent) => processMove(e.clientX, e.clientY);
+    const handleWindowMouseUp = () => processRelease();
     const handleWindowTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       e.preventDefault();
-      const touch = e.touches[0];
-      const deltaScreenX = (touch.clientX - draggingNode.startClientX) / viewport.zoom;
-      const deltaScreenY = (touch.clientY - draggingNode.startClientY) / viewport.zoom;
-      
-      const moved = Math.hypot(deltaScreenX, deltaScreenY) > 3;
-
-      const delta3D = projectIsoTo3D(deltaScreenX, deltaScreenY);
-      const newPos = {
-        x: Math.round(draggingNode.startNodePos.x + delta3D.x),
-        y: Math.round(draggingNode.startNodePos.y + delta3D.y),
-      };
-
-      setDraggingNode(prev => prev ? {
-        ...prev,
-        currentPos: newPos,
-        hasMoved: prev.hasMoved || moved,
-      } : null);
-
-      if (draggingNode.type === 'project') {
-        setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
-      } else if (draggingNode.type === 'skill') {
-        setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
-      }
+      processMove(e.touches[0].clientX, e.touches[0].clientY);
     };
-
-    const handleWindowTouchEnd = () => {
-      if (draggingNode) {
-        if (!draggingNode.hasMoved) {
-          if (draggingNode.type === 'project') {
-            onSelectProject(draggingNode.id);
-          } else if (draggingNode.type === 'skill') {
-            onSelectSkill(draggingNode.id);
-          }
-        } else {
-          // Resolve snap & collision avoidance on drop
-          const resolved = findNearestValidGridPosition(
-            draggingNode.type,
-            draggingNode.id,
-            draggingNode.currentPos,
-            effectiveProjectPositions,
-            effectiveSkillPositions,
-            projects,
-            activeSkills,
-            GRID_SNAP_STEP,
-            gridSnapEnabled
-          );
-
-          const finalPos = { x: resolved.x, y: resolved.y };
-
-          if (draggingNode.type === 'project') {
-            setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          } else if (draggingNode.type === 'skill') {
-            setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          }
-
-          if (resolved.wasAdjusted) {
-            setSnapNotice({
-              message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`,
-              type: 'collision',
-            });
-            setTimeout(() => setSnapNotice(null), 2500);
-          } else if (gridSnapEnabled) {
-            setSnapNotice({
-              message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`,
-              type: 'snap',
-            });
-            setTimeout(() => setSnapNotice(null), 1800);
-          }
-        }
-        setDraggingNode(null);
-      }
-    };
+    const handleWindowTouchEnd = () => processRelease();
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
@@ -673,7 +887,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
     };
-  }, [draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
+  }, [
+    draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions,
+    gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills,
+    projectsById, animatedCanonicalProjectPositions, projectDockState, startSettleTransition
+  ]);
 
   // Handle Pan & Drag on canvas surface
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1492,6 +1710,21 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const isSelected = selectedProjectId === project.id;
             const isHovered = hoveredProjectId === project.id;
             const isThisDragging = draggingNode?.type === 'project' && draggingNode.id === project.id;
+
+            // PR23: magnetic docking render state. The actively-dragged project's
+            // dockState comes from activeDockingPreview (the single source shared
+            // with the mouseup release decision); a project mid-settle-animation
+            // is rendered as 'capturing' until the transition completes; every
+            // other project reads its persisted (docked/detached) state.
+            const isThisRedocking = activeDockTransitionProjectId === project.id;
+            const liveDockInfo = isThisDragging ? activeDockingPreview : null;
+            const persistedDockState = resolveProjectDockState(projectDockState, project.id);
+            const renderDockState: ProjectDockState = isThisRedocking
+              ? 'capturing'
+              : (liveDockInfo?.dockState ?? persistedDockState);
+            const isDockStateVisible = renderDockState !== 'docked';
+            const isCapturingBlocked = Boolean(liveDockInfo?.dockState === 'capturing' && liveDockInfo.isBlocked);
+
             const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : (selectedSkillId ? focusedConnectedProjectIds.has(project.id) : false);
             const selectedExp = selectedExperienceId ? activeExperience.find(e => e.id === selectedExperienceId) : null;
             const isLinkedToSelectedExp = selectedExp ? isProjectLinkedToExperience(project, selectedExp) : false;
@@ -1582,27 +1815,44 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={project.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
+                  const startPos = { x: originX, y: originY };
+                  const persisted = resolveProjectDockState(projectDockState, project.id);
                   setDraggingNode({
                     type: 'project',
                     id: project.id,
                     startClientX: e.clientX,
                     startClientY: e.clientY,
-                    startNodePos: { x: originX, y: originY },
-                    currentPos: { x: originX, y: originY },
+                    startNodePos: startPos,
+                    currentPos: startPos,
+                    rawPos: startPos,
                     hasMoved: false,
+                    // Already-detached: no resistance phase — grabbing it again is
+                    // immediately free-drag, with the gesture start itself as the
+                    // free-drag baseline (see PR23 spec section 17/19).
+                    crossedDetachThreshold: persisted === 'detached',
+                    breakaway: persisted === 'detached'
+                      ? { clientX: e.clientX, clientY: e.clientY, worldPos: startPos }
+                      : undefined,
                   });
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
                   if (e.touches.length === 1) {
+                    const startPos = { x: originX, y: originY };
+                    const persisted = resolveProjectDockState(projectDockState, project.id);
                     setDraggingNode({
                       type: 'project',
                       id: project.id,
                       startClientX: e.touches[0].clientX,
                       startClientY: e.touches[0].clientY,
-                      startNodePos: { x: originX, y: originY },
-                      currentPos: { x: originX, y: originY },
+                      startNodePos: startPos,
+                      currentPos: startPos,
+                      rawPos: startPos,
                       hasMoved: false,
+                      crossedDetachThreshold: persisted === 'detached',
+                      breakaway: persisted === 'detached'
+                        ? { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, worldPos: startPos }
+                        : undefined,
                     });
                   }
                 }}
@@ -1804,6 +2054,55 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                           </text>
                         </g>
                       )}
+                    </g>
+                  );
+                })()}
+
+                {/* PR23: Reserved orbital slot marker + tether. The slot itself
+                    keeps revolving with the ring even while this project sits
+                    detached — never a duplicate project cube, never another
+                    orbital ellipse, just a small drafting-style diamond mark.
+                    The tether only appears while actively dragging/redocking
+                    (an idle detached project shows the marker alone). */}
+                {isDockStateVisible && (() => {
+                  const reservedSlotOrigin = animatedCanonicalProjectPositions[project.id];
+                  if (!reservedSlotOrigin) return null;
+                  const reservedCenterIso = getProjectVisualCenterIso(project, reservedSlotOrigin);
+                  // Ground-plane center of the CURRENT rendered box — same corners
+                  // already computed above for the main structure, so this always
+                  // matches exactly what's on screen (resisted, free-drag, or settling).
+                  const currentCenterIso = {
+                    x: (p0_ground.x + p2_ground.x) / 2,
+                    y: (p0_ground.y + p2_ground.y) / 2,
+                  };
+                  const showTether = isThisDragging || isThisRedocking;
+                  const isCapturingActive = renderDockState === 'capturing' && !isCapturingBlocked;
+                  const markerColor = isCapturingBlocked ? '#E5534E' : isCapturingActive ? '#C3E54E' : '#15150F';
+                  const markerOpacity = isCapturingActive ? 0.9 : isCapturingBlocked ? 0.75 : 0.4;
+                  const m = 6;
+
+                  return (
+                    <g className="pointer-events-none">
+                      {showTether && (
+                        <line
+                          x1={reservedCenterIso.x}
+                          y1={reservedCenterIso.y}
+                          x2={currentCenterIso.x}
+                          y2={currentCenterIso.y}
+                          stroke={isCapturingBlocked ? '#E5534E' : isCapturingActive ? '#C3E54E' : 'rgba(21, 21, 15, 0.5)'}
+                          strokeWidth={isCapturingActive ? 1.1 : 0.8}
+                          strokeDasharray="3 3"
+                          opacity={isCapturingActive ? 0.7 : 0.45}
+                        />
+                      )}
+                      <path
+                        d={`M ${reservedCenterIso.x} ${reservedCenterIso.y - m} L ${reservedCenterIso.x + m} ${reservedCenterIso.y} L ${reservedCenterIso.x} ${reservedCenterIso.y + m} L ${reservedCenterIso.x - m} ${reservedCenterIso.y} Z`}
+                        fill="none"
+                        stroke={markerColor}
+                        strokeWidth={isCapturingActive ? 1.4 : 1}
+                        opacity={markerOpacity}
+                      />
+                      <circle cx={reservedCenterIso.x} cy={reservedCenterIso.y} r={1.2} fill={markerColor} opacity={markerOpacity} />
                     </g>
                   );
                 })()}
