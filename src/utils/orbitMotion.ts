@@ -149,9 +149,10 @@ export function getDynamicOrbitalPosition(
 
 /**
  * Interaction, system, and accessibility state stays observable in one object,
- * but only the five machine-level authorities below may stop the orbit. Hover,
- * selection, focus, canvas pan, ordinary below-threshold project drag, and an
- * already-detached project's free drag deliberately do not participate.
+ * but only the four machine-level authorities below may stop the orbit. Hover,
+ * selection, focus, canvas pan, and node drag — including a docked project
+ * crossing the magnetic detach threshold — deliberately do not participate;
+ * only the shared reflow that a committed detach/reinsertion triggers does.
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -167,14 +168,6 @@ export interface OrbitPauseState {
   isExperienceSelected: boolean;
   /** PR23: a magnetic aborted-pull-return or redock settle transition is actively animating. */
   isDockingTransitionActive: boolean;
-  /**
-   * PR24: a DOCKED project has crossed the magnetic detach threshold during
-   * the current drag gesture. Freezes the ring at its exact current phase for
-   * the remainder of the breakaway so detach/reflow math reads a coherent
-   * value. An already-detached project being regrabbed/repositioned never
-   * sets this — only a docked project's first actual breakaway does.
-   */
-  isProjectBreakawayActive: boolean;
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
@@ -182,7 +175,6 @@ export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
     state.isCompact ||
-    state.isDockingTransitionActive ||
-    state.isProjectBreakawayActive
+    state.isDockingTransitionActive
   );
 }
