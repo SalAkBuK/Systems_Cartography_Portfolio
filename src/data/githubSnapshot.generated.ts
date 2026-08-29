@@ -6,7 +6,7 @@ import type { GitHubSyncResult } from '../services/githubService';
 
 export const GITHUB_SNAPSHOT_METADATA: GitHubSnapshotMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-28T18:12:38.191Z",
+  "generatedAt": "2026-08-29T07:28:03.816Z",
   "githubTarget": "https://github.com/SalAkBuK",
   "sourceIdentifier": "SalAkBuK",
   "rawRepositoryCount": 19,
@@ -33,349 +33,9 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
   },
   "projects": [
     {
-      "id": "gh-1347309405",
-      "code": "GH-01",
-      "title": "Systems_Cartography_Portfolio",
-      "tagline": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface.",
-      "category": "fullstack",
-      "classifications": [
-        "fullstack",
-        "frontend",
-        "backend"
-      ],
-      "status": "ACTIVE",
-      "year": "2026",
-      "dimensions": {
-        "width": 89,
-        "height": 77,
-        "levels": 2
-      },
-      "gridPosition": {
-        "x": -160,
-        "y": -90
-      },
-      "accentColor": "#8EA9DA",
-      "summary": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface. GitHub reports 0 stars, 0 forks, and 1 open issues.",
-      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
-      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
-      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
-      "techStack": [
-        "TypeScript",
-        "Lucide Icons",
-        "Motion",
-        "React",
-        "React DOM",
-        "Tailwind CSS",
-        "Express",
-        "Vite",
-        "esbuild"
-      ],
-      "infrastructureDeps": [
-        "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5"
-      ],
-      "subsystems": [
-        {
-          "id": "systems_cartography_portfolio-layer-1",
-          "name": "Lucide Icons Client Surface",
-          "category": "frontend",
-          "role": "Client rendering, UI components, and state synchronization",
-          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
-          "tech": [
-            "Lucide Icons",
-            "Motion",
-            "React",
-            "React DOM",
-            "Tailwind CSS"
-          ],
-          "coordinates": {
-            "x": -40,
-            "y": -20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        },
-        {
-          "id": "systems_cartography_portfolio-layer-2",
-          "name": "Express Backend Service",
-          "category": "backend",
-          "role": "Business transactions, routing, and workflow orchestration",
-          "protocol": "HTTPS / REST",
-          "description": "Architectural tier derived from verified Express configuration.",
-          "tech": [
-            "Express"
-          ],
-          "coordinates": {
-            "x": 40,
-            "y": 20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        }
-      ],
-      "metrics": [
-        {
-          "label": "Stargazers",
-          "value": "0 ★",
-          "note": "GitHub community stars",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Forks",
-          "value": "0 ⑂",
-          "note": "Public downstream forks",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Repo Footprint",
-          "value": "0.7 MB",
-          "note": "Source code & assets",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Open Issues",
-          "value": "1 open",
-          "note": "Issue tracker backlog",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Primary Language",
-          "value": "TypeScript",
-          "note": "Dominant language",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "License Spec",
-          "value": "Not reported",
-          "note": "GitHub repository metadata",
-          "provenance": "VERIFIED"
-        }
-      ],
-      "keyDecisions": [],
-      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 7 test files detected in repository structure.",
-      "provenance": {
-        "summary": "VERIFIED",
-        "problem": "VERIFIED",
-        "solution": "DERIVED",
-        "architectureNotes": "VERIFIED",
-        "subsystems": "DERIVED",
-        "keyDecisions": "UNAVAILABLE",
-        "resilienceTesting": "VERIFIED",
-        "metrics": "VERIFIED"
-      },
-      "validationEvidence": {
-        "testFrameworks": [],
-        "ciWorkflows": [],
-        "e2eHarnesses": [],
-        "lintersAndFormatters": [
-          "TypeScript Type-Check"
-        ],
-        "buildTools": [
-          "Vite",
-          "esbuild"
-        ],
-        "hasDocker": false,
-        "hasMigrations": false,
-        "testFilesDetected": 7,
-        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 7 test files detected in repository structure.",
-        "provenance": "VERIFIED"
-      },
-      "performanceEvidence": {
-        "claimed": false,
-        "notes": "No runtime benchmarks or production telemetry claimed in repository."
-      },
-      "links": {
-        "github": "https://github.com/SalAkBuK/Systems_Cartography_Portfolio",
-        "caseStudy": false
-      }
-    },
-    {
-      "id": "gh-1348899950",
-      "code": "GH-02",
-      "title": "test-template",
-      "tagline": "test template",
-      "category": "fullstack",
-      "classifications": [
-        "fullstack",
-        "frontend",
-        "backend"
-      ],
-      "status": "ACTIVE",
-      "year": "2026",
-      "dimensions": {
-        "width": 89,
-        "height": 77,
-        "levels": 2
-      },
-      "gridPosition": {
-        "x": 140,
-        "y": -110
-      },
-      "accentColor": "#8EA9DA",
-      "summary": "test template GitHub reports 0 stars, 0 forks, and 0 open issues.",
-      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
-      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
-      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
-      "techStack": [
-        "TypeScript",
-        "Lucide Icons",
-        "Motion",
-        "React",
-        "React DOM",
-        "Tailwind CSS",
-        "Express",
-        "Vite",
-        "esbuild"
-      ],
-      "infrastructureDeps": [
-        "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5"
-      ],
-      "subsystems": [
-        {
-          "id": "test-template-layer-1",
-          "name": "Lucide Icons Client Surface",
-          "category": "frontend",
-          "role": "Client rendering, UI components, and state synchronization",
-          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
-          "tech": [
-            "Lucide Icons",
-            "Motion",
-            "React",
-            "React DOM",
-            "Tailwind CSS"
-          ],
-          "coordinates": {
-            "x": -40,
-            "y": -20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        },
-        {
-          "id": "test-template-layer-2",
-          "name": "Express Backend Service",
-          "category": "backend",
-          "role": "Business transactions, routing, and workflow orchestration",
-          "protocol": "HTTPS / REST",
-          "description": "Architectural tier derived from verified Express configuration.",
-          "tech": [
-            "Express"
-          ],
-          "coordinates": {
-            "x": 40,
-            "y": 20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        }
-      ],
-      "metrics": [
-        {
-          "label": "Stargazers",
-          "value": "0 ★",
-          "note": "GitHub community stars",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Forks",
-          "value": "0 ⑂",
-          "note": "Public downstream forks",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Repo Footprint",
-          "value": "0.3 MB",
-          "note": "Source code & assets",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Open Issues",
-          "value": "0 open",
-          "note": "Issue tracker backlog",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Primary Language",
-          "value": "TypeScript",
-          "note": "Dominant language",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "License Spec",
-          "value": "Not reported",
-          "note": "GitHub repository metadata",
-          "provenance": "VERIFIED"
-        }
-      ],
-      "keyDecisions": [],
-      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 5 test files detected in repository structure.",
-      "provenance": {
-        "summary": "VERIFIED",
-        "problem": "VERIFIED",
-        "solution": "DERIVED",
-        "architectureNotes": "VERIFIED",
-        "subsystems": "DERIVED",
-        "keyDecisions": "UNAVAILABLE",
-        "resilienceTesting": "VERIFIED",
-        "metrics": "VERIFIED"
-      },
-      "validationEvidence": {
-        "testFrameworks": [],
-        "ciWorkflows": [],
-        "e2eHarnesses": [],
-        "lintersAndFormatters": [
-          "TypeScript Type-Check"
-        ],
-        "buildTools": [
-          "Vite",
-          "esbuild"
-        ],
-        "hasDocker": false,
-        "hasMigrations": false,
-        "testFilesDetected": 5,
-        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 5 test files detected in repository structure.",
-        "provenance": "VERIFIED"
-      },
-      "performanceEvidence": {
-        "claimed": false,
-        "notes": "No runtime benchmarks or production telemetry claimed in repository."
-      },
-      "links": {
-        "github": "https://github.com/SalAkBuK/test-template",
-        "caseStudy": false
-      }
-    },
-    {
       "id": "gh-1072943348",
-      "code": "GH-03",
-      "title": "binghatti-concierge-app-rn-expo",
+      "code": "GH-01",
+      "title": "towerdesk-mobile-app",
       "tagline": "Public frontend repository; no description supplied on GitHub.",
       "category": "frontend",
       "classifications": [
@@ -389,8 +49,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -210,
-        "y": 120
+        "x": -160,
+        "y": -90
       },
       "accentColor": "#8EA9DA",
       "summary": "Public repository owned by SalAkBuK. Primary language: TypeScript.",
@@ -527,13 +187,13 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "keyDecisions": [
         {
-          "decision": "Publish a sanitized showcase repository",
-          "rationale": "The public code excludes production configuration, real contracts, credentials, and original history.",
-          "tradeoff": "A reviewer cannot reproduce production integrations from this repository alone.",
+          "decision": "Multi-role mobile workspace isolation",
+          "rationale": "Support distinct operational user roles (resident, owner, management, employee, provider) in a single mobile codebase.",
+          "tradeoff": "Requires structured route guards and modular navigation state.",
           "provenance": "CURATED"
         }
       ],
-      "resilienceTesting": "Repository evidence: Jest/jest-expo is configured for selected workflow coverage, with lint and TypeScript type-check scripts available. The README does not claim production reliability metrics.",
+      "resilienceTesting": "Repository evidence: Jest/jest-expo is configured for selected workflow coverage, with lint and TypeScript type-check scripts available.",
       "provenance": {
         "summary": "VERIFIED",
         "problem": "CURATED",
@@ -568,7 +228,347 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "notes": "No runtime benchmarks or production telemetry claimed in repository."
       },
       "links": {
-        "github": "https://github.com/SalAkBuK/binghatti-concierge-app-rn-expo",
+        "github": "https://github.com/SalAkBuK/towerdesk-mobile-app",
+        "caseStudy": false
+      }
+    },
+    {
+      "id": "gh-1348899950",
+      "code": "GH-02",
+      "title": "test-template",
+      "tagline": "test template",
+      "category": "fullstack",
+      "classifications": [
+        "fullstack",
+        "frontend",
+        "backend"
+      ],
+      "status": "ACTIVE",
+      "year": "2026",
+      "dimensions": {
+        "width": 89,
+        "height": 77,
+        "levels": 2
+      },
+      "gridPosition": {
+        "x": 140,
+        "y": -110
+      },
+      "accentColor": "#8EA9DA",
+      "summary": "test template GitHub reports 0 stars, 0 forks, and 0 open issues.",
+      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
+      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
+      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
+      "techStack": [
+        "TypeScript",
+        "Lucide Icons",
+        "Motion",
+        "React",
+        "React DOM",
+        "Tailwind CSS",
+        "Express",
+        "Vite",
+        "esbuild"
+      ],
+      "infrastructureDeps": [
+        "gh-infra-1",
+        "gh-infra-2",
+        "gh-infra-3",
+        "gh-infra-4",
+        "gh-infra-5"
+      ],
+      "subsystems": [
+        {
+          "id": "test-template-layer-1",
+          "name": "Lucide Icons Client Surface",
+          "category": "frontend",
+          "role": "Client rendering, UI components, and state synchronization",
+          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
+          "tech": [
+            "Lucide Icons",
+            "Motion",
+            "React",
+            "React DOM",
+            "Tailwind CSS"
+          ],
+          "coordinates": {
+            "x": -40,
+            "y": -20,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "DERIVED"
+        },
+        {
+          "id": "test-template-layer-2",
+          "name": "Express Backend Service",
+          "category": "backend",
+          "role": "Business transactions, routing, and workflow orchestration",
+          "protocol": "HTTPS / REST",
+          "description": "Architectural tier derived from verified Express configuration.",
+          "tech": [
+            "Express"
+          ],
+          "coordinates": {
+            "x": 40,
+            "y": 20,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "DERIVED"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Stargazers",
+          "value": "0 ★",
+          "note": "GitHub community stars",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Forks",
+          "value": "0 ⑂",
+          "note": "Public downstream forks",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Repo Footprint",
+          "value": "0.5 MB",
+          "note": "Source code & assets",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Open Issues",
+          "value": "0 open",
+          "note": "Issue tracker backlog",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Primary Language",
+          "value": "TypeScript",
+          "note": "Dominant language",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "License Spec",
+          "value": "Not reported",
+          "note": "GitHub repository metadata",
+          "provenance": "VERIFIED"
+        }
+      ],
+      "keyDecisions": [],
+      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
+      "provenance": {
+        "summary": "VERIFIED",
+        "problem": "VERIFIED",
+        "solution": "DERIVED",
+        "architectureNotes": "VERIFIED",
+        "subsystems": "DERIVED",
+        "keyDecisions": "UNAVAILABLE",
+        "resilienceTesting": "VERIFIED",
+        "metrics": "VERIFIED"
+      },
+      "validationEvidence": {
+        "testFrameworks": [],
+        "ciWorkflows": [],
+        "e2eHarnesses": [],
+        "lintersAndFormatters": [
+          "TypeScript Type-Check"
+        ],
+        "buildTools": [
+          "Vite",
+          "esbuild"
+        ],
+        "hasDocker": false,
+        "hasMigrations": false,
+        "testFilesDetected": 8,
+        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
+        "provenance": "VERIFIED"
+      },
+      "performanceEvidence": {
+        "claimed": false,
+        "notes": "No runtime benchmarks or production telemetry claimed in repository."
+      },
+      "links": {
+        "github": "https://github.com/SalAkBuK/test-template",
+        "caseStudy": false
+      }
+    },
+    {
+      "id": "gh-1347309405",
+      "code": "GH-03",
+      "title": "Systems_Cartography_Portfolio",
+      "tagline": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface.",
+      "category": "fullstack",
+      "classifications": [
+        "fullstack",
+        "frontend",
+        "backend"
+      ],
+      "status": "ACTIVE",
+      "year": "2026",
+      "dimensions": {
+        "width": 89,
+        "height": 77,
+        "levels": 2
+      },
+      "gridPosition": {
+        "x": -210,
+        "y": 120
+      },
+      "accentColor": "#8EA9DA",
+      "summary": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface. GitHub reports 0 stars, 0 forks, and 0 open issues.",
+      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
+      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
+      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
+      "techStack": [
+        "TypeScript",
+        "Lucide Icons",
+        "Motion",
+        "React",
+        "React DOM",
+        "Tailwind CSS",
+        "Express",
+        "Vite",
+        "esbuild"
+      ],
+      "infrastructureDeps": [
+        "gh-infra-1",
+        "gh-infra-2",
+        "gh-infra-3",
+        "gh-infra-4",
+        "gh-infra-5"
+      ],
+      "subsystems": [
+        {
+          "id": "systems_cartography_portfolio-layer-1",
+          "name": "Lucide Icons Client Surface",
+          "category": "frontend",
+          "role": "Client rendering, UI components, and state synchronization",
+          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
+          "tech": [
+            "Lucide Icons",
+            "Motion",
+            "React",
+            "React DOM",
+            "Tailwind CSS"
+          ],
+          "coordinates": {
+            "x": -40,
+            "y": -20,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "DERIVED"
+        },
+        {
+          "id": "systems_cartography_portfolio-layer-2",
+          "name": "Express Backend Service",
+          "category": "backend",
+          "role": "Business transactions, routing, and workflow orchestration",
+          "protocol": "HTTPS / REST",
+          "description": "Architectural tier derived from verified Express configuration.",
+          "tech": [
+            "Express"
+          ],
+          "coordinates": {
+            "x": 40,
+            "y": 20,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "DERIVED"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Stargazers",
+          "value": "0 ★",
+          "note": "GitHub community stars",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Forks",
+          "value": "0 ⑂",
+          "note": "Public downstream forks",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Repo Footprint",
+          "value": "0.7 MB",
+          "note": "Source code & assets",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Open Issues",
+          "value": "0 open",
+          "note": "Issue tracker backlog",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Primary Language",
+          "value": "TypeScript",
+          "note": "Dominant language",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "License Spec",
+          "value": "Not reported",
+          "note": "GitHub repository metadata",
+          "provenance": "VERIFIED"
+        }
+      ],
+      "keyDecisions": [],
+      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
+      "provenance": {
+        "summary": "VERIFIED",
+        "problem": "VERIFIED",
+        "solution": "DERIVED",
+        "architectureNotes": "VERIFIED",
+        "subsystems": "DERIVED",
+        "keyDecisions": "UNAVAILABLE",
+        "resilienceTesting": "VERIFIED",
+        "metrics": "VERIFIED"
+      },
+      "validationEvidence": {
+        "testFrameworks": [],
+        "ciWorkflows": [],
+        "e2eHarnesses": [],
+        "lintersAndFormatters": [
+          "TypeScript Type-Check"
+        ],
+        "buildTools": [
+          "Vite",
+          "esbuild"
+        ],
+        "hasDocker": false,
+        "hasMigrations": false,
+        "testFilesDetected": 8,
+        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
+        "provenance": "VERIFIED"
+      },
+      "performanceEvidence": {
+        "claimed": false,
+        "notes": "No runtime benchmarks or production telemetry claimed in repository."
+      },
+      "links": {
+        "github": "https://github.com/SalAkBuK/Systems_Cartography_Portfolio",
         "caseStudy": false
       }
     },
@@ -766,7 +766,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
           "provenance": "CURATED"
         }
       ],
-      "resilienceTesting": "Repository evidence: Vitest unit tests and Playwright e2e tests are configured. The sanitized README reports 60 unit-test files and 249 passing tests at its latest verification, while also disclosing remaining moderate audit findings.",
+      "resilienceTesting": "Repository evidence: Vitest unit tests and Playwright e2e tests are configured, with lint and TypeScript typecheck scripts.",
       "provenance": {
         "summary": "VERIFIED",
         "problem": "CURATED",
@@ -3452,9 +3452,9 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       },
       "systemCount": 12,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
         "gh-1072943348",
+        "gh-1348899950",
+        "gh-1347309405",
         "gh-1121594562",
         "gh-1301560608",
         "gh-1299619574",
@@ -3486,9 +3486,9 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       },
       "systemCount": 11,
       "usedInProjects": [
-        "gh-1347309405",
-        "gh-1348899950",
         "gh-1072943348",
+        "gh-1348899950",
+        "gh-1347309405",
         "gh-1121594562",
         "gh-1122295326",
         "gh-1301560608",
@@ -3519,8 +3519,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       },
       "systemCount": 9,
       "usedInProjects": [
-        "gh-1347309405",
         "gh-1348899950",
+        "gh-1347309405",
         "gh-1121594562",
         "gh-1299619574",
         "gh-1300791569",
@@ -3550,8 +3550,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       },
       "systemCount": 8,
       "usedInProjects": [
-        "gh-1347309405",
         "gh-1348899950",
+        "gh-1347309405",
         "gh-1122295326",
         "gh-1301560608",
         "gh-1237812647",
@@ -3580,8 +3580,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       },
       "systemCount": 6,
       "usedInProjects": [
-        "gh-1347309405",
         "gh-1348899950",
+        "gh-1347309405",
         "gh-1237812647",
         "gh-1237757392",
         "gh-913331020",
@@ -4101,9 +4101,9 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "No employment history or performance claims inferred."
       ],
       "systemsArchitected": [
-        "Systems_Cartography_Portfolio",
+        "towerdesk-mobile-app",
         "test-template",
-        "binghatti-concierge-app-rn-expo"
+        "Systems_Cartography_Portfolio"
       ],
       "technologies": [
         "React",

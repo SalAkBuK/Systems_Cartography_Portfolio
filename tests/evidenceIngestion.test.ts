@@ -369,15 +369,15 @@ test('canonical and sanitized TowerDesk repositories deduplicate to 3 logical pr
     { ...repo, id: 103, name: 'tower-desk', full_name: 'SalAkBuK/tower-desk', html_url: 'https://github.com/SalAkBuK/tower-desk', size: 400 },
     { ...repo, id: 104, name: 'tower-desk-clean', full_name: 'SalAkBuK/tower-desk-clean', html_url: 'https://github.com/SalAkBuK/tower-desk-clean', size: 400 },
     { ...repo, id: 105, name: 'binghatti-concierge-app-rn-expo', full_name: 'SalAkBuK/binghatti-concierge-app-rn-expo', html_url: 'https://github.com/SalAkBuK/binghatti-concierge-app-rn-expo', size: 300 },
-    { ...repo, id: 106, name: 'towerdesk-mobile-showcase', full_name: 'SalAkBuK/towerdesk-mobile-showcase', html_url: 'https://github.com/SalAkBuK/towerdesk-mobile-showcase', size: 300 }
+    { ...repo, id: 106, name: 'towerdesk-mobile-app', full_name: 'SalAkBuK/towerdesk-mobile-app', html_url: 'https://github.com/SalAkBuK/towerdesk-mobile-app', size: 300 }
   ];
 
   const canonical = canonicalizeRepositories(filterEligibleRepositories(towerdeskClusterRepos));
-  assert.equal(canonical.length, 3, 'The 6 TowerDesk repos collapse into exactly 3 logical presentation surfaces');
+  assert.equal(canonical.length, 3, 'The TowerDesk repos collapse into exactly 3 logical presentation surfaces');
   const titles = canonical.map(p => p.name);
-  assert.ok(titles.includes('towerdesk-backend-clean'));
-  assert.ok(titles.includes('tower-desk-clean'));
-  assert.ok(titles.includes('towerdesk-mobile-showcase'));
+  assert.ok(titles.includes('towerdesk-backend'));
+  assert.ok(titles.includes('tower-desk'));
+  assert.ok(titles.includes('towerdesk-mobile-app'));
 });
 
 test('FormCrash is multi-classified and discoverable under TOOL and FULL filters without duplication', () => {

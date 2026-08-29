@@ -1,5 +1,6 @@
-import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData, InfrastructureSkill } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
+import { projectUsesCapability } from './capabilityAssociations';
 import type { GitHubSyncResult } from '../services/githubService';
 
 export interface ParsedGitHubTarget {
@@ -236,6 +237,80 @@ export function isProjectLinkedToExperience(
   }
 
   return false;
+}
+
+/**
+ * Resolves a ProjectData object from a professional evidence key (e.g. 'worthy-crm', 'towerdesk-backend', 'towerdesk-backend-clean').
+ * Resolution hierarchy:
+ * 1. Exact match on ProjectData.id (case-insensitive)
+ * 2. Exact match on ProjectData.title / repository name (case-insensitive)
+ * 3. Canonical cluster mapping via getCanonicalRepositoryKey (case-insensitive)
+ * 
+ * Returns ProjectData or null (no fuzzy guessing).
+ */
+export function resolveProjectFromEvidenceKey(
+  projects: ProjectData[],
+  evidenceKey?: string | null
+): ProjectData | null {
+  if (!evidenceKey || typeof evidenceKey !== 'string' || !Array.isArray(projects) || projects.length === 0) {
+    return null;
+  }
+
+  const target = evidenceKey.toLowerCase().trim();
+  if (!target) return null;
+
+  // 1. Direct match on ProjectData.id
+  const directIdMatch = projects.find(p => p.id.toLowerCase().trim() === target);
+  if (directIdMatch) return directIdMatch;
+
+  // 2. Exact match on ProjectData.title (repository name)
+  const exactTitleMatch = projects.find(p => p.title.toLowerCase().trim() === target);
+  if (exactTitleMatch) return exactTitleMatch;
+
+  // 3. Canonical repository alias resolution
+  const canonicalTarget = getCanonicalRepositoryKey(target);
+  const canonicalMatch = projects.find(p => {
+    const pTitleCanonical = getCanonicalRepositoryKey(p.title.toLowerCase().trim());
+    const pIdCanonical = getCanonicalRepositoryKey(p.id.toLowerCase().trim());
+    return pTitleCanonical === canonicalTarget || pIdCanonical === canonicalTarget;
+  });
+  if (canonicalMatch) return canonicalMatch;
+
+  return null;
+}
+
+/**
+ * Convenience helper returning the actual ProjectData.id or null.
+ */
+export function resolveProjectIdFromEvidenceKey(
+  projects: ProjectData[],
+  evidenceKey?: string | null
+): string | null {
+  return resolveProjectFromEvidenceKey(projects, evidenceKey)?.id || null;
+}
+
+/**
+ * Pure helper deriving the set of InfrastructureSkill IDs used by projects linked to an ExperienceNode.
+ * Uses canonical association logic and projectUsesCapability.
+ */
+export function getCapabilitiesLinkedToExperience(
+  exp: ExperienceNode,
+  projects: ProjectData[],
+  skills: InfrastructureSkill[]
+): Set<string> {
+  const linkedSkillIds = new Set<string>();
+  if (!exp || !Array.isArray(projects) || !Array.isArray(skills)) {
+    return linkedSkillIds;
+  }
+
+  const linkedProjects = projects.filter(p => isProjectLinkedToExperience(p, exp));
+  for (const skill of skills) {
+    if (linkedProjects.some(p => projectUsesCapability(p, skill))) {
+      linkedSkillIds.add(skill.id);
+    }
+  }
+
+  return linkedSkillIds;
 }
 
 const MONTH_ABBRS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];

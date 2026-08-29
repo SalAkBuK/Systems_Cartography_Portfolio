@@ -19,6 +19,9 @@ export interface ConduitStateParams {
   isAnySkillSelected: boolean;
   isAnyDragging: boolean;
   showBackgroundRelationships: boolean;
+  isSelectedExpActive?: boolean;
+  isProjectLinkedToExp?: boolean;
+  isSkillLinkedToExp?: boolean;
 }
 
 /**
@@ -28,12 +31,12 @@ export interface ConduitStateParams {
  * - Not connected -> 'hidden'
  * - Active drag on this node -> 'dragging'
  * - Directly hovered or selected -> 'focused' (prominent, animated)
- * - Focused target active elsewhere:
- *     - If showBackgroundRelationships is TRUE (RELATIONSHIPS mode) -> 'background' (subdued, static)
- *     - If showBackgroundRelationships is FALSE (SYSTEMS/CAPABILITIES) -> 'hidden' (no distraction)
- * - No focus anywhere:
- *     - If showBackgroundRelationships is TRUE (RELATIONSHIPS mode) -> 'background' (subdued, static)
- *     - If showBackgroundRelationships is FALSE (SYSTEMS/CAPABILITIES) -> 'hidden'
+ * - When Experience is active:
+ *     - RELATIONSHIPS mode: only promote conduits where BOTH project and skill are linked to selected experience. Unrelated -> 'hidden'.
+ *     - SYSTEMS/CAPABILITIES mode: no background conduits -> 'hidden'.
+ * - When Experience is inactive:
+ *     - RELATIONSHIPS mode -> 'background' (subdued, static)
+ *     - SYSTEMS/CAPABILITIES mode -> 'hidden' (no distraction)
  */
 export function getConduitPresentationState(params: ConduitStateParams): ConduitPresentationState {
   const {
@@ -49,7 +52,10 @@ export function getConduitPresentationState(params: ConduitStateParams): Conduit
     isAnyProjectSelected,
     isAnySkillSelected,
     isAnyDragging,
-    showBackgroundRelationships
+    showBackgroundRelationships,
+    isSelectedExpActive,
+    isProjectLinkedToExp,
+    isSkillLinkedToExp
   } = params;
 
   if (!isConnected) return 'hidden';
@@ -67,12 +73,22 @@ export function getConduitPresentationState(params: ConduitStateParams): Conduit
     return 'focused';
   }
 
+  // When experience filter is active
+  if (isSelectedExpActive) {
+    if (showBackgroundRelationships) {
+      // RELATIONSHIPS mode: promote conduits between experience-linked projects and their skills
+      return (isProjectLinkedToExp && isSkillLinkedToExp) ? 'background' : 'hidden';
+    }
+    // SYSTEMS / CAPABILITIES mode: no background conduit noise
+    return 'hidden';
+  }
+
   // Edge is not directly related to the active focus target
   if (isFocusActive) {
     return showBackgroundRelationships ? 'background' : 'hidden';
   }
 
-  // At rest (no hover, no selection, no drag)
+  // At rest (no hover, no selection, no drag, no experience filter)
   return showBackgroundRelationships ? 'background' : 'hidden';
 }
 
@@ -92,10 +108,12 @@ export interface NodeEmphasisParams {
   isAnyFocusActive: boolean;
   isSelectedExpActive: boolean;
   isLinkedToSelectedExp: boolean;
+  isSkillLinkedToExp?: boolean;
 }
 
 /**
  * Pure helper determining visual emphasis level for topology nodes based on view mode and interaction state.
+ * Composes Professional Experience filter context with Topology presentation modes.
  */
 export function getTopologyNodeEmphasis(params: NodeEmphasisParams): TopologyNodeVisualLevel {
   const {
@@ -107,32 +125,50 @@ export function getTopologyNodeEmphasis(params: NodeEmphasisParams): TopologyNod
     isConnectedToFocus,
     isAnyFocusActive,
     isSelectedExpActive,
-    isLinkedToSelectedExp
+    isLinkedToSelectedExp,
+    isSkillLinkedToExp
   } = params;
 
-  // 1. Authoritative Experience Selection Precedence for Projects
-  // When an experience record is selected, experience-link filtering is authoritative for all project nodes.
-  // Unlinked projects remain strictly dimmed regardless of hover or connected focus.
-  if (isSelectedExpActive && nodeType === 'project') {
-    return isLinkedToSelectedExp ? 'highlighted' : 'dimmed';
+  // 1. Authoritative unlinked project filter during Experience Selection
+  // Unlinked projects remain strictly dimmed regardless of hover or connected focus
+  if (isSelectedExpActive && nodeType === 'project' && !isLinkedToSelectedExp) {
+    return 'dimmed';
   }
 
-  // 2. Direct Interaction / Focus Target (highest priority for skills, and projects when experience is inactive)
+  // 2. Direct Interaction / Focus Target (highest priority for active node interaction)
   if (isHovered || isSelected || isDragging) {
     return 'highlighted';
   }
 
-  // 3. Connected to Active Focus Target
+  // 3. Connected to Active Focus Target (e.g. hovering a project highlights its connected skills)
   if (isConnectedToFocus) {
     return 'highlighted';
   }
 
-  // 4. Skills during Experience Selection:
-  if (isSelectedExpActive && nodeType === 'skill') {
-    if (isAnyFocusActive) {
-      return 'dimmed';
+  // 4. When Experience Selection IS Active (filter context):
+  if (isSelectedExpActive) {
+    if (nodeType === 'project') {
+      if (mode === 'systems') {
+        return 'primary';
+      }
+      if (mode === 'capabilities') {
+        return 'contextual';
+      }
+      // mode === 'relationships'
+      return 'primary';
     }
-    return mode === 'systems' ? 'contextual' : 'primary';
+
+    if (nodeType === 'skill') {
+      const isLinked = Boolean(isSkillLinkedToExp);
+      if (mode === 'systems') {
+        return 'contextual';
+      }
+      if (mode === 'capabilities') {
+        return isLinked ? 'primary' : 'dimmed';
+      }
+      // mode === 'relationships'
+      return isLinked ? 'primary' : 'dimmed';
+    }
   }
 
   // 5. Unrelated node during active canvas focus

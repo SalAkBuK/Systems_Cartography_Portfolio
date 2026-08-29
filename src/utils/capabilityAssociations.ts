@@ -482,3 +482,5 @@ export const RECOGNIZED_CAPABILITY_TAXONOMY: Record<string, { category: SystemCa
   'Go': { category: 'backend', titleSuffix: 'Systems & Concurrent Services' },
   'Rust': { category: 'backend', titleSuffix: 'Systems Architecture' }
 };
+
+export { getCapabilitiesLinkedToExperience } from './portfolioUtils';

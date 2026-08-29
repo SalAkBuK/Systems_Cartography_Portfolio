@@ -42,9 +42,9 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
         </span>
       </button>
 
-      <div className="flex flex-col">
-        <span className="text-[8px] opacity-50 tracking-tighter">OWNER PROJECTS</span>
-        <span>{activeProjectsCount.toString().padStart(2, '0')} PUBLIC REPOS</span>
+      <div className="flex flex-col bg-[#15150F] text-[#C3E54E] px-2 py-0.5 border border-[#15150F] shadow-[1px_1px_0px_#15150F]">
+        <span className="text-[7.5px] text-[#D4CDA4] tracking-tighter opacity-70">OWNER PROJECTS</span>
+        <span className="text-[#C3E54E] font-bold text-[9.5px] tracking-wider">{activeProjectsCount.toString().padStart(2, '0')} PUBLIC REPOS</span>
       </div>
 
       <div className="hidden md:flex flex-col">
