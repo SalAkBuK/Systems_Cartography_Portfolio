@@ -101,6 +101,8 @@ import {
   insertProjectIntoOrbitOrder,
   deriveDockState,
   resolveOrbitReleaseAction,
+  buildOrbitReflowPlan,
+  resolveOrbitReflowPositions,
   stepOrbitReflow,
   isDetachedPlacementMotionSafe,
   ORBIT_REFLOW_DURATION_MS,
@@ -241,9 +243,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // position (aborted pull) and a whole-ring redistribution (detach or
   // reinsertion) — the same mechanism, just a map with one entry vs many.
   // `orbitReflowRef` is the interpolation source of truth for the RAF loop;
-  // `isOrbitReflowActive` is the reactive flag that starts/stops that loop and
-  // feeds the orbit pause state; `orbitReflowRenderPositions` is what the
-  // render layer actually reads each frame (null when idle).
+  // `isOrbitReflowActive` is the reactive flag that starts/stops that loop
+  // and blocks a new drag gesture from starting mid-settle (it does NOT pause
+  // the autonomous orbit — PR24 keeps that running continuously through any
+  // reflow); `orbitReflowRenderPositions` is what the render layer actually
+  // reads each frame (null when idle).
   const orbitReflowRef = useRef<OrbitReflowTransition | null>(null);
   const [isOrbitReflowActive, setIsOrbitReflowActive] = useState(false);
   const [orbitReflowRenderPositions, setOrbitReflowRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
@@ -279,7 +283,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // One ring, one phase, one pause state — never per-project.
+  // One ring, one phase, one pause state — never per-project. PR24: an
+  // active detach/reinsertion reflow is deliberately absent here — the ring
+  // is a continuous machine and never stops for a drop or its redistribution.
   const orbitPauseState: OrbitPauseState = useMemo(() => ({
     isProjectHovered: Boolean(hoveredProjectId),
     isSkillHovered: Boolean(hoveredSkillId),
@@ -291,11 +297,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     prefersReducedMotion,
     isCompact: isCompactViewport,
     isExperienceSelected: Boolean(selectedExperienceId),
-    isDockingTransitionActive: Boolean(isOrbitReflowActive),
   }), [
     hoveredProjectId, hoveredSkillId, selectedProjectId, selectedSkillId,
     draggingNode, isDragging, isDocumentHidden, prefersReducedMotion,
-    isCompactViewport, selectedExperienceId, isOrbitReflowActive
+    isCompactViewport, selectedExperienceId
   ]);
   const isPauseConditionActive = useMemo(
     () => isOrbitPauseConditionActive(orbitPauseState),
@@ -322,22 +327,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [orbitPhase, setOrbitPhase] = useState(0);
   const orbitPhaseRef = useRef(0);
   const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
-  // Mirrors the orbit-clock effect's in-flight requestAnimationFrame id so a
-  // release that commits a detach/reinsertion (commitOrbitReflow) can cancel
-  // it SYNCHRONOUSLY, in the same task as the mouseup/touchend handler.
-  // Waiting for the isOrbitReflowActive state change to reach this effect —
-  // a passive effect, deferred until after paint — could otherwise let one
-  // already-scheduled tick fire first, producing a visible one-frame "ring
-  // advances once more, then freezes" glitch right at the drop.
-  const orbitRafIdRef = useRef<number | null>(null);
 
   // The RAF loop is only ALIVE while isOrbitRunning is true — at most one
   // active chain, and genuinely zero scheduled repeating callbacks while
-  // paused (user pause, compact, reduced motion, hidden tab, or an active
-  // docking/reflow transition), rather than a mount-lifetime loop that
-  // keeps waking the browser and merely holding position. Every pause clears
-  // lastTimestamp (not the phase itself) so a later resume re-baselines
-  // instead of applying a catch-up jump for however long it was paused.
+  // paused (user pause, compact, reduced motion, hidden tab), rather than a
+  // mount-lifetime loop that keeps waking the browser and merely holding
+  // position. PR24: an active detach/reinsertion reflow is intentionally NOT
+  // a pause condition — the ring is a continuous machine that keeps
+  // advancing through a drag, a drop, and the resulting redistribution alike
+  // (see commitOrbitReflow/stepOrbitReflow's moving-frame interpolation,
+  // which is what makes this safe: reflow targets are recomputed against
+  // this very orbitPhase every frame, never a frozen snapshot). Every pause
+  // clears lastTimestamp (not the phase itself) so a later resume
+  // re-baselines instead of applying a catch-up jump for however long it was
+  // paused.
   useEffect(() => {
     // isOrbitRunning changes re-baseline genuine pause/resume boundaries;
     // orbitRateMultiplier changes re-baseline speed boundaries. In both cases
@@ -348,20 +351,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return;
     }
 
+    let rafId: number;
     const tick = (timestamp: number) => {
       const next = stepOrbitClock(orbitClockRef.current, timestamp, true, orbitRateMultiplier);
       orbitClockRef.current = next;
       orbitPhaseRef.current = next.phase;
       setOrbitPhase(next.phase);
-      orbitRafIdRef.current = requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     };
-    orbitRafIdRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (orbitRafIdRef.current !== null) {
-        cancelAnimationFrame(orbitRafIdRef.current);
-        orbitRafIdRef.current = null;
-      }
-    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [isOrbitRunning, orbitRateMultiplier]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
@@ -407,10 +406,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     }
     return positions;
   }, [dockedProjectsInOrder, staticOrbitalLattice, orbitPhase]);
-  const dockedProjectPositionsRef = useRef(dockedProjectPositions);
-  dockedProjectPositionsRef.current = dockedProjectPositions;
-  const orbitReflowRenderPositionsRef = useRef(orbitReflowRenderPositions);
-  orbitReflowRenderPositionsRef.current = orbitReflowRenderPositions;
 
   // Effective position maps: the animated docked orbit as the base layer,
   // with any manually dragged/detached positions layered on top. Passed to
@@ -438,54 +433,30 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   // Starts (or, under reduced motion, instantly applies) the ONE shared
   // reflow transition that carries every project in `newOrder` from its
-  // current position to its new equal-spacing position on the fixed orbit
-  // ellipse. Used uniformly for an aborted pull (newOrder === the unchanged
-  // docked order, only the dragged project's `from` overridden), a detach
-  // (newOrder is the docked order minus the detaching project), and a
+  // previous slot (in `previousOrder`) to its new equal-spacing slot — one
+  // mechanism for an aborted pull (previousOrder === newOrder, only the
+  // dragged project's `from` overridden to its exact drag position), a
+  // detach (newOrder is the docked order minus the detaching project), and a
   // reinsertion (newOrder is the docked order with the returning project
-  // spliced back in) — one mechanism, never several competing ones. Docked-
-  // membership state (interactiveOrbitOrder/customProjectPositions/
-  // projectDockState) must already be committed by the caller BEFORE this
-  // runs, since the `to` positions are simply newOrder's authoritative
-  // interactive orbital positions — there is no separate finalize step.
+  // spliced back in). Docked-membership state (interactiveOrbitOrder/
+  // customProjectPositions/projectDockState) must already be committed by
+  // the caller BEFORE this runs, since `newOrder` is simply the authoritative
+  // interactive order going forward — there is no separate finalize step.
+  //
+  // PR24 (continuous machine): the autonomous orbit never pauses for this —
+  // not even for the reflow itself — so the plan stores SLOT descriptors
+  // (buildOrbitReflowPlan), not fixed positions. Every frame of the reflow
+  // resolves those slots against whatever orbitPhase is at that instant
+  // (see the reflow tick effect below), so the interpolation and the
+  // continuously-advancing ring share one moving frame and can never
+  // produce a jump when the reflow hands off to the normal dynamic formula.
   const commitOrbitReflow = useCallback((
+    previousOrder: string[],
     newOrder: string[],
     fromOverrides: Record<string, { x: number; y: number }> = {},
     durationMs: number = ORBIT_REFLOW_DURATION_MS
   ) => {
-    // Freeze the autonomous orbit SYNCHRONOUSLY, in the same task as the
-    // release that committed this transition, rather than waiting for the
-    // isOrbitReflowActive state update to reach the (passive, post-paint)
-    // orbit-clock effect — see orbitRafIdRef's definition for why that gap
-    // could otherwise let one more already-scheduled tick fire first.
-    if (orbitRafIdRef.current !== null) {
-      cancelAnimationFrame(orbitRafIdRef.current);
-      orbitRafIdRef.current = null;
-    }
-
-    const phaseAtCommit = orbitPhaseRef.current;
-    const count = newOrder.length;
-    const toPositions: Record<string, { x: number; y: number }> = {};
-    for (let i = 0; i < count; i++) {
-      const id = newOrder[i];
-      const proj = projectsById.get(id);
-      if (!proj) continue;
-      toPositions[id] = getDynamicOrbitalPosition(
-        proj,
-        i,
-        count,
-        staticOrbitalLattice.orbitGeometry,
-        phaseAtCommit
-      );
-    }
-    const fromPositions: Record<string, { x: number; y: number }> = {};
-    for (const id of newOrder) {
-      fromPositions[id] =
-        fromOverrides[id] ??
-        orbitReflowRenderPositionsRef.current?.[id] ??
-        dockedProjectPositionsRef.current[id] ??
-        toPositions[id];
-    }
+    const plan = buildOrbitReflowPlan(previousOrder, newOrder, fromOverrides);
 
     if (prefersReducedMotion) {
       orbitReflowRef.current = null;
@@ -494,8 +465,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return;
     }
 
-    orbitReflowRef.current = { fromPositions, toPositions, durationMs, startTimestamp: null };
-    setOrbitReflowRenderPositions(fromPositions);
+    const initialPositions = resolveOrbitReflowPositions(
+      plan,
+      0,
+      orbitPhaseRef.current,
+      staticOrbitalLattice.orbitGeometry,
+      (id) => projectsById.get(id)
+    );
+
+    orbitReflowRef.current = { plan, durationMs, startTimestamp: null };
+    setOrbitReflowRenderPositions(initialPositions);
     setIsOrbitReflowActive(true);
   }, [projectsById, staticOrbitalLattice, prefersReducedMotion]);
 
@@ -503,7 +482,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // transition is in progress (never a persistent per-project loop), gated
   // exactly like the PR22 orbit clock. Elapsed-time based via stepOrbitReflow,
   // so frame-rate variance cannot change perceived speed and every affected
-  // project shares the exact same eased progress value.
+  // project shares the exact same eased progress value. PR24: resolves the
+  // plan's slot descriptors against orbitPhaseRef.current — the LIVE,
+  // continuously-advancing phase — on every single tick, never a value
+  // captured once at commit time, so the ring never has to stop for this.
   useEffect(() => {
     if (!isOrbitReflowActive) return;
 
@@ -512,7 +494,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const transition = orbitReflowRef.current;
       if (!transition) return;
 
-      const result = stepOrbitReflow(transition, timestamp);
+      const result = stepOrbitReflow(
+        transition,
+        timestamp,
+        orbitPhaseRef.current,
+        staticOrbitalLattice.orbitGeometry,
+        (id) => projectsById.get(id)
+      );
       if (transition.startTimestamp === null) {
         orbitReflowRef.current = { ...transition, startTimestamp: timestamp };
       }
@@ -1043,7 +1031,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // breakaway/capture cancel return to the EXISTING membership/order.
         // Whole-ellipse insertion is reserved for a later gesture that starts
         // from persisted detached state, so this path can never duplicate ID.
-        commitOrbitReflow(dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
+        commitOrbitReflow(dockedOrbitOrder, dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
         setSnapNotice({
           message: dockStateAtRelease === 'detaching'
             ? 'MAGNETIC RELEASE // RETURNING TO SLOT'
@@ -1082,7 +1070,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           delete next[draggingNode.id];
           return next;
         });
-        commitOrbitReflow(newOrder, { [draggingNode.id]: draggingNode.currentPos });
+        commitOrbitReflow(dockedOrbitOrder, newOrder, { [draggingNode.id]: draggingNode.currentPos });
 
         setSnapNotice({ message: 'DOCK TARGET ACQUIRED // ORBIT REALIGNED', type: 'snap' });
         setTimeout(() => setSnapNotice(null), 1800);
@@ -1122,6 +1110,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             // returns to its authoritative docked position.
             commitOrbitReflow(
               dockedOrbitOrder,
+              dockedOrbitOrder,
               { [draggingNode.id]: draggingNode.currentPos },
               ABORTED_PULL_RETURN_MS
             );
@@ -1143,7 +1132,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
         if (wasDocked) {
           setInteractiveOrbitOrder(newOrder);
-          commitOrbitReflow(newOrder);
+          commitOrbitReflow(dockedOrbitOrder, newOrder);
         }
 
         if (resolved.wasAdjustedForValidatorOnly) {

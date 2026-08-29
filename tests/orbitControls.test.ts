@@ -26,7 +26,6 @@ const idlePauseState: OrbitPauseState = {
   prefersReducedMotion: false,
   isCompact: false,
   isExperienceSelected: false,
-  isDockingTransitionActive: false,
 };
 
 test('orbit rate architecture exposes PAUSE through 64×', () => {
@@ -95,9 +94,8 @@ test('background pan and orbit rate operate independently at every rate from PAU
   }
 });
 
-test('only reflow, compact, reduced motion, and hidden document remain pause authorities', () => {
+test('only compact, reduced motion, and hidden document remain pause authorities (reflow no longer pauses the orbit)', () => {
   const requiredPauseFields: Array<keyof OrbitPauseState> = [
-    'isDockingTransitionActive',
     'isCompact',
     'prefersReducedMotion',
     'isDocumentHidden',
@@ -246,20 +244,23 @@ test('TopologyCanvas maintains one current-phase mirror and synchronizes tick an
   assert.ok(reset.includes('setOrbitPhase(0);'));
 });
 
-test('reflow commit and detached insertion snapshot the current phase instead of capturing render phase', () => {
+test('reflow commit never snapshots phase (PR24 moving-frame reflow); detached insertion still snapshots release phase for its one-time insertion-index decision', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const commitStart = source.indexOf('const commitOrbitReflow = useCallback((');
   const commitEnd = source.indexOf('// The ONE short-lived orbital reflow RAF loop', commitStart);
   const commit = source.substring(commitStart, commitEnd);
-  assert.ok(commit.includes('const phaseAtCommit = orbitPhaseRef.current;'));
-  assert.match(commit, /phaseAtCommit\s*\);/, 'Every destination must use the one phase-at-commit snapshot');
+  assert.ok(
+    !commit.includes('phaseAtCommit'),
+    'commit must never freeze a phase snapshot — reflow targets are slot descriptors resolved against the live phase every frame'
+  );
+  assert.ok(commit.includes('buildOrbitReflowPlan('), 'commit must build a slot-descriptor plan, not fixed positions');
   const commitDependencies = commit.substring(commit.lastIndexOf('}, ['));
   assert.ok(!commitDependencies.includes('orbitPhase'), 'commit callback identity must not change each autonomous frame');
 
   const releaseStart = source.indexOf("} else if (releaseAction === 'insert-detached-project')");
   const releaseEnd = source.indexOf("setSnapNotice({ message: 'DOCK TARGET ACQUIRED", releaseStart);
   const release = source.substring(releaseStart, releaseEnd);
-  assert.ok(release.includes('const phaseAtRelease = orbitPhaseRef.current;'));
+  assert.ok(release.includes('const phaseAtRelease = orbitPhaseRef.current;'), 'the one-time insertion-INDEX decision still reads the live phase at release');
   assert.match(release, /theta,\s*phaseAtRelease,/);
   assert.ok(!release.includes('resolveOrbitInsertionIndex(theta, orbitPhase'));
 });
