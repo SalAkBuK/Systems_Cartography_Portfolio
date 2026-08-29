@@ -102,7 +102,7 @@ export async function syncGitHubSnapshotToFile(
 
 async function main() {
   const target = readArg('--target') || readArg('--github') || PORTFOLIO_CONFIG.githubTarget;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = readArg('--token') || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
   console.log(`[sync:github] Fetching public repository snapshot for target: ${target}`);
   if (token) {

@@ -506,8 +506,8 @@ test('canonicalizeRepositories dedupes clusters before deep inspection and disca
   assert.equal(summary.inspectedRepositoryCount, 6);
   assert.equal(summary.warnings.length, 0);
   assert.equal(inspections.length, 6);
-  assert.ok(requestedInspectionRepos.includes('towerdesk-backend-clean'), 'Canonical repo must be inspected');
-  assert.ok(!requestedInspectionRepos.includes('towerdesk-backend'), 'Discarded alias must receive 0 inspection requests');
+  assert.ok(requestedInspectionRepos.includes('towerdesk-backend'), 'Canonical repo must be inspected');
+  assert.ok(!requestedInspectionRepos.includes('towerdesk-backend-clean'), 'Discarded alias must receive 0 inspection requests');
 });
 
 // ---------------------------------------------------------------------------

@@ -297,7 +297,7 @@ test('8d. getTopologyNodeEmphasis: Hover/selection overrides contextual de-empha
 });
 
 test('8e. getTopologyNodeEmphasis: Selected Professional Experience is authoritative for projects (linked=highlighted, unlinked=dimmed regardless of hover/connected)', () => {
-  // A. Selected Experience + linked project -> highlighted
+  // A. Selected Experience + linked project at rest in systems mode -> primary
   const linkedProj = getTopologyNodeEmphasis({
     nodeType: 'project',
     mode: 'systems',
@@ -309,7 +309,21 @@ test('8e. getTopologyNodeEmphasis: Selected Professional Experience is authorita
     isSelectedExpActive: true,
     isLinkedToSelectedExp: true
   });
-  assert.equal(linkedProj, 'highlighted', 'Linked project during experience selection must be highlighted');
+  assert.equal(linkedProj, 'primary', 'Linked project during experience selection in systems mode at rest must be primary');
+
+  // A2. Selected Experience + linked project hovered -> highlighted
+  const linkedProjHovered = getTopologyNodeEmphasis({
+    nodeType: 'project',
+    mode: 'systems',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: true
+  });
+  assert.equal(linkedProjHovered, 'highlighted', 'Linked project when hovered must be highlighted');
 
   // B. Selected Experience + unlinked project at rest -> dimmed
   const unlinkedProjAtRest = getTopologyNodeEmphasis({
