@@ -84,6 +84,7 @@ interface RightInspectorPanelProps {
   onDrillIntoProject: (id: string) => void;
   onOpenCaseStudy: () => void;
   onOpenContact: () => void;
+  onClearSelection?: () => void;
   projects?: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
@@ -102,6 +103,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   onDrillIntoProject,
   onOpenCaseStudy,
   onOpenContact,
+  onClearSelection,
   projects = PROJECTS,
   skills = INFRASTRUCTURE_SKILLS,
   experience = EXPERIENCE_HISTORY,
@@ -170,18 +172,16 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             >
               <span>{isMobileExpanded ? '↓ MINIMIZE' : '↑ EXPAND'}</span>
             </button>
-            {(selectedProject || selectedSkill || selectedExperience) && (
+            {(selectedProject || selectedSkill || selectedExperience || selectedSubsystem) && (
               <button
                 onClick={() => {
                   setIsMobileExpanded(false);
-                  if (selectedProject) onSelectProject(selectedProject.id);
-                  else if (selectedSkill) onSelectSkill(selectedSkill.id);
-                  else if (selectedExperience) onSelectExperience(selectedExperience.id);
+                  onClearSelection?.();
                 }}
-                className="px-1.5 py-0.5 bg-[#CBC59B] text-[#15150F] text-[8.5px] font-bold border border-[#15150F] cursor-pointer"
-                title="Close / Deselect"
+                className="px-1.5 py-0.5 bg-[#CBC59B] text-[#15150F] text-[8.5px] font-bold border border-[#15150F] cursor-pointer hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+                title="Clear Selection"
               >
-                ✕
+                ✕ CLEAR
               </button>
             )}
           </div>

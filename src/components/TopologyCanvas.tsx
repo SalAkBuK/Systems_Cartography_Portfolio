@@ -41,12 +41,12 @@ import {
   GRID_SNAP_STEP
 } from '../utils/collision';
 import {
-  isProjectLinkedToExperience,
-  getCapabilitiesLinkedToExperience
+  isProjectLinkedToExperience
 } from '../utils/portfolioUtils';
 import { 
   projectUsesCapability, 
-  getCapabilityCoreTechnology 
+  getCapabilityCoreTechnology,
+  getCapabilitiesLinkedToExperience
 } from '../utils/capabilityAssociations';
 import {
   calculateConduitGeometry,
@@ -822,7 +822,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
     >
       {/* Visual Corner Framing / Region Labels */}
-      <div className="hidden md:flex absolute top-3 left-3 pointer-events-none items-center gap-1.5 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-b-2">
+      <div className="hidden lg:flex absolute top-3 left-3 pointer-events-none items-center gap-1.5 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-b-2">
         <Compass size={11} className="text-[#15150F]" />
         <span className="font-bold">APPLICATION SURFACE // CORE WORK</span>
       </div>
@@ -842,7 +842,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       )}
 
       {/* Bottom-Left Controls & Status */}
-      <div className="hidden md:flex absolute bottom-3 left-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10">
+      <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10">
         <div className="bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-t-2">
           <span className="font-bold">TECHNICAL CAPABILITIES // SYSTEM BACKBONE</span>
         </div>
@@ -865,7 +865,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       </div>
 
       {/* Top-Right Viewport & Dragging Telemetry */}
-      <div className="hidden md:flex absolute top-3 right-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2.5 py-1 border border-[#15150F]">
+      <div className="hidden lg:flex absolute top-3 right-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2.5 py-1 border border-[#15150F]">
         <span>X: {viewport.x} Y: {viewport.y}</span>
         <span className="text-[#5C5946]">|</span>
         <span>SCALE: {viewport.zoom.toFixed(2)}x</span>
@@ -889,13 +889,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       </div>
 
       {/* Floating Canvas Controls */}
-      <div className="absolute bottom-16 sm:bottom-4 right-3 sm:right-4 flex flex-col gap-1.5 z-20">
+      <div className="absolute bottom-14 lg:bottom-4 right-3 lg:right-4 flex flex-col gap-1.5 z-20">
         <button
           onClick={(e) => {
             e.stopPropagation();
             handleAssemble();
           }}
-          className="hidden md:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
+          className="hidden lg:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
           title="Apply Deterministic Multi-Ring Schematic Layout"
         >
           <Layers size={12} />
@@ -915,7 +915,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               return next;
             });
           }}
-          className={`w-9 h-9 sm:w-8 sm:h-8 border border-[#15150F] flex items-center justify-center transition-colors shadow-[2px_2px_0px_#15150F] ${
+          className={`w-9 h-9 lg:w-8 lg:h-8 border border-[#15150F] flex items-center justify-center transition-colors shadow-[2px_2px_0px_#15150F] ${
             gridSnapEnabled ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F] hover:text-[#D4CDA4]'
           }`}
           title="Toggle Grid Snapping (G)"
@@ -929,11 +929,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               e.stopPropagation();
               resetAllPositions();
             }}
-            className="px-2 h-9 sm:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#D4CDA4] font-mono text-[9px] font-bold hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors shadow-[2px_2px_0px_#15150F]"
+            className="px-2 h-9 lg:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#D4CDA4] font-mono text-[9px] font-bold hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors shadow-[2px_2px_0px_#15150F]"
             title="Reset Nodes to Default Schematic (Alt+R)"
           >
             <RotateCcw size={12} />
-            <span className="hidden sm:inline">RESET</span>
+            <span className="hidden lg:inline">RESET</span>
           </button>
         )}
 
@@ -942,7 +942,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             e.stopPropagation();
             setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom + 0.2, 2.5) }));
           }}
-          className="w-9 h-9 sm:w-8 sm:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center text-[#D4CDA4] hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors"
+          className="w-9 h-9 lg:w-8 lg:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center text-[#D4CDA4] hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors"
           title="Zoom In (+)"
         >
           <ZoomIn size={14} />
@@ -952,7 +952,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             e.stopPropagation();
             setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom - 0.2, 0.45) }));
           }}
-          className="w-9 h-9 sm:w-8 sm:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center text-[#D4CDA4] hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors"
+          className="w-9 h-9 lg:w-8 lg:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center text-[#D4CDA4] hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors"
           title="Zoom Out (-)"
         >
           <ZoomOut size={14} />
@@ -962,7 +962,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             e.stopPropagation();
             fitAll();
           }}
-          className="px-2 h-9 sm:h-8 bg-[#C3E54E] border border-[#15150F] flex items-center justify-center gap-1 text-[#15150F] font-mono text-[9px] font-bold hover:bg-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
+          className="px-2 h-9 lg:h-8 bg-[#C3E54E] border border-[#15150F] flex items-center justify-center gap-1 text-[#15150F] font-mono text-[9px] font-bold hover:bg-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
           title="Fit All Nodes (0 or F)"
         >
           <Maximize2 size={12} />
