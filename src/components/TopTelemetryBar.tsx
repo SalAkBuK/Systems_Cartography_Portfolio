@@ -47,7 +47,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
         <span className="text-[#C3E54E] font-bold text-[11.5px] lg:text-[9.5px] tracking-wider">{activeProjectsCount.toString().padStart(2, '0')} PUBLIC REPOS</span>
       </div>
 
-      <div className="hidden md:flex flex-col">
+      <div className="hidden lg:flex flex-col">
         <span className="text-[8px] opacity-50 tracking-tighter">OWNER SOURCE</span>
         <span className="flex items-center gap-1">
           <span className={`w-1.5 h-1.5 ${syncState === 'ready' ? 'bg-[#C3E54E]' : 'bg-[#CA885C]'}`} />
