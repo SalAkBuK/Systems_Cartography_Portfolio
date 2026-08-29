@@ -428,11 +428,19 @@ test('TopologyCanvas.tsx: pausing clears the timestamp baseline but preserves th
 test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimationFrame chain and cancels it on cleanup', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
-  const runningBlock = block.slice(block.indexOf('let rafId'));
+  // PR24 tracks the scheduled id via a ref (orbitRafIdRef) instead of a bare
+  // local variable, so commitOrbitReflow can cancel it synchronously from
+  // outside this effect — see orbitRafIdRef's own definition/tests. The
+  // chain-count and cancel-on-cleanup invariants below are unchanged.
+  const runningBlock = block.slice(block.indexOf('const tick = ('));
 
   const rafCallCount = (runningBlock.match(/requestAnimationFrame\(/g) || []).length;
   assert.equal(rafCallCount, 2, 'Exactly one chain: one initial schedule plus one re-schedule inside tick (the same recursive chain, not multiple independent loops)');
-  assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame when isOrbitRunning flips or the component unmounts');
+  assert.match(
+    runningBlock,
+    /return \(\) => \{\s*if \(orbitRafIdRef\.current !== null\) \{\s*cancelAnimationFrame\(orbitRafIdRef\.current\);/,
+    'Cleanup must cancel the active frame when isOrbitRunning flips or the component unmounts'
+  );
 });
 
 test('TopologyCanvas.tsx: no setInterval is ever used, and exactly two gated requestAnimationFrame chains exist (orbit clock + PR23 dock settle transition)', () => {
