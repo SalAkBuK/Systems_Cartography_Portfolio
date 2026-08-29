@@ -462,20 +462,20 @@ test('33. Escape clears selected focus without resetting viewport or topology st
   assert.ok(!clearHandler.includes('setDetached'), 'Selection clearing must preserve detached project state');
 });
 
-test('34. Desktop inspector exposes one responsive clear-selection affordance when selected', () => {
+test('34. Desktop inspector omits duplicate clear control while mobile CLEAR remains available', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
   const titleBar = inspectorSource.substring(
     inspectorSource.indexOf('Inspector Title Bar'),
     inspectorSource.indexOf('Sub-Tabs for Projects')
   );
+  const mobileControls = titleBar.substring(titleBar.indexOf('Mobile Sheet Controls'));
   const selectionCondition = '(selectedProject || selectedSkill || selectedExperience || selectedSubsystem)';
 
-  assert.ok(titleBar.includes(selectionCondition), 'Desktop clear control must render only while an object is selected');
-  assert.ok(titleBar.includes('onClick={onClearSelection}'), 'Desktop clear control must use the shared clear callback');
-  assert.ok(titleBar.includes('hidden lg:inline-flex'), 'Desktop clear control must be hidden below the desktop breakpoint');
-  assert.ok(titleBar.includes('aria-label="Clear selection"'), 'Desktop clear control must have an accessible name');
-  assert.equal((titleBar.match(/hidden lg:inline-flex/g) ?? []).length, 1, 'Inspector title bar must contain exactly one desktop clear control');
-  assert.ok(titleBar.includes('lg:hidden'), 'Existing mobile controls must remain hidden on desktop');
+  assert.ok(!titleBar.includes('hidden lg:inline-flex'), 'Inspector title bar must not contain a desktop clear control');
+  assert.ok(mobileControls.includes('lg:hidden'), 'Existing mobile controls must remain hidden on desktop');
+  assert.ok(mobileControls.includes(selectionCondition), 'Mobile CLEAR must still render while an object is selected');
+  assert.ok(mobileControls.includes('onClearSelection?.();'), 'Mobile CLEAR must retain the shared clear callback');
+  assert.ok(mobileControls.includes('✕ CLEAR'), 'Mobile CLEAR label must remain available');
 });
 
 // ---------------------------------------------------------------------------

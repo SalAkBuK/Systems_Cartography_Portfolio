@@ -120,6 +120,7 @@ interface TopologyCanvasProps {
   selectedSkillId: string | null;
   onSelectSkill: (id: string) => void;
   selectedExperienceId: string | null;
+  onClearSelection: () => void;
   searchQuery: string;
   topologyViewMode: TopologyViewMode;
   viewport: ViewportState;
@@ -136,6 +137,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedSkillId,
   onSelectSkill,
   selectedExperienceId,
+  onClearSelection,
   searchQuery,
   topologyViewMode,
   viewport,
@@ -146,6 +148,24 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 }) => {
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
+  const selectedFocusLabel = useMemo(() => {
+    if (selectedProjectId) {
+      const project = projects.find(item => item.id === selectedProjectId);
+      return project ? `${project.code} · ${project.title}` : null;
+    }
+
+    if (selectedSkillId) {
+      const skill = activeSkills.find(item => item.id === selectedSkillId);
+      return skill ? `${skill.code} · ${skill.name}` : null;
+    }
+
+    if (selectedExperienceId) {
+      const selectedExperience = activeExperience.find(item => item.id === selectedExperienceId);
+      return selectedExperience ? `${selectedExperience.code} · ${selectedExperience.organization}` : null;
+    }
+
+    return null;
+  }, [selectedProjectId, selectedSkillId, selectedExperienceId, projects, activeSkills, activeExperience]);
 
   // Static orbital lattice: deterministic collision-free ring layout used as the
   // canonical default for every node's position. Computed from the full (unfiltered)
@@ -1355,9 +1375,36 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <span className="font-bold">APPLICATION SURFACE // CORE WORK</span>
       </div>
 
+      {/* Screen-positioned focus status; intentionally outside the transformed SVG scene. */}
+      {selectedFocusLabel && (
+        <div
+          id="topology-focus-status"
+          className="hidden lg:flex absolute top-12 left-1/2 -translate-x-1/2 z-30 items-stretch max-w-[52%] border border-[#15150F] bg-[#15150F] font-mono"
+        >
+          <span className="min-w-0 px-2.5 py-1.5 text-[9px] font-bold tracking-wide text-[#C3E54E] truncate">
+            FOCUS LOCK // {selectedFocusLabel}
+          </span>
+          <button
+            type="button"
+            aria-label="Release topology focus"
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClearSelection();
+            }}
+            className="shrink-0 border-l border-[#C3E54E] px-2.5 py-1.5 text-[9px] font-bold text-[#15150F] bg-[#C3E54E] hover:bg-[#D5F06E] transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E]"
+          >
+            × RELEASE
+          </button>
+        </div>
+      )}
+
       {/* Snap / Collision Toast Notification */}
       {snapNotice && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[9.5px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[9.5px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in slide-in-from-top-2 duration-150 ${
+          selectedFocusLabel ? 'top-24' : 'top-12'
+        }`}>
           {snapNotice.type === 'collision' ? (
             <ShieldAlert size={13} className="text-[#E5534E] shrink-0" />
           ) : (
