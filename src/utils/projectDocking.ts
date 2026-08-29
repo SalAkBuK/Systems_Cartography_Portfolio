@@ -49,6 +49,67 @@ export function resolveProjectDockState(map: ProjectDockRuntimeMap, projectId: s
 }
 
 // ---------------------------------------------------------------------------
+// Interactive-order integrity. These helpers derive every concrete runtime
+// order mutation; they reject duplicate/unknown identities instead of trying
+// to repair a broken transition with Set-based cleanup.
+// ---------------------------------------------------------------------------
+
+function assertInteractiveOrbitOrder(
+  order: readonly string[],
+  knownProjectIds: readonly string[]
+): void {
+  for (let i = 0; i < order.length; i++) {
+    const id = order[i];
+    if (!knownProjectIds.includes(id)) {
+      throw new Error(`Interactive orbit order contains unknown project id: ${id}`);
+    }
+    if (order.indexOf(id) !== i) {
+      throw new Error(`Interactive orbit order contains duplicate project id: ${id}`);
+    }
+  }
+}
+
+export function removeProjectFromOrbitOrder(
+  currentOrder: readonly string[],
+  projectId: string,
+  knownProjectIds: readonly string[]
+): string[] {
+  assertInteractiveOrbitOrder(currentOrder, knownProjectIds);
+  const removalIndex = currentOrder.indexOf(projectId);
+  if (removalIndex === -1) {
+    throw new Error(`Cannot detach project absent from docked orbit order: ${projectId}`);
+  }
+  const nextOrder = [
+    ...currentOrder.slice(0, removalIndex),
+    ...currentOrder.slice(removalIndex + 1),
+  ];
+  assertInteractiveOrbitOrder(nextOrder, knownProjectIds);
+  return nextOrder;
+}
+
+export function insertProjectIntoOrbitOrder(
+  currentOrder: readonly string[],
+  projectId: string,
+  insertionIndex: number,
+  knownProjectIds: readonly string[]
+): string[] {
+  assertInteractiveOrbitOrder(currentOrder, knownProjectIds);
+  if (!knownProjectIds.includes(projectId)) {
+    throw new Error(`Cannot insert unknown project into orbit order: ${projectId}`);
+  }
+  if (currentOrder.includes(projectId)) {
+    throw new Error(`Cannot insert project already present in docked orbit order: ${projectId}`);
+  }
+  if (!Number.isInteger(insertionIndex) || insertionIndex < 0 || insertionIndex > currentOrder.length) {
+    throw new Error(`Orbit insertion index ${insertionIndex} is outside [0, ${currentOrder.length}]`);
+  }
+  const nextOrder = [...currentOrder];
+  nextOrder.splice(insertionIndex, 0, projectId);
+  assertInteractiveOrbitOrder(nextOrder, knownProjectIds);
+  return nextOrder;
+}
+
+// ---------------------------------------------------------------------------
 // Geometry helpers
 // ---------------------------------------------------------------------------
 
@@ -269,19 +330,29 @@ export function deriveDockState(input: DockSessionInput): ProjectDockState {
   return input.isWithinCaptureRadius ? 'capturing' : 'detached';
 }
 
+export type OrbitReleaseAction =
+  | 'return-to-existing-dock'
+  | 'insert-detached-project'
+  | 'place-detached';
+
 /**
- * Resolves the FINAL persisted outcome when the pointer is released, given
- * the dock state at the instant of release and whether the proposed target
- * is blocked. Whole-ellipse insertion passes false because it redistributes
- * the ring instead of claiming a fixed vacancy.
+ * Explicit two-stage release semantics. Only a project that was already
+ * persisted detached before this gesture may be inserted at a new angular
+ * gap. A docked project that crosses breakaway and returns to the capture band
+ * in the same gesture cancels its detach and returns to its unchanged order.
  */
-export function resolveReleaseOutcome(
-  dockStateAtRelease: ProjectDockState,
-  isTargetBlocked: boolean
-): 'docked' | 'detached' {
-  if (dockStateAtRelease === 'detaching') return 'docked'; // aborted pull — never left
-  if (dockStateAtRelease === 'capturing' && !isTargetBlocked) return 'docked'; // valid redock
-  return 'detached'; // ordinary detached drop, or a blocked capture falling through to free placement
+export function resolveOrbitReleaseAction(
+  persistedState: 'docked' | 'detached',
+  dockStateAtRelease: ProjectDockState
+): OrbitReleaseAction {
+  if (persistedState === 'docked') {
+    return dockStateAtRelease === 'detached'
+      ? 'place-detached'
+      : 'return-to-existing-dock';
+  }
+  return dockStateAtRelease === 'capturing'
+    ? 'insert-detached-project'
+    : 'place-detached';
 }
 
 // ---------------------------------------------------------------------------

@@ -20,8 +20,10 @@ import {
   computeMagneticRenderPosition,
   projectPointOntoOrbitEllipse,
   resolveOrbitInsertionIndex,
+  removeProjectFromOrbitOrder,
+  insertProjectIntoOrbitOrder,
   deriveDockState,
-  resolveReleaseOutcome,
+  resolveOrbitReleaseAction,
   stepOrbitReflow,
   isDetachedPlacementMotionSafe,
   ORBITAL_CLEARANCE_SAMPLE_COUNT,
@@ -147,16 +149,21 @@ test('deriveDockState: at rest (not dragging) simply reflects the persisted stat
   assert.equal(deriveDockState({ persistedState: 'detached', isDragging: false, hasCrossedThresholdThisGesture: false, isWithinCaptureRadius: false }), 'detached');
 });
 
-test('resolveReleaseOutcome: valid capture release ends docked', () => {
-  assert.equal(resolveReleaseOutcome('capturing', false), 'docked');
+test('resolveOrbitReleaseAction: only a project already persisted detached may insert from whole-ellipse capture', () => {
+  assert.equal(resolveOrbitReleaseAction('detached', 'capturing'), 'insert-detached-project');
 });
 
-test('resolveReleaseOutcome: aborted pull (still detaching at release) ends docked', () => {
-  assert.equal(resolveReleaseOutcome('detaching', false), 'docked');
+test('resolveOrbitReleaseAction: below-threshold docked release returns to its existing dock', () => {
+  assert.equal(resolveOrbitReleaseAction('docked', 'detaching'), 'return-to-existing-dock');
 });
 
-test('resolveReleaseOutcome: normal release away from the orbit ends detached', () => {
-  assert.equal(resolveReleaseOutcome('detached', false), 'detached');
+test('resolveOrbitReleaseAction: same-gesture docked breakaway and recapture cancels detach instead of inserting', () => {
+  assert.equal(resolveOrbitReleaseAction('docked', 'capturing'), 'return-to-existing-dock');
+});
+
+test('resolveOrbitReleaseAction: normal release away from the orbit places detached', () => {
+  assert.equal(resolveOrbitReleaseAction('docked', 'detached'), 'place-detached');
+  assert.equal(resolveOrbitReleaseAction('detached', 'detached'), 'place-detached');
 });
 
 // ---------------------------------------------------------------------------
@@ -322,10 +329,32 @@ test('resolveOrbitInsertionIndex: matches the spec\'s own worked example — dro
   const thetaBetweenEandF = (angleOf(3) + angleOf(4)) / 2; // strictly between E and F
 
   const insertionIndex = resolveOrbitInsertionIndex(thetaBetweenEandF, 0, N);
-  const newOrder = [...order];
-  newOrder.splice(insertionIndex, 0, 'C');
+  const newOrder = insertProjectIntoOrbitOrder(order, 'C', insertionIndex, ['A', 'B', 'C', 'D', 'E', 'F']);
 
   assert.deepEqual(newOrder, ['A', 'B', 'D', 'E', 'C', 'F'], 'C must land strictly between E and F, matching the spec example exactly');
+});
+
+test('same-gesture docked breakaway + capture: C returns once in unchanged A B C D E F membership with no detached persistence', () => {
+  const canonicalOrder = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const persistedState = 'docked' as const;
+  const dockStateAtRelease = deriveDockState({
+    persistedState,
+    isDragging: true,
+    hasCrossedThresholdThisGesture: true,
+    isWithinCaptureRadius: true,
+  });
+  const action = resolveOrbitReleaseAction(persistedState, dockStateAtRelease);
+
+  assert.equal(action, 'return-to-existing-dock');
+  const finalOrder = canonicalOrder;
+  const finalDockMap: ProjectDockRuntimeMap = {};
+  const finalCustomPositions: Record<string, { x: number; y: number }> = {};
+
+  assert.equal(finalOrder.length, 6, 'must not create N+1 phantom spacing');
+  assert.equal(finalOrder.filter(id => id === 'C').length, 1, 'C must appear exactly once');
+  assert.deepEqual(finalOrder, canonicalOrder, 'same-gesture capture must preserve canonical relative order');
+  assert.equal(resolveProjectDockState(finalDockMap, 'C'), 'docked');
+  assert.equal(finalCustomPositions.C, undefined, 'no detached custom position may persist');
 });
 
 test('resolveOrbitInsertionIndex: accounts for orbitPhase — the same absolute visual angle produces different logical insertion points as the ring rotates', () => {
@@ -625,6 +654,7 @@ test('search resolution: findNearestValidGridPosition rejects a current-safe-but
     isCandidateValid
   );
 
+  assert.equal(resolved.foundValidPosition, true);
   assert.equal(resolved.wasAdjusted, true, 'The resolver must move off the naive candidate');
   assert.equal(resolved.wasAdjustedForValidatorOnly, true, 'The shift must be attributed to the validator, not an ordinary current-node collision');
 
@@ -641,6 +671,21 @@ test('search resolution: an ordinary candidate with no orbital-clearance concern
   const withAlwaysTrueValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true, () => true);
   assert.deepEqual(withoutValidator, withAlwaysTrueValidator, 'Supplying an always-true validator must be indistinguishable from omitting it entirely');
   assert.equal(withoutValidator.wasAdjusted, false);
+});
+
+test('search saturation: an always-false validator is never represented as a valid fallback', () => {
+  const project = { ...generateMockProjects(1)[0], id: 'project-saturation' };
+  const rawPos = { x: 125, y: -75 };
+  const resolved = findNearestValidGridPosition(
+    'project', project.id, rawPos,
+    {}, {}, [project], [],
+    25, true,
+    () => false
+  );
+
+  assert.equal(resolved.foundValidPosition, false);
+  assert.equal(resolved.x, 125, 'fallback coordinates remain diagnostic only');
+  assert.equal(resolved.y, -75, 'fallback coordinates remain diagnostic only');
 });
 
 // ---------------------------------------------------------------------------
@@ -765,6 +810,38 @@ test('real committed snapshot: reinserting a detached real project (17 -> 18) pr
   assert.deepEqual(reinserted, canonicalOrder, 'reinserting at the same logical position must exactly reproduce the original canonical order');
 });
 
+test('interactive-order invariant: repeated detach/reinsert operations keep only known real project IDs and never duplicate identity', () => {
+  const { orbitGeometry } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
+  const knownIds = orbitGeometry.slots.map(slot => slot.projectId);
+  let order = [...knownIds];
+
+  for (const [projectId, insertionIndex] of [
+    [knownIds[2], 9],
+    [knownIds[11], 1],
+    [knownIds[2], knownIds.length - 1],
+    [knownIds[7], 4],
+  ] as const) {
+    order = removeProjectFromOrbitOrder(order, projectId, knownIds);
+    assert.equal(order.includes(projectId), false);
+    order = insertProjectIntoOrbitOrder(order, projectId, insertionIndex, knownIds);
+    assert.equal(order.filter(id => id === projectId).length, 1);
+    assert.equal(new Set(order).size, order.length);
+    assert.ok(order.every(id => knownIds.includes(id)));
+  }
+
+  assert.equal(order.length, knownIds.length);
+  assert.throws(
+    () => insertProjectIntoOrbitOrder(order, order[0], 1, knownIds),
+    /already present/,
+    'correct transitions reject duplicates rather than silently cleaning them up'
+  );
+  assert.throws(
+    () => insertProjectIntoOrbitOrder(order, 'unknown-project', 1, knownIds),
+    /unknown project/,
+    'runtime order cannot admit an ID outside the current snapshot'
+  );
+});
+
 test('real committed snapshot: ASSEMBLE/RESET restore interactiveOrbitOrder to null and clear every dock-runtime exception (byte-for-byte canonical restoration)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const restoreIdx = content.indexOf('const restoreCanonicalDockMembership = useCallback(() => {');
@@ -817,11 +894,49 @@ test('architecture: a reflow is committed before the drag session itself is clea
   assert.ok(commitIdx < finalNullIdx, 'A reflow is committed before the drag session itself is cleared');
 });
 
+test('TopologyCanvas.tsx: same-gesture docked capture returns existing membership; only persisted-detached capture reaches checked insertion', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const releaseIdx = content.indexOf('const processRelease = () => {');
+  const releaseBlock = content.slice(releaseIdx, content.indexOf('const handleWindowMouseMove', releaseIdx));
+  const actionIdx = releaseBlock.indexOf('const releaseAction = resolveOrbitReleaseAction(persisted, dockStateAtRelease);');
+  const returnIdx = releaseBlock.indexOf("if (releaseAction === 'return-to-existing-dock')", actionIdx);
+  const insertIdx = releaseBlock.indexOf("else if (releaseAction === 'insert-detached-project')", returnIdx);
+  const returnBlock = releaseBlock.slice(returnIdx, insertIdx);
+  const insertBlock = releaseBlock.slice(insertIdx, releaseBlock.indexOf('} else {', insertIdx));
+
+  assert.ok(actionIdx !== -1 && returnIdx !== -1 && insertIdx !== -1);
+  assert.ok(returnBlock.includes('commitOrbitReflow(dockedOrbitOrder'), 'same-gesture capture must return to unchanged order');
+  assert.ok(!returnBlock.includes('setInteractiveOrbitOrder('));
+  assert.ok(!returnBlock.includes('setCustomProjectPositions('));
+  assert.ok(!returnBlock.includes('setProjectDockState('));
+  assert.ok(insertBlock.includes('insertProjectIntoOrbitOrder('), 'eligible reinsertion must use the checked insertion transition');
+});
+
+test('TopologyCanvas.tsx: exhausted safe-placement search cancels first detach and retains an already-detached prior position without unsafe writes', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const releaseIdx = content.indexOf('const processRelease = () => {');
+  const releaseBlock = content.slice(releaseIdx, content.indexOf('const handleWindowMouseMove', releaseIdx));
+  const exhaustionIdx = releaseBlock.indexOf('if (!resolved.foundValidPosition)');
+  const successIdx = releaseBlock.indexOf('const finalPos =', exhaustionIdx);
+  const exhaustionBlock = releaseBlock.slice(exhaustionIdx, successIdx);
+
+  assert.ok(exhaustionIdx !== -1 && successIdx !== -1);
+  assert.ok(exhaustionBlock.includes('if (wasDocked)'));
+  assert.ok(exhaustionBlock.includes('commitOrbitReflow('), 'first-time detach must return to existing docked order');
+  assert.ok(exhaustionBlock.includes('NO SAFE CLEARANCE // DETACH CANCELLED'));
+  assert.ok(exhaustionBlock.includes('NO SAFE CLEARANCE // PREVIOUS POSITION RETAINED'));
+  assert.ok(!exhaustionBlock.includes('setCustomProjectPositions('), 'unsafe candidate must never overwrite custom position');
+  assert.ok(!exhaustionBlock.includes('setProjectDockState('), 'unsafe candidate must never change dock state');
+  assert.ok(!exhaustionBlock.includes('setInteractiveOrbitOrder('), 'unsafe candidate must never change membership');
+  assert.ok(exhaustionBlock.includes('setDraggingNode(null);') && exhaustionBlock.includes('return;'));
+});
+
 test('TopologyCanvas.tsx: a detach commit builds the future-clearance sweep set from the CURRENT interactive docked order, excluding the project being dropped', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const idx = content.indexOf('const newOrder = wasDocked ? dockedOrbitOrder.filter(id => id !== draggingNode.id) : dockedOrbitOrder;');
-  assert.ok(idx !== -1, 'the future-clearance sweep set must be derived from the current interactive docked order, not any fixed canonical slot list');
-  const nearby = content.slice(idx, idx + 500);
+  const releaseIdx = content.indexOf('const processRelease = () => {');
+  const idx = content.indexOf('removeProjectFromOrbitOrder(dockedOrbitOrder, draggingNode.id, canonicalOrbitOrder)', releaseIdx);
+  assert.ok(idx !== -1, 'detach must remove exactly the dragged identity from the current interactive docked order through the checked transition');
+  const nearby = content.slice(idx, idx + 600);
   assert.ok(nearby.includes('isDetachedPlacementMotionSafe('), 'must reuse the existing motion-safety validator, not a duplicate search algorithm');
 });
 
