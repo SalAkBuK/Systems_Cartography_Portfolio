@@ -116,6 +116,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
 
+  // Static orbital lattice: deterministic collision-free ring layout used as the
+  // canonical default for every node's position. Computed from the full (unfiltered)
+  // project/skill sets so search filtering never perturbs slot allocation, and is
+  // independent of topologyViewMode / selectedExperienceId so geometry never shifts
+  // between view modes or under the Professional Experience filter.
+  const staticOrbitalLattice = useMemo(
+    () => assembleTopologyLayout(projects, activeSkills),
+    [projects, activeSkills]
+  );
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -126,6 +136,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // Custom dragged positions for 3D project structures and skill nodes
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [customSkillPositions, setCustomSkillPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  // Effective position maps: static orbital lattice as the base layer, with any
+  // manually dragged/assembled positions layered on top. Passed to collision &
+  // snap-resolution so they always agree with what is actually rendered, instead
+  // of resolving un-dragged neighbors against stale authored gridPosition data.
+  const effectiveProjectPositions = useMemo(
+    () => ({ ...staticOrbitalLattice.projectPositions, ...customProjectPositions }),
+    [staticOrbitalLattice, customProjectPositions]
+  );
+  const effectiveSkillPositions = useMemo(
+    () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
+    [staticOrbitalLattice, customSkillPositions]
+  );
 
   // Grid snap state (enabled by default)
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
@@ -147,15 +170,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (draggingNode?.type === 'project' && draggingNode.id === project.id) {
       return draggingNode.currentPos;
     }
-    return customProjectPositions[project.id] || project.gridPosition;
-  }, [draggingNode, customProjectPositions]);
+    return effectiveProjectPositions[project.id] || project.gridPosition;
+  }, [draggingNode, effectiveProjectPositions]);
 
   const getSkillPos = useCallback((skill: InfrastructureSkill) => {
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
       return draggingNode.currentPos;
     }
-    return customSkillPositions[skill.id] || skill.gridPosition;
-  }, [draggingNode, customSkillPositions]);
+    return effectiveSkillPositions[skill.id] || skill.gridPosition;
+  }, [draggingNode, effectiveSkillPositions]);
 
   // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -233,14 +256,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.type,
       draggingNode.id,
       draggingNode.currentPos,
-      customProjectPositions,
-      customSkillPositions,
+      effectiveProjectPositions,
+      effectiveSkillPositions,
       projects,
       activeSkills,
       GRID_SNAP_STEP,
       gridSnapEnabled
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills, gridSnapEnabled]);
+  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills, gridSnapEnabled]);
 
   // Real-time raw collision warning if directly hovering over another node
   const liveCollision = useMemo(() => {
@@ -249,12 +272,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       draggingNode.type,
       draggingNode.id,
       draggingNode.currentPos,
-      customProjectPositions,
-      customSkillPositions,
+      effectiveProjectPositions,
+      effectiveSkillPositions,
       projects,
       activeSkills
     );
-  }, [draggingNode, customProjectPositions, customSkillPositions, projects, activeSkills]);
+  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
 
   // Update container size on resize
   useEffect(() => {
@@ -378,8 +401,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.type,
             draggingNode.id,
             draggingNode.currentPos,
-            customProjectPositions,
-            customSkillPositions,
+            effectiveProjectPositions,
+            effectiveSkillPositions,
             projects,
             activeSkills,
             GRID_SNAP_STEP,
@@ -454,8 +477,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             draggingNode.type,
             draggingNode.id,
             draggingNode.currentPos,
-            customProjectPositions,
-            customSkillPositions,
+            effectiveProjectPositions,
+            effectiveSkillPositions,
             projects,
             activeSkills,
             GRID_SNAP_STEP,
@@ -499,7 +522,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
     };
-  }, [draggingNode, viewport.zoom, customProjectPositions, customSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
+  }, [draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions, gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills]);
 
   // Handle Pan & Drag on canvas surface
   const handleMouseDown = (e: React.MouseEvent) => {
