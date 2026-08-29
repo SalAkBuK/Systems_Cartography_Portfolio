@@ -12,10 +12,10 @@ import {
 import { 
   resolveProjectFromEvidenceKey, 
   resolveProjectIdFromEvidenceKey, 
-  getCapabilitiesLinkedToExperience, 
   isProjectLinkedToExperience, 
   getLinkedProjectIdsForExperience 
 } from '../src/utils/portfolioUtils';
+import { getCapabilitiesLinkedToExperience } from '../src/utils/capabilityAssociations';
 import { 
   getTopologyNodeEmphasis, 
   getConduitPresentationState 
@@ -194,7 +194,7 @@ test('Test I: getCapabilitiesLinkedToExperience derives correct capability set f
 
   // Verify skills used by CodeFier projects are in the set
   const codefierProjects = GITHUB_SNAPSHOT.projects.filter(p => isProjectLinkedToExperience(p, codefierExp));
-  assert.ok(codefierProjects.length >= 3, `Must find at least 3 linked projects, found ${codefierProjects.length}`);
+  assert.equal(codefierProjects.length, 5, `CodeFier must link to exactly 5 repositories, found ${codefierProjects.length}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -311,6 +311,21 @@ test('Test K: CAPABILITIES Mode + Selected Experience: linked skills=primary, un
   });
   assert.equal(unlinkedSkill, 'dimmed', 'Unlinked capability in capabilities mode must be dimmed');
 
+  // Unlinked skill hovered in capabilities mode -> STILL dimmed (experience filter authoritative)
+  const unlinkedSkillHovered = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'capabilities',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: false,
+    isSkillLinkedToExp: false
+  });
+  assert.equal(unlinkedSkillHovered, 'dimmed', 'Unlinked capability when hovered in capabilities mode must remain dimmed');
+
   // Linked project in capabilities mode -> contextual
   const linkedProjInCap = getTopologyNodeEmphasis({
     nodeType: 'project',
@@ -375,6 +390,21 @@ test('Test L: RELATIONSHIPS Mode + Selected Experience: linked nodes=primary, co
     isSkillLinkedToExp: true
   });
   assert.equal(linkedSkill, 'primary');
+
+  // Unlinked skill hovered in relationships mode -> STILL dimmed
+  const unlinkedSkillHovered = getTopologyNodeEmphasis({
+    nodeType: 'skill',
+    mode: 'relationships',
+    isHovered: true,
+    isSelected: false,
+    isDragging: false,
+    isConnectedToFocus: false,
+    isAnyFocusActive: true,
+    isSelectedExpActive: true,
+    isLinkedToSelectedExp: false,
+    isSkillLinkedToExp: false
+  });
+  assert.equal(unlinkedSkillHovered, 'dimmed', 'Unlinked skill when hovered in relationships mode must remain dimmed');
 
   // Conduit between linked project and linked skill -> background (visible)
   const linkedConduit = getConduitPresentationState({
@@ -468,9 +498,9 @@ test('Test N: In RELATIONSHIPS mode without experience selected, all valid condu
 });
 
 // ---------------------------------------------------------------------------
-// TEST O: CodeFier model invariants
+// TEST O: Hardened CodeFier model invariants (3 systems, 5 snapshot repos)
 // ---------------------------------------------------------------------------
-test('Test O: CodeFier model invariants: 2 role periods, 3 delivered systems, 5 highlighted repos', () => {
+test('Test O: CodeFier model invariants: exactly 2 role periods, 3 delivered systems, 5 current snapshot repos', () => {
   const codefierRoles = resolvedExperience.filter(e => (e.organization || '').toLowerCase().includes('codefier'));
   assert.equal(codefierRoles.length, 2, 'CodeFier must have exactly 2 role periods');
 
@@ -483,27 +513,37 @@ test('Test O: CodeFier model invariants: 2 role periods, 3 delivered systems, 5 
   assert.ok(deliveredNames.some(n => n.includes('Worthy')));
   assert.ok(deliveredNames.some(n => n.includes('Remapp')));
 
-  const linkedRepos = getLinkedProjectIdsForExperience(codefierRoles[0]);
-  assert.ok(linkedRepos.has('towerdesk-backend'));
-  assert.ok(linkedRepos.has('tower-desk'));
-  assert.ok(linkedRepos.has('towerdesk-mobile-app'));
-  assert.ok(linkedRepos.has('worthy-crm'));
-  assert.ok(linkedRepos.has('remapp-scraper'));
+  const codefierExp = codefierRoles[0];
+  const codefierProjects = GITHUB_SNAPSHOT.projects.filter(p => isProjectLinkedToExperience(p, codefierExp));
+  assert.equal(codefierProjects.length, 5, 'Must have exactly 5 linked projects from current snapshot');
+
+  const titles = new Set(codefierProjects.map(p => p.title));
+  assert.deepEqual(
+    titles,
+    new Set(['towerdesk-backend', 'tower-desk', 'towerdesk-mobile-app', 'worthy-crm', 'remapp-scraper'])
+  );
 });
 
 // ---------------------------------------------------------------------------
-// TEST P: AOK model invariants
+// TEST P: Mandatory / Non-skipping AOK model invariants
 // ---------------------------------------------------------------------------
-test('Test P: AOK model invariants: 0 project topology linkage', () => {
-  const aokExp = resolvedExperience.find(e => (e.organization || '').toLowerCase().includes('aok'));
-  if (aokExp) {
-    const linkedIds = getLinkedProjectIdsForExperience(aokExp);
-    assert.equal(linkedIds.size, 0, 'AOK must have 0 linked project IDs in topology');
+test('Test P: AOK freelance experience must resolve unconditionally and have 0 project links', () => {
+  const aokExp = resolvedExperience.find(
+    e =>
+      e.id === 'exp-freelance-aok-health-solutions' ||
+      e.progressionGroup === 'salakbuk-independent-freelance'
+  );
 
-    GITHUB_SNAPSHOT.projects.forEach(p => {
-      assert.equal(isProjectLinkedToExperience(p, aokExp), false, `Project ${p.title} must not be linked to AOK`);
-    });
-  }
+  assert.ok(aokExp, 'AOK freelance experience must resolve');
+  assert.equal(getLinkedProjectIdsForExperience(aokExp).size, 0, 'AOK must have 0 linked project IDs in topology');
+
+  GITHUB_SNAPSHOT.projects.forEach(project => {
+    assert.equal(
+      isProjectLinkedToExperience(project, aokExp),
+      false,
+      `Project ${project.title} must not be linked to AOK`
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -517,25 +557,125 @@ test('Test Q: TopTelemetryBar source code contains OWNER PROJECTS in brutalist b
 });
 
 // ---------------------------------------------------------------------------
-// TEST R: TopologyCanvas duplicate Zoom In removal and mobile responsiveness
+// TEST R: TopologyCanvas duplicate Zoom In removal, lg breakpoint, and control rail clearance
 // ---------------------------------------------------------------------------
-test('Test R: TopologyCanvas has exactly 1 Zoom In button and hides corner labels on mobile', () => {
+test('Test R: TopologyCanvas has exactly 1 Zoom In button, hides telemetry on < lg, and has bottom-14 clearance', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/TopologyCanvas.tsx'), 'utf8');
   const zoomInMatches = source.match(/title="Zoom In \(\+\)"/g) || [];
   assert.equal(zoomInMatches.length, 1, 'Must have exactly 1 Zoom In button');
 
-  // Verify corner labels are hidden on mobile
-  assert.ok(source.includes('hidden md:flex absolute top-3 left-3'), 'Top-left label must be hidden on mobile');
-  assert.ok(source.includes('hidden md:flex absolute bottom-3 left-3'), 'Bottom-left label must be hidden on mobile');
-  assert.ok(source.includes('hidden md:flex absolute top-3 right-3'), 'Top-right label must be hidden on mobile');
+  // Verify corner labels and telemetry use lg breakpoint
+  assert.ok(source.includes('hidden lg:flex absolute top-3 left-3'), 'Top-left label must be hidden on < lg');
+  assert.ok(source.includes('hidden lg:flex absolute bottom-3 left-3'), 'Bottom-left label must be hidden on < lg');
+  assert.ok(source.includes('hidden lg:flex absolute top-3 right-3'), 'Top-right label must be hidden on < lg');
+
+  // Verify floating controls rail uses bottom-14 clearance on compact viewports
+  assert.ok(source.includes('bottom-14 lg:bottom-4'), 'Control rail must stay above collapsed bottom sheet on < lg');
 });
 
 // ---------------------------------------------------------------------------
-// TEST S: RightInspectorPanel mobile bottom drawer and resolver integration
+// TEST S: RightInspectorPanel mobile bottom drawer, onClearSelection, and resolver
 // ---------------------------------------------------------------------------
-test('Test S: RightInspectorPanel renders mobile bottom drawer and resolves project IDs', () => {
+test('Test S: RightInspectorPanel renders mobile bottom drawer, CLEAR button, and resolves project IDs', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
   assert.ok(source.includes('isMobileExpanded'), 'Must have isMobileExpanded state');
+  assert.ok(source.includes('onClearSelection'), 'Must have onClearSelection prop');
+  assert.ok(source.includes('✕ CLEAR'), 'Must have ✕ CLEAR button');
   assert.ok(source.includes('resolveProjectFromEvidenceKey'), 'Must import and use resolveProjectFromEvidenceKey');
   assert.ok(source.includes('fixed bottom-0 left-0 right-0 z-30'), 'Must use fixed bottom drawer positioning on mobile');
+});
+
+// ---------------------------------------------------------------------------
+// TEST T: scripts/sync-github-snapshot.ts token handling safety invariant
+// ---------------------------------------------------------------------------
+test('Test T: scripts/sync-github-snapshot.ts contains NO readArg("--token") and supports env tokens', () => {
+  const source = readFileSync(resolve(process.cwd(), 'scripts/sync-github-snapshot.ts'), 'utf8');
+  assert.ok(!source.includes("readArg('--token')"), 'Must NOT accept --token CLI argument');
+  assert.ok(!source.includes('readArg("--token")'), 'Must NOT accept --token CLI argument');
+  assert.ok(source.includes('process.env.GITHUB_TOKEN'), 'Must support process.env.GITHUB_TOKEN');
+  assert.ok(source.includes('process.env.GH_TOKEN'), 'Must support process.env.GH_TOKEN');
+});
+
+// ---------------------------------------------------------------------------
+// TEST U: No circular dependency: portfolioUtils must NOT import capabilityAssociations
+// ---------------------------------------------------------------------------
+test('Test U: portfolioUtils.ts MUST NOT import capabilityAssociations.ts', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/utils/portfolioUtils.ts'), 'utf8');
+  assert.ok(!source.includes('capabilityAssociations'), 'portfolioUtils must not import from capabilityAssociations');
+});
+
+// ---------------------------------------------------------------------------
+// TEST V: BottomCommandStrip hidden on < lg to prevent bottom sheet collision
+// ---------------------------------------------------------------------------
+test('Test V: BottomCommandStrip root contains hidden lg:flex', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/BottomCommandStrip.tsx'), 'utf8');
+  assert.ok(source.includes('hidden lg:flex'), 'BottomCommandStrip must be hidden below lg breakpoint');
+});
+
+// ---------------------------------------------------------------------------
+// TEST W: Authoritative experience conduit filtering precedence
+// ---------------------------------------------------------------------------
+test('Test W: With Experience selected, unrelated conduits remain strictly hidden regardless of hover', () => {
+  // CodeFier selected + hover unrelated project -> conduit remains hidden
+  const unrelatedProjHovered = getConduitPresentationState({
+    isConnected: true,
+    isProjectHovered: true,
+    isSkillHovered: false,
+    isProjectSelected: false,
+    isSkillSelected: false,
+    isDraggingThisProject: false,
+    isDraggingThisSkill: false,
+    isAnyProjectHovered: true,
+    isAnySkillHovered: false,
+    isAnyProjectSelected: false,
+    isAnySkillSelected: false,
+    isAnyDragging: false,
+    showBackgroundRelationships: true,
+    isSelectedExpActive: true,
+    isProjectLinkedToExp: false,
+    isSkillLinkedToExp: true
+  });
+  assert.equal(unrelatedProjHovered, 'hidden', 'Hovering an unrelated project must NOT reveal an unrelated conduit during experience filter');
+
+  // CodeFier selected + hover unrelated capability -> conduit remains hidden
+  const unrelatedSkillHovered = getConduitPresentationState({
+    isConnected: true,
+    isProjectHovered: false,
+    isSkillHovered: true,
+    isProjectSelected: false,
+    isSkillSelected: false,
+    isDraggingThisProject: false,
+    isDraggingThisSkill: false,
+    isAnyProjectHovered: false,
+    isAnySkillHovered: true,
+    isAnyProjectSelected: false,
+    isAnySkillSelected: false,
+    isAnyDragging: false,
+    showBackgroundRelationships: true,
+    isSelectedExpActive: true,
+    isProjectLinkedToExp: true,
+    isSkillLinkedToExp: false
+  });
+  assert.equal(unrelatedSkillHovered, 'hidden', 'Hovering an unrelated capability must NOT reveal an unrelated conduit during experience filter');
+
+  // CodeFier selected + hover linked project -> eligible linked conduit becomes focused
+  const linkedProjHovered = getConduitPresentationState({
+    isConnected: true,
+    isProjectHovered: true,
+    isSkillHovered: false,
+    isProjectSelected: false,
+    isSkillSelected: false,
+    isDraggingThisProject: false,
+    isDraggingThisSkill: false,
+    isAnyProjectHovered: true,
+    isAnySkillHovered: false,
+    isAnyProjectSelected: false,
+    isAnySkillSelected: false,
+    isAnyDragging: false,
+    showBackgroundRelationships: false,
+    isSelectedExpActive: true,
+    isProjectLinkedToExp: true,
+    isSkillLinkedToExp: true
+  });
+  assert.equal(linkedProjHovered, 'focused', 'Hovering an experience-linked project must focus eligible linked conduits');
 });

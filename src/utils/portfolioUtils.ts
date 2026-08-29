@@ -1,6 +1,5 @@
-import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData, InfrastructureSkill } from '../types';
+import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
-import { projectUsesCapability } from './capabilityAssociations';
 import type { GitHubSyncResult } from '../services/githubService';
 
 export interface ParsedGitHubTarget {
@@ -287,30 +286,6 @@ export function resolveProjectIdFromEvidenceKey(
   evidenceKey?: string | null
 ): string | null {
   return resolveProjectFromEvidenceKey(projects, evidenceKey)?.id || null;
-}
-
-/**
- * Pure helper deriving the set of InfrastructureSkill IDs used by projects linked to an ExperienceNode.
- * Uses canonical association logic and projectUsesCapability.
- */
-export function getCapabilitiesLinkedToExperience(
-  exp: ExperienceNode,
-  projects: ProjectData[],
-  skills: InfrastructureSkill[]
-): Set<string> {
-  const linkedSkillIds = new Set<string>();
-  if (!exp || !Array.isArray(projects) || !Array.isArray(skills)) {
-    return linkedSkillIds;
-  }
-
-  const linkedProjects = projects.filter(p => isProjectLinkedToExperience(p, exp));
-  for (const skill of skills) {
-    if (linkedProjects.some(p => projectUsesCapability(p, skill))) {
-      linkedSkillIds.add(skill.id);
-    }
-  }
-
-  return linkedSkillIds;
 }
 
 const MONTH_ABBRS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
