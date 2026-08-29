@@ -333,8 +333,8 @@ function isoFootprintHalfExtent(width: number, depth: number): { x: number; y: n
   };
 }
 
-const ORBIT_CORE_CLEARANCE_ISO = 150; // breathing room (iso units) between capability core and orbit ellipse
-const ORBIT_SLOT_MARGIN = 40; // additional iso-space margin reserved per project along the ellipse perimeter
+const ORBIT_CORE_CLEARANCE_ISO = 100; // breathing room (iso units) between capability core and orbit ellipse
+const ORBIT_SLOT_MARGIN = 28; // additional iso-space margin reserved per project along the ellipse perimeter (preliminary heuristic only — actual visual-envelope validation below is authoritative)
 const ORBIT_RADIUS_GROWTH_STEP = 24;
 const ORBIT_MAX_GROWTH_ITERATIONS = 400;
 const FIT_VIEWPORT_PADDING = 40; // modest final padding around the union of everything actually rendered
