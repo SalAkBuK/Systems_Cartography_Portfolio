@@ -590,7 +590,9 @@ export function computeFitViewport(
  * - Dynamic scaling: the orbit ellipse grows to fit capacity; capability rings
  *   still expand as needed.
  * - Guaranteed collision-safe: verifies bounding-box clearance before writing positions.
- * - Grid-snapped: all node x/y coordinates are multiples of GRID_SNAP_STEP.
+ * - Capability (skill) coordinates are grid-snapped to GRID_SNAP_STEP. Canonical
+ *   project orbit coordinates are intentionally continuous (exact ellipse
+ *   positions, not grid-snapped) — see buildStaticProjectOrbit.
  * - 0 animation frames / 0 physics relaxation needed.
  */
 export function assembleTopologyLayout(
