@@ -324,22 +324,27 @@ test('TopologyCanvas.tsx: static orbital lattice is computed from full projects/
   assert.ok(!latticeBlock.includes('selectedExperienceId'), 'Lattice computation must not depend on selectedExperienceId');
 });
 
-test('TopologyCanvas.tsx: position precedence is drag > custom/manual > canonical lattice > gridPosition fallback', () => {
+test('TopologyCanvas.tsx: position precedence is drag > shared reflow > custom/detached > dynamic docked orbit > gridPosition fallback', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
 
-  // getProjectPos: drag branch returns first, then effective (lattice+custom) map, then raw gridPosition
+  // getProjectPos: drag branch returns first, then the active shared reflow,
+  // then the effective dynamic-orbit/custom map, then raw gridPosition.
   const getProjectPosIdx = content.indexOf('const getProjectPos = useCallback(');
-  const getProjectPosBlock = content.slice(getProjectPosIdx, content.indexOf('}, [draggingNode, effectiveProjectPositions]);', getProjectPosIdx));
+  const getProjectPosBlock = content.slice(getProjectPosIdx, content.indexOf('const getSkillPos', getProjectPosIdx));
   const dragCheckIdx = getProjectPosBlock.indexOf("draggingNode?.type === 'project'");
+  const reflowCheckIdx = getProjectPosBlock.indexOf('orbitReflowRenderPositions[project.id]');
   const effectiveFallbackIdx = getProjectPosBlock.indexOf('effectiveProjectPositions[project.id] || project.gridPosition');
-  assert.ok(dragCheckIdx !== -1 && effectiveFallbackIdx !== -1 && dragCheckIdx < effectiveFallbackIdx, 'Drag position must be checked before the canonical/custom fallback');
-
-  // effectiveProjectPositions: animated canonical orbit spread first, custom
-  // spread second (custom wins on key collision — a manually dragged project
-  // stays fixed and does not resume orbiting until ASSEMBLE clears it).
   assert.ok(
-    content.includes('{ ...animatedCanonicalProjectPositions, ...customProjectPositions }'),
-    'Custom positions must be layered on top of (spread after) the animated canonical orbit'
+    dragCheckIdx !== -1 && reflowCheckIdx !== -1 && effectiveFallbackIdx !== -1 &&
+      dragCheckIdx < reflowCheckIdx && reflowCheckIdx < effectiveFallbackIdx,
+    'Drag must win over shared reflow, which must win over the dynamic/custom fallback'
+  );
+
+  // effectiveProjectPositions: dynamic docked orbit spread first, custom
+  // detached/manual positions second so stationary detached projects win.
+  assert.ok(
+    content.includes('{ ...dockedProjectPositions, ...customProjectPositions }'),
+    'Custom positions must be layered on top of (spread after) the dynamic docked orbit'
   );
   assert.ok(
     content.includes('{ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }'),
@@ -371,8 +376,11 @@ test('TopologyCanvas.tsx: collision and snap-resolution read from effective (can
 // of docking state outside transient UI state.
 test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts & orbitMotion.ts & projectDocking.ts: no physics engine, no external animation library, no docking-state persistence', () => {
   const forbidden = [
-    'three',
     'Three.js',
+    "from 'three'",
+    'from "three"',
+    "require('three')",
+    'require("three")',
     'd3-force',
     'framer-motion',
     'matter-js',
@@ -424,7 +432,7 @@ test('ASSEMBLE restores canonical lattice by clearing overrides rather than copy
   const restoreIdx = content.indexOf('const restoreCanonicalDockMembership = useCallback(');
   const restoreBlock = content.slice(restoreIdx, content.indexOf('}, [', restoreIdx));
   assert.ok(restoreBlock.includes('setDraggingNode(null);'), 'Restoring canonical membership must cancel any active drag');
-  assert.ok(restoreBlock.includes('cancelDockTransition();'), 'Restoring canonical membership must cancel any in-flight settle animation');
+  assert.ok(restoreBlock.includes('cancelOrbitReflow();'), 'Restoring canonical membership must cancel any in-flight shared reflow');
   assert.ok(restoreBlock.includes('setCustomProjectPositions({});'), 'ASSEMBLE/RESET must clear custom project positions');
   assert.ok(restoreBlock.includes('setCustomSkillPositions({});'), 'ASSEMBLE/RESET must clear custom skill positions');
   assert.ok(restoreBlock.includes('setProjectDockState({});'), 'ASSEMBLE/RESET must clear every project dock-runtime exception');
