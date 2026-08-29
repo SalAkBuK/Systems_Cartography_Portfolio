@@ -93,6 +93,45 @@ export function getOrbitalProjectPositionAtPhase(
   };
 }
 
+/** Minimal ellipse shape needed for orbital position math — deliberately NOT
+ * StaticOrbitGeometry itself, so callers can pass the same fixed PR22 ellipse
+ * (centerIso/radiusX/radiusY never change) without depending on its `.slots`. */
+export interface OrbitEllipseGeometry {
+  centerIso: { x: number; y: number };
+  radiusX: number;
+  radiusY: number;
+}
+
+/**
+ * PR23 product pivot (dynamic interactive orbit): position is derived from a
+ * project's CURRENT index within the CURRENT docked membership count, not
+ * from a fixed per-project canonical slot. `-π/2 + (i/N)*2π` is exactly
+ * PR21/22's own even-spacing formula — at full canonical membership (index
+ * == original slot index, N == total project count) this reproduces
+ * getOrbitalProjectPositionAtPhase's result exactly, so canonical and
+ * interactive membership share one formula rather than two parallel systems.
+ * The ellipse itself (centerIso/radiusX/radiusY) is always the same fixed
+ * PR22 geometry — membership changes redistribute ANGULAR SPACING only, never
+ * the ring's size or shape.
+ */
+export function getDynamicOrbitalPosition(
+  project: ProjectDimensionsSource,
+  indexInDockedOrder: number,
+  dockedCount: number,
+  orbitGeometry: OrbitEllipseGeometry,
+  orbitPhase: number
+): { x: number; y: number } {
+  const angle = -Math.PI / 2 + (indexInDockedOrder / dockedCount) * TWO_PI + orbitPhase;
+  const isoX = orbitGeometry.centerIso.x + orbitGeometry.radiusX * Math.cos(angle);
+  const isoY = orbitGeometry.centerIso.y + orbitGeometry.radiusY * Math.sin(angle);
+  const worldCenter = projectIsoTo3D(isoX, isoY);
+  const dims = getTopologyProjectDimensions(project);
+  return {
+    x: worldCenter.x - dims.width / 2,
+    y: worldCenter.y - dims.depth / 2,
+  };
+}
+
 /**
  * Every condition that must hold the whole ring motionless. Deliberately a
  * single flat OR — one ring, one phase, one pause state; no per-node pausing.
@@ -108,6 +147,8 @@ export interface OrbitPauseState {
   prefersReducedMotion: boolean;
   isCompact: boolean;
   isExperienceSelected: boolean;
+  /** PR23: a magnetic aborted-pull-return or redock settle transition is actively animating. */
+  isDockingTransitionActive: boolean;
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
@@ -121,6 +162,7 @@ export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
     state.isCompact ||
-    state.isExperienceSelected
+    state.isExperienceSelected ||
+    state.isDockingTransitionActive
   );
 }
