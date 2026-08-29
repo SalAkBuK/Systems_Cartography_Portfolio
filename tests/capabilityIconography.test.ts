@@ -2,6 +2,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  siDocker,
+  siExpress,
+  siFastify,
+  siJavascript,
+  siJest,
+  siMongodb,
+  siMysql,
+  siNestjs,
+  siNextdotjs,
+  siNodedotjs,
+  siPhp,
+  siPostgresql,
+  siPrisma,
+  siPython,
+  siReact,
+  siRedis,
+  siSocketdotio,
+  siSqlite,
+  siTailwindcss,
+  siTypescript,
+  siVitest
+} from 'simple-icons';
 import { GITHUB_SNAPSHOT } from '../src/data/githubSnapshot.generated';
 import { getCapabilityCoreTechnology, projectUsesCapability } from '../src/utils/capabilityAssociations';
 import {
@@ -11,11 +34,87 @@ import {
 } from '../src/utils/capabilityIconRegistry';
 
 // ---------------------------------------------------------------------------
-// 1. Coverage: Every Active Capability Node Resolves to Valid Icon Descriptor
+// 1. Direct Provenance: Mapped Icons Strictly Match Simple Icons Package Exports
 // ---------------------------------------------------------------------------
-test('1. Every capability node in the active snapshot resolves to a valid vector icon or deterministic fallback', () => {
+test('1. Verified Simple Icons exports are directly returned for all mapped capability technologies', () => {
+  const verifiedMappings = [
+    { label: 'React', expectedExport: siReact },
+    { label: 'TypeScript', expectedExport: siTypescript },
+    { label: 'Tailwind CSS', expectedExport: siTailwindcss },
+    { label: 'Node.js', expectedExport: siNodedotjs },
+    { label: 'Express', expectedExport: siExpress },
+    { label: 'JavaScript', expectedExport: siJavascript },
+    { label: 'Next.js', expectedExport: siNextdotjs },
+    { label: 'Vitest', expectedExport: siVitest },
+    { label: 'Jest', expectedExport: siJest },
+    { label: 'Socket.IO', expectedExport: siSocketdotio },
+    { label: 'Docker', expectedExport: siDocker },
+    { label: 'PostgreSQL', expectedExport: siPostgresql },
+    { label: 'Python', expectedExport: siPython },
+    { label: 'Fastify', expectedExport: siFastify },
+    { label: 'MongoDB', expectedExport: siMongodb },
+    { label: 'MySQL', expectedExport: siMysql },
+    { label: 'NestJS', expectedExport: siNestjs },
+    { label: 'PHP', expectedExport: siPhp },
+    { label: 'Prisma', expectedExport: siPrisma },
+    { label: 'Redis', expectedExport: siRedis },
+    { label: 'SQLite', expectedExport: siSqlite }
+  ];
+
+  for (const { label, expectedExport } of verifiedMappings) {
+    const icon = resolveCapabilityIcon(label);
+    assert.equal(icon.type, 'vector', `${label} must resolve to a vector icon`);
+    if (icon.type === 'vector') {
+      assert.equal(
+        icon.path,
+        expectedExport.path,
+        `Path for ${label} must exactly match official Simple Icons export ${expectedExport.title}`
+      );
+      assert.equal(
+        icon.title,
+        expectedExport.title,
+        `Title for ${label} must exactly match official Simple Icons title ${expectedExport.title}`
+      );
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 2. Verified Handling of Unavailable Brands (Playwright, BullMQ, React Native)
+// ---------------------------------------------------------------------------
+test('2. Technologies unavailable in Simple Icons resolve to deterministic fallbacks or documented family marks', () => {
+  // Playwright -> Unavailable in simple-icons -> Deterministic PW fallback
+  const pw = resolveCapabilityIcon('Playwright');
+  assert.equal(pw.type, 'fallback');
+  if (pw.type === 'fallback') {
+    assert.equal(pw.text, 'PW');
+    assert.equal(pw.title, 'Playwright');
+  }
+
+  // BullMQ -> Unavailable in simple-icons -> Deterministic BMQ fallback
+  const bullmq = resolveCapabilityIcon('BullMQ');
+  assert.equal(bullmq.type, 'fallback');
+  if (bullmq.type === 'fallback') {
+    assert.equal(bullmq.text, 'BMQ');
+    assert.equal(bullmq.title, 'BullMQ');
+  }
+
+  // React Native -> Distinct key 'reactnative' and title 'React Native', reusing verified siReact.path
+  assert.equal(normalizeCapabilityIconKey('React Native'), 'reactnative');
+  const rn = resolveCapabilityIcon('React Native');
+  assert.equal(rn.type, 'vector');
+  if (rn.type === 'vector') {
+    assert.equal(rn.path, siReact.path, 'React Native reuses verified React atom vector mark');
+    assert.equal(rn.title, 'React Native', 'React Native maintains its distinct identity title');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3. Complete Snapshot Coverage: All 24 Active Capability Nodes Resolve
+// ---------------------------------------------------------------------------
+test('3. Every capability node in the active snapshot resolves to a valid descriptor', () => {
   const skills = GITHUB_SNAPSHOT.skills;
-  assert.ok(skills.length > 0, 'Snapshot must contain capability skills');
+  assert.equal(skills.length, 24, 'Snapshot must contain exactly 24 capability skills');
 
   for (const skill of skills) {
     const coreTech = getCapabilityCoreTechnology(skill);
@@ -35,9 +134,9 @@ test('1. Every capability node in the active snapshot resolves to a valid vector
 });
 
 // ---------------------------------------------------------------------------
-// 2. Normalization: Canonical Alias Resolution
+// 4. Normalization: Canonical Alias Resolution
 // ---------------------------------------------------------------------------
-test('2. normalizeCapabilityIconKey correctly normalizes technology aliases and casing', () => {
+test('4. normalizeCapabilityIconKey correctly normalizes technology aliases and casing', () => {
   // Node.js
   assert.equal(normalizeCapabilityIconKey('Node.js'), 'nodejs');
   assert.equal(normalizeCapabilityIconKey('NodeJS'), 'nodejs');
@@ -80,9 +179,9 @@ test('2. normalizeCapabilityIconKey correctly normalizes technology aliases and 
 });
 
 // ---------------------------------------------------------------------------
-// 3. Fallback System: Deterministic Glyphs for Unmapped Concepts
+// 5. Fallback System: Deterministic Glyphs for Unmapped Concepts
 // ---------------------------------------------------------------------------
-test('3. deriveFallbackGlyph generates expected uppercase glyphs for known engineering concepts', () => {
+test('5. deriveFallbackGlyph generates expected uppercase glyphs for known engineering concepts', () => {
   assert.equal(deriveFallbackGlyph('REST API'), 'API');
   assert.equal(deriveFallbackGlyph('API Architecture'), 'API');
   assert.equal(deriveFallbackGlyph('Authentication'), 'AUTH');
@@ -97,17 +196,11 @@ test('3. deriveFallbackGlyph generates expected uppercase glyphs for known engin
   assert.equal(deriveFallbackGlyph('State Management'), 'STATE');
 });
 
-test('4. Unknown technology produces deterministic initials and never throws or returns blank', () => {
-  const unknown1 = resolveCapabilityIcon('Quantum Computing Architecture');
-  assert.equal(unknown1.type, 'fallback');
-  if (unknown1.type === 'fallback') {
-    assert.equal(unknown1.text, 'ARCH'); // keyword match
-  }
-
-  const unknown2 = resolveCapabilityIcon('Hyper Dimensional Matrix');
-  assert.equal(unknown2.type, 'fallback');
-  if (unknown2.type === 'fallback') {
-    assert.equal(unknown2.text, 'HDM'); // initials
+test('6. Unknown technology produces deterministic initials and never throws or returns blank', () => {
+  const unknown = resolveCapabilityIcon('Hyper Dimensional Matrix');
+  assert.equal(unknown.type, 'fallback');
+  if (unknown.type === 'fallback') {
+    assert.equal(unknown.text, 'HDM');
   }
 
   const empty = resolveCapabilityIcon('');
@@ -123,48 +216,28 @@ test('4. Unknown technology produces deterministic initials and never throws or 
 });
 
 // ---------------------------------------------------------------------------
-// 5. Representative Mapped Technologies
+// 7. Provenance Invariant: Registry Imports Simple Icons & Has No Hardcoded Paths
 // ---------------------------------------------------------------------------
-test('5. Primary technology identities resolve to recognized vector representations', () => {
-  const expectedVectors = [
-    { label: 'React', title: 'React' },
-    { label: 'TypeScript', title: 'TypeScript' },
-    { label: 'Node.js', title: 'Node.js' },
-    { label: 'PostgreSQL', title: 'PostgreSQL' },
-    { label: 'Docker', title: 'Docker' },
-    { label: 'Redis', title: 'Redis' },
-    { label: 'Prisma', title: 'Prisma' },
-    { label: 'Next.js', title: 'Next.js' },
-    { label: 'NestJS', title: 'NestJS' },
-    { label: 'Express', title: 'Express' },
-    { label: 'Fastify', title: 'Fastify' },
-    { label: 'MongoDB', title: 'MongoDB' },
-    { label: 'MySQL', title: 'MySQL' },
-    { label: 'SQLite', title: 'SQLite' },
-    { label: 'PHP', title: 'PHP' },
-    { label: 'Python', title: 'Python' },
-    { label: 'Tailwind CSS', title: 'Tailwind CSS' },
-    { label: 'Vitest', title: 'Vitest' },
-    { label: 'Jest', title: 'Jest' },
-    { label: 'Socket.IO', title: 'Socket.IO' },
-    { label: 'Go', title: 'Go' },
-    { label: 'Rust', title: 'Rust' }
-  ];
+test('7. capabilityIconRegistry.ts imports directly from simple-icons without hardcoded SVG paths', () => {
+  const registrySource = readFileSync(resolve(process.cwd(), 'src/utils/capabilityIconRegistry.ts'), 'utf8');
 
-  for (const exp of expectedVectors) {
-    const icon = resolveCapabilityIcon(exp.label);
-    assert.equal(icon.type, 'vector', `${exp.label} must resolve to a vector icon`);
-    if (icon.type === 'vector') {
-      assert.equal(icon.title, exp.title);
-      assert.ok(icon.path && icon.path.length > 20, `${exp.label} must have valid path string`);
-    }
-  }
+  // Verify import from 'simple-icons'
+  assert.ok(registrySource.includes("from 'simple-icons'"), 'Registry must import directly from simple-icons');
+
+  // Verify no hardcoded SVG path strings (e.g. M12..., M14...) in VECTOR_ICON_MAP
+  assert.ok(!registrySource.includes("path: 'M"), 'Registry must not contain hardcoded raw SVG path strings');
+  assert.ok(!registrySource.includes('path: "M'), 'Registry must not contain hardcoded raw SVG path strings');
+
+  // Verify no speculative future icons
+  assert.ok(!registrySource.includes('siGo'), 'Registry must not contain unused speculative siGo icon');
+  assert.ok(!registrySource.includes('siRust'), 'Registry must not contain unused speculative siRust icon');
+  assert.ok(!registrySource.includes('siLinux'), 'Registry must not contain unused speculative siLinux icon');
 });
 
 // ---------------------------------------------------------------------------
-// 6. Presentation Safety: Association Logic & Data Remains Pure
+// 8. Presentation Safety: Association Logic & Data Remains Pure
 // ---------------------------------------------------------------------------
-test('6. projectUsesCapability and underlying association logic remain unmodified', () => {
+test('8. projectUsesCapability and underlying association logic remain unmodified', () => {
   const sampleProject = GITHUB_SNAPSHOT.projects[0];
   assert.ok(sampleProject, 'Sample project must exist');
 
@@ -177,9 +250,9 @@ test('6. projectUsesCapability and underlying association logic remain unmodifie
 });
 
 // ---------------------------------------------------------------------------
-// 7. Source Invariant: TopologyCanvas Renders CapabilityIcon Component
+// 9. Source Invariant: TopologyCanvas Renders CapabilityIcon Component
 // ---------------------------------------------------------------------------
-test('7. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', () => {
+test('9. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', () => {
   const canvasSource = readFileSync(resolve(process.cwd(), 'src/components/TopologyCanvas.tsx'), 'utf8');
 
   // Verify CapabilityIcon import
@@ -198,9 +271,9 @@ test('7. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', ()
 });
 
 // ---------------------------------------------------------------------------
-// 8. Accessibility & Zero Network Runtime
+// 10. Accessibility & Zero Network Runtime
 // ---------------------------------------------------------------------------
-test('8. CapabilityIcon and icon registry introduce zero runtime network fetch or remote URLs', () => {
+test('10. CapabilityIcon and icon registry introduce zero runtime network fetch or remote URLs', () => {
   const registrySource = readFileSync(resolve(process.cwd(), 'src/utils/capabilityIconRegistry.ts'), 'utf8');
   const iconSource = readFileSync(resolve(process.cwd(), 'src/components/CapabilityIcon.tsx'), 'utf8');
 
