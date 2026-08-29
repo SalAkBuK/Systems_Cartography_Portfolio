@@ -16,6 +16,7 @@ import { getCapabilityCoreTechnology } from '../src/utils/capabilityAssociations
 import { matchesProjectClassification } from '../src/utils/portfolioUtils.ts';
 import { VERIFIED_PROJECTS, VERIFIED_SKILLS } from '../src/data/verifiedPortfolioData.ts';
 import { GRID_SNAP_STEP } from '../src/utils/collision.ts';
+import { getTopologyProjectDimensions } from '../src/utils/projectTopologyGeometry.ts';
 import { ProjectData, InfrastructureSkill } from '../src/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -550,7 +551,7 @@ test('19. assembleTopologyLayout: Verified portfolio layout has zero overlaps an
   const projectBoxes = VERIFIED_PROJECTS.map(p => ({
     id: p.id,
     type: 'project' as const,
-    ...getNodeBounds('project', projectPositions[p.id], (p.dimensions?.width || 100) * 0.75, 55)
+    ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
   }));
 
   // Assert zero skill-to-skill overlap
@@ -644,7 +645,7 @@ for (const sCount of skillCounts) {
       const projectBoxes = mockProjects.map(p => ({
         id: p.id,
         type: 'project' as const,
-        ...getNodeBounds('project', projectPositions[p.id], (p.dimensions?.width || 100) * 0.75, 55)
+        ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
       }));
 
       // 4. Assert zero capability overlap
@@ -708,7 +709,7 @@ test('20. assembleTopologyLayout: Pathological dataset with large variable proje
   const projectBoxes = pathologicalProjects.map(p => ({
     id: p.id,
     type: 'project' as const,
-    ...getNodeBounds('project', projectPositions[p.id], p.dimensions.width * 0.75, 55)
+    ...getNodeBounds('project', projectPositions[p.id], getTopologyProjectDimensions(p).width, getTopologyProjectDimensions(p).depth)
   }));
 
   // Assert all coordinates finite and snapped

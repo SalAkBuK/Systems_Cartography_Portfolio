@@ -1,5 +1,7 @@
 import { ProjectData, InfrastructureSkill, TopologyViewMode } from '../types';
 import { GRID_SNAP_STEP } from './collision';
+import { project3DToIso, projectIsoTo3D } from './isometricProjection';
+import { getTopologyProjectDimensions } from './projectTopologyGeometry';
 
 export type { TopologyViewMode };
 
@@ -311,9 +313,38 @@ export function wrapCalloutTitle(
   return lines.length > 0 ? lines : [trimmed];
 }
 
+/**
+ * One slot on the static project orbit ellipse. `isoX`/`isoY` are the slot's
+ * position in isometric/visual space (what the ellipse looks like on screen);
+ * `worldX`/`worldY` are the corresponding project TOP-LEFT origin in world
+ * coordinate space (what gets stored/rendered/collision-checked).
+ */
+export interface StaticOrbitSlot {
+  projectId: string;
+  slotIndex: number;
+  angle: number;
+  isoX: number;
+  isoY: number;
+  worldX: number;
+  worldY: number;
+}
+
+/**
+ * Static geometric description of the single project orbit ellipse surrounding
+ * the capability nucleus. Pure geometry — no runtime/animation state.
+ */
+export interface StaticOrbitGeometry {
+  centerIso: { x: number; y: number };
+  radiusX: number;
+  radiusY: number;
+  slots: StaticOrbitSlot[];
+  visualBounds: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
 export interface AssembledTopologyPositions {
   projectPositions: Record<string, { x: number; y: number }>;
   skillPositions: Record<string, { x: number; y: number }>;
+  orbitGeometry: StaticOrbitGeometry;
 }
 
 export interface PlacedNodeBounds {
@@ -371,12 +402,204 @@ export function checkAABBOverlap(
   );
 }
 
+const ellipsePerimeter = (rx: number, ry: number): number =>
+  2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2);
+
+/** Iso-space half-extent [x, y] of a project's footprint if it were placed at world origin. */
+function isoFootprintHalfExtent(width: number, depth: number): { x: number; y: number } {
+  const corners = [
+    project3DToIso(0, 0, 0),
+    project3DToIso(width, 0, 0),
+    project3DToIso(width, depth, 0),
+    project3DToIso(0, depth, 0),
+  ];
+  const xs = corners.map(c => c.x);
+  const ys = corners.map(c => c.y);
+  return {
+    x: (Math.max(...xs) - Math.min(...xs)) / 2,
+    y: (Math.max(...ys) - Math.min(...ys)) / 2,
+  };
+}
+
+const ORBIT_CORE_CLEARANCE_ISO = 150; // breathing room (iso units) between capability core and orbit ellipse
+const ORBIT_SLOT_MARGIN = 40; // additional iso-space margin reserved per project along the ellipse perimeter
+const ORBIT_RADIUS_GROWTH_STEP = 24;
+const ORBIT_MAX_GROWTH_ITERATIONS = 400;
+const ORBIT_VISUAL_BOUNDS_PADDING = 150; // accounts for callout labels extending past a project's footprint
+
+/**
+ * Builds the single static elliptical project orbit surrounding the capability
+ * nucleus. The ellipse is defined in isometric/visual space (so it reads as a
+ * true ellipse on screen) and centered on the capability core's actual visual
+ * bounds. Each project occupies exactly one evenly-spaced slot on that one
+ * ellipse — growing N never adds another ring, only a larger ellipse.
+ */
+function buildStaticProjectOrbit(
+  sortedProjects: ProjectData[],
+  capabilityBoxes: PlacedNodeBounds[],
+  snap: (val: number, step?: number) => number
+): { projectPositions: Record<string, { x: number; y: number }>; orbitGeometry: StaticOrbitGeometry } {
+  // 1. Project the capability core into isometric/visual space to find the true visual nucleus.
+  let coreMinIsoX = 0, coreMaxIsoX = 0, coreMinIsoY = 0, coreMaxIsoY = 0;
+  if (capabilityBoxes.length > 0) {
+    const corners: { x: number; y: number }[] = [];
+    capabilityBoxes.forEach(box => {
+      corners.push(project3DToIso(box.minX, box.minY, 0));
+      corners.push(project3DToIso(box.maxX, box.minY, 0));
+      corners.push(project3DToIso(box.maxX, box.maxY, 0));
+      corners.push(project3DToIso(box.minX, box.maxY, 0));
+    });
+    coreMinIsoX = Math.min(...corners.map(c => c.x));
+    coreMaxIsoX = Math.max(...corners.map(c => c.x));
+    coreMinIsoY = Math.min(...corners.map(c => c.y));
+    coreMaxIsoY = Math.max(...corners.map(c => c.y));
+  }
+
+  const centerIso = {
+    x: (coreMinIsoX + coreMaxIsoX) / 2,
+    y: (coreMinIsoY + coreMaxIsoY) / 2,
+  };
+  const coreHalfWidthIso = (coreMaxIsoX - coreMinIsoX) / 2;
+  const coreHalfHeightIso = (coreMaxIsoY - coreMinIsoY) / 2;
+
+  const projectPositions: Record<string, { x: number; y: number }> = {};
+  const totalProjects = sortedProjects.length;
+
+  if (totalProjects === 0) {
+    const radiusX = coreHalfWidthIso + ORBIT_CORE_CLEARANCE_ISO;
+    const radiusY = coreHalfHeightIso + ORBIT_CORE_CLEARANCE_ISO;
+    return {
+      projectPositions,
+      orbitGeometry: {
+        centerIso,
+        radiusX,
+        radiusY,
+        slots: [],
+        visualBounds: {
+          minX: centerIso.x - radiusX - ORBIT_VISUAL_BOUNDS_PADDING,
+          maxX: centerIso.x + radiusX + ORBIT_VISUAL_BOUNDS_PADDING,
+          minY: centerIso.y - radiusY - ORBIT_VISUAL_BOUNDS_PADDING,
+          maxY: centerIso.y + radiusY + ORBIT_VISUAL_BOUNDS_PADDING,
+        },
+      },
+    };
+  }
+
+  // 2. Base radius: clear the capability core plus the largest project's iso footprint.
+  const projectDims = sortedProjects.map(p => getTopologyProjectDimensions(p));
+  const footprintHalfExtents = projectDims.map(d => isoFootprintHalfExtent(d.width, d.depth));
+  const maxFootprintIsoHalfX = Math.max(...footprintHalfExtents.map(e => e.x));
+  const maxFootprintIsoHalfY = Math.max(...footprintHalfExtents.map(e => e.y));
+
+  let radiusX = coreHalfWidthIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfX;
+  let radiusY = coreHalfHeightIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfY;
+
+  // 3. Grow the single ellipse until its perimeter can comfortably host every project slot.
+  const totalSlotRequirement = projectDims.reduce(
+    (sum, d) => sum + Math.max(d.width, d.depth) + ORBIT_SLOT_MARGIN,
+    0
+  );
+  let growthIterations = 0;
+  while (ellipsePerimeter(radiusX, radiusY) < totalSlotRequirement && growthIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
+    radiusX += ORBIT_RADIUS_GROWTH_STEP;
+    radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
+    growthIterations++;
+  }
+
+  // 4. Evenly distribute one slot per project, starting at the top, going clockwise.
+  const computeSlots = (rx: number, ry: number) => {
+    const slots: StaticOrbitSlot[] = [];
+    const positions: Record<string, { x: number; y: number }> = {};
+    const boxes: PlacedNodeBounds[] = [];
+
+    for (let i = 0; i < totalProjects; i++) {
+      const project = sortedProjects[i];
+      const dims = getTopologyProjectDimensions(project);
+      const angle = (i / totalProjects) * 2 * Math.PI - Math.PI / 2;
+      const isoX = centerIso.x + rx * Math.cos(angle);
+      const isoY = centerIso.y + ry * Math.sin(angle);
+      const worldCenter = projectIsoTo3D(isoX, isoY);
+      const originX = snap(worldCenter.x - dims.width / 2);
+      const originY = snap(worldCenter.y - dims.depth / 2);
+
+      positions[project.id] = { x: originX, y: originY };
+      slots.push({
+        projectId: project.id,
+        slotIndex: i,
+        angle,
+        isoX,
+        isoY,
+        worldX: originX,
+        worldY: originY,
+      });
+      boxes.push({
+        id: project.id,
+        type: 'project',
+        ...getNodeBounds('project', { x: originX, y: originY }, dims.width, dims.depth),
+      });
+    }
+
+    return { slots, positions, boxes };
+  };
+
+  let { slots, positions, boxes } = computeSlots(radiusX, radiusY);
+
+  const hasOverlap = (): boolean => {
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        if (checkAABBOverlap(boxes[i], boxes[j], 15)) return true;
+      }
+    }
+    for (const projectBox of boxes) {
+      for (const capabilityBox of capabilityBoxes) {
+        if (checkAABBOverlap(projectBox, capabilityBox, 15)) return true;
+      }
+    }
+    return false;
+  };
+
+  // 5. Validate zero-overlap against the actual computed footprints; if the heuristic
+  // radius wasn't quite enough, grow the whole ellipse uniformly and re-place every
+  // slot (never nudge a single slot independently — the perimeter must stay one
+  // coherent ellipse).
+  let validationIterations = 0;
+  while (hasOverlap() && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
+    radiusX += ORBIT_RADIUS_GROWTH_STEP;
+    radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
+    ({ slots, positions, boxes } = computeSlots(radiusX, radiusY));
+    validationIterations++;
+  }
+
+  if (hasOverlap()) {
+    throw new Error('Deterministic layout failed: unable to place static project orbit without collision.');
+  }
+
+  Object.assign(projectPositions, positions);
+
+  return {
+    projectPositions,
+    orbitGeometry: {
+      centerIso,
+      radiusX,
+      radiusY,
+      slots,
+      visualBounds: {
+        minX: centerIso.x - radiusX - ORBIT_VISUAL_BOUNDS_PADDING,
+        maxX: centerIso.x + radiusX + ORBIT_VISUAL_BOUNDS_PADDING,
+        minY: centerIso.y - radiusY - ORBIT_VISUAL_BOUNDS_PADDING,
+        maxY: centerIso.y + radiusY + ORBIT_VISUAL_BOUNDS_PADDING,
+      },
+    },
+  };
+}
+
 /**
  * Computes an instant, deterministic, and collision-safe schematic layout.
  *
  * Hierarchy:
  * - Capabilities: Inner core backbone rings (expanding as capacity requires)
- * - Projects: Outer concentric system rings (strictly outside the entire capability core)
+ * - Projects: ONE static outer elliptical orbit, strictly outside the entire
+ *   capability core, growing radius (never adding a second ring) as N increases.
  *
  * Coordinate Semantics:
  * - Project coordinates: TOP-LEFT origin of the structure box.
@@ -385,7 +608,8 @@ export function checkAABBOverlap(
  * Guarantees:
  * - Deterministic output: identical inputs produce identical coordinates.
  * - Stable sorting: input array ordering changes do NOT change coordinates.
- * - Dynamic scaling: calculates capacity per ring and dynamically adds rings as needed.
+ * - Dynamic scaling: the orbit ellipse grows to fit capacity; capability rings
+ *   still expand as needed.
  * - Guaranteed collision-safe: verifies bounding-box clearance before writing positions.
  * - Grid-snapped: all node x/y coordinates are multiples of GRID_SNAP_STEP.
  * - 0 animation frames / 0 physics relaxation needed.
@@ -420,8 +644,6 @@ export function assembleTopologyLayout(
 
   // 3. Layout Capabilities (Inner Core Backbone Rings)
   const totalSkills = sortedSkills.length;
-  let maxCapabilityExtentX = 0;
-  let maxCapabilityExtentY = 0;
 
   if (totalSkills === 1) {
     // Single capability at center (0, 0)
@@ -430,8 +652,6 @@ export function assembleTopologyLayout(
     const bounds = getNodeBounds('skill', pos, 48, 48);
     skillPositions[skill.id] = pos;
     placedBoxes.push({ id: skill.id, type: 'skill', ...bounds });
-    maxCapabilityExtentX = 24;
-    maxCapabilityExtentY = 24;
   } else if (totalSkills > 1) {
     let unplacedSkills = [...sortedSkills];
     let ringIndex = 0;
@@ -487,11 +707,6 @@ export function assembleTopologyLayout(
 
         skillPositions[skill.id] = { x: candX, y: candY };
         placedBoxes.push({ id: skill.id, type: 'skill', ...candBounds });
-
-        const extentX = Math.abs(candX) + 24;
-        const extentY = Math.abs(candY) + 24;
-        if (extentX > maxCapabilityExtentX) maxCapabilityExtentX = extentX;
-        if (extentY > maxCapabilityExtentY) maxCapabilityExtentY = extentY;
       }
 
       // Expand to next capability ring
@@ -501,75 +716,14 @@ export function assembleTopologyLayout(
     }
   }
 
-  // 4. Layout Projects (Outer Concentric Rings strictly outside capability region)
-  const totalProjects = sortedProjects.length;
-  if (totalProjects > 0) {
-    let unplacedProjects = [...sortedProjects];
-    let projectRingIndex = 0;
+  // 4. Layout Projects: ONE static elliptical orbit surrounding the capability nucleus.
+  // `placedBoxes` at this point contains only capability (skill) boxes.
+  const { projectPositions: orbitProjectPositions, orbitGeometry } = buildStaticProjectOrbit(
+    sortedProjects,
+    placedBoxes,
+    snap
+  );
+  Object.assign(projectPositions, orbitProjectPositions);
 
-    // Start project rings outside the entire capability core plus clearance buffer
-    let projRx = Math.max(260, maxCapabilityExtentX + 160);
-    let projRy = Math.max(185, maxCapabilityExtentY + 120);
-
-    while (unplacedProjects.length > 0) {
-      const perimeter = 2 * Math.PI * Math.sqrt((projRx * projRx + projRy * projRy) / 2);
-      // Project footprint width is (dim.width * 0.75) ~75px, depth 55px; safe perimeter spacing ~135px
-      const capacity = Math.max(4, Math.floor(perimeter / 135));
-      const batchCount = Math.min(unplacedProjects.length, capacity);
-      const batch = unplacedProjects.slice(0, batchCount);
-      unplacedProjects = unplacedProjects.slice(batchCount);
-
-      const angleStagger = (projectRingIndex * Math.PI) / 6;
-
-      for (let i = 0; i < batch.length; i++) {
-        const proj = batch[i];
-        const pWidth = (proj.dimensions?.width || 100) * 0.75;
-        const pHeight = 55;
-
-        const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
-        const rawX = Math.cos(angle) * projRx;
-        const rawY = Math.sin(angle) * projRy;
-
-        let candX = snap(rawX);
-        let candY = snap(rawY);
-        let candBounds = getNodeBounds('project', { x: candX, y: candY }, pWidth, pHeight);
-
-        // Deterministic collision search with radial stepping & candidate ring expansion
-        let isCollisionFree = false;
-        let step = 0;
-        let currentCandRx = projRx;
-        let currentCandRy = projRy;
-
-        while (!isCollisionFree && step < 120) {
-          if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 15))) {
-            isCollisionFree = true;
-            break;
-          }
-          step++;
-          if (step % 10 === 0) {
-            currentCandRx += GRID_SNAP_STEP * 2;
-            currentCandRy += GRID_SNAP_STEP * 2;
-          }
-          const rayOffset = (step % 10) * GRID_SNAP_STEP;
-          candX = snap(Math.cos(angle) * (currentCandRx + rayOffset));
-          candY = snap(Math.sin(angle) * (currentCandRy + rayOffset));
-          candBounds = getNodeBounds('project', { x: candX, y: candY }, pWidth, pHeight);
-        }
-
-        if (!isCollisionFree) {
-          throw new Error(`Deterministic layout failed: unable to place project ${proj.id} without collision.`);
-        }
-
-        projectPositions[proj.id] = { x: candX, y: candY };
-        placedBoxes.push({ id: proj.id, type: 'project', ...candBounds });
-      }
-
-      // Expand to next concentric project ring
-      projRx += 140;
-      projRy += 105;
-      projectRingIndex++;
-    }
-  }
-
-  return { projectPositions, skillPositions };
+  return { projectPositions, skillPositions, orbitGeometry };
 }

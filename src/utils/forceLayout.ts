@@ -1,4 +1,4 @@
-import { project3DToIso } from '../components/TopologyCanvas';
+import { project3DToIso } from './isometricProjection';
 
 export interface ConduitEndpointNode {
   x: number;

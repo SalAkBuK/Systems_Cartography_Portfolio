@@ -60,6 +60,18 @@ import {
   getTopologyNodeEmphasis,
   getNodeEmphasisClassName
 } from '../utils/topologyLayout';
+import {
+  ISO_COS,
+  ISO_SIN,
+  project3DToIso,
+  projectIsoTo3D
+} from '../utils/isometricProjection';
+import { getTopologyProjectDimensions } from '../utils/projectTopologyGeometry';
+
+// Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
+// tests) import the isometric projection helpers from this component file. The
+// canonical implementation lives in ../utils/isometricProjection.
+export { ISO_COS, ISO_SIN, project3DToIso, projectIsoTo3D };
 
 interface TopologyCanvasProps {
   selectedProjectId: string | null;
@@ -76,27 +88,6 @@ interface TopologyCanvasProps {
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
 }
-
-// Math helpers for Isometric Axonometric Projection
-// 30 degree axonometric angle: cos(30°) ≈ 0.8660254, sin(30°) = 0.5
-const ISO_COS = 0.86602540378;
-const ISO_SIN = 0.5;
-
-export const project3DToIso = (x: number, y: number, z: number = 0): { x: number; y: number } => {
-  return {
-    x: (x - y) * ISO_COS,
-    y: (x + y) * ISO_SIN - z,
-  };
-};
-
-export const projectIsoTo3D = (isoX: number, isoY: number): { x: number; y: number } => {
-  const term1 = isoX / ISO_COS;
-  const term2 = isoY / ISO_SIN;
-  return {
-    x: 0.5 * (term1 + term2),
-    y: 0.5 * (term2 - term1),
-  };
-};
 
 export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedProjectId,
@@ -235,14 +226,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setTimeout(() => setSnapNotice(null), 2400);
   }, []);
 
-  // Instant Deterministic Schematic Layout Assembler
+  // Restores the canonical static orbital lattice by clearing manual overrides.
+  // The lattice is now the default fallback itself (see staticOrbitalLattice above),
+  // so ASSEMBLE no longer needs to copy coordinates into custom state.
   const handleAssemble = useCallback(() => {
-    const { projectPositions, skillPositions } = assembleTopologyLayout(projects, activeSkills);
-    setCustomProjectPositions(projectPositions);
-    setCustomSkillPositions(skillPositions);
-    setSnapNotice({ message: 'TOPOLOGY ASSEMBLED // SCHEMATIC LAYOUT APPLIED', type: 'snap' });
+    setCustomProjectPositions({});
+    setCustomSkillPositions({});
+    setSnapNotice({ message: 'TOPOLOGY RESTORED // CANONICAL ORBITAL LATTICE', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, [projects, activeSkills]);
+  }, []);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
@@ -297,19 +289,24 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Auto-fit function to center and fit all topology nodes (compact <lg and desktop aware)
+  // Auto-fit function to center and fit the actual static orbital lattice bounds
+  // (compact <lg and desktop aware). Frames the real ellipse + capability core
+  // instead of an approximate fixed box, so no outer project/callout clips.
   const fitAll = useCallback(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
     const isCompact = w < 1024;
-    const targetW = isCompact ? 560 : 640;
-    const targetH = isCompact ? 400 : 460;
+    const bounds = staticOrbitalLattice.orbitGeometry.visualBounds;
+    const boundsW = Math.max(bounds.maxX - bounds.minX, 1);
+    const boundsH = Math.max(bounds.maxY - bounds.minY, 1);
+    const midX = (bounds.minX + bounds.maxX) / 2;
+    const midY = (bounds.minY + bounds.maxY) / 2;
     const minZoom = isCompact ? 0.35 : 0.50;
-    const fitRatio = Math.min(w / targetW, h / targetH) * (isCompact ? 0.92 : 0.95);
+    const fitRatio = Math.min(w / boundsW, h / boundsH) * (isCompact ? 0.92 : 0.95);
     const fitZoom = Math.min(Math.max(fitRatio, minZoom), 1.2);
-    setViewport({ x: 0, y: isCompact ? 0 : 10, zoom: Number(fitZoom.toFixed(2)) });
-  }, [setViewport]);
+    setViewport({ x: -midX * fitZoom, y: -midY * fitZoom, zoom: Number(fitZoom.toFixed(2)) });
+  }, [setViewport, staticOrbitalLattice]);
 
   // Initial mount auto-fit
   const initializedRef = useRef(false);
@@ -622,8 +619,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const isDraggingThisProj = draggingNode?.type === 'project' && draggingNode.id === project.id;
       const projectPos = getProjectPos(project);
       
-      const pWidth = (project.dimensions?.width || 100) * 0.75;
-      const pDepth = 55;
+      const { width: pWidth, depth: pDepth } = getTopologyProjectDimensions(project);
 
       activeSkills.forEach(skill => {
         // Check if project and skill are connected using centralized predicate
@@ -920,7 +916,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             handleAssemble();
           }}
           className="hidden lg:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
-          title="Apply Deterministic Multi-Ring Schematic Layout"
+          title="Restore Canonical Static Orbital Lattice"
         >
           <Layers size={12} />
           <span>ASSEMBLE</span>
@@ -1067,6 +1063,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               </g>
             );
           })}
+        </g>
+
+        {/* Static Orbit Track: subtle drafting-style guide for the single project ellipse */}
+        <g id="static-orbit-track" className="pointer-events-none" opacity={0.2}>
+          <ellipse
+            cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
+            cy={staticOrbitalLattice.orbitGeometry.centerIso.y}
+            rx={staticOrbitalLattice.orbitGeometry.radiusX}
+            ry={staticOrbitalLattice.orbitGeometry.radiusY}
+            fill="none"
+            stroke="#15150F"
+            strokeWidth="0.8"
+            strokeDasharray="6 6"
+          />
         </g>
 
         {/* Cable / Routing Connections Layer */}
@@ -1224,8 +1234,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               // Project structure footprint
               if (draggingNode.type === 'project') {
                 const proj = projects.find(p => p.id === draggingNode.id);
-                const w = (proj?.dimensions.width || 100) * 0.75;
-                const d = 55;
+                const { width: w, depth: d } = getTopologyProjectDimensions(proj);
 
                 const p0 = project3DToIso(dragResolution.x, dragResolution.y, 0);
                 const p1 = project3DToIso(dragResolution.x + w, dragResolution.y, 0);
@@ -1380,9 +1389,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const projectPos = getProjectPos(project);
             const originX = projectPos.x;
             const originY = projectPos.y;
-            const width = project.dimensions.width * 0.75;
-            const depth = 55;
-            const height = project.dimensions.height * 0.75;
+            const { width, depth, height } = getTopologyProjectDimensions(project);
             const levels = project.dimensions.levels;
 
             // Compute 3D corners for the base slab
