@@ -27,7 +27,6 @@ const idlePauseState: OrbitPauseState = {
   isCompact: false,
   isExperienceSelected: false,
   isDockingTransitionActive: false,
-  isProjectBreakawayActive: false,
 };
 
 test('orbit rate architecture exposes PAUSE through 64×', () => {

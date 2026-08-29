@@ -304,7 +304,6 @@ const idleState: OrbitPauseState = {
   isCompact: false,
   isExperienceSelected: false,
   isDockingTransitionActive: false,
-  isProjectBreakawayActive: false,
 };
 
 test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
@@ -316,7 +315,6 @@ const pauseTriggeringFields: Array<keyof OrbitPauseState> = [
   'prefersReducedMotion',
   'isCompact',
   'isDockingTransitionActive',
-  'isProjectBreakawayActive',
 ];
 
 for (const field of pauseTriggeringFields) {
