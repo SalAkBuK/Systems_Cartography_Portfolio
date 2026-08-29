@@ -1754,8 +1754,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
-        {/* Static Orbit Track: subtle drafting-style guide for the single project ellipse */}
-        <g id="static-orbit-track" className="pointer-events-none" opacity={0.2}>
+        {/* Orbital Field Guides: subtle drafting-style guide ellipse and registration ticks */}
+        <g id="orbital-field-guides" pointerEvents="none" className="pointer-events-none" opacity={0.25}>
           <ellipse
             cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
             cy={staticOrbitalLattice.orbitGeometry.centerIso.y}
@@ -1766,6 +1766,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             strokeWidth="0.8"
             strokeDasharray="6 6"
           />
+          {Array.from({ length: 24 }, (_, i) => {
+            const angle = (i / 24) * 2 * Math.PI;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const cx = staticOrbitalLattice.orbitGeometry.centerIso.x;
+            const cy = staticOrbitalLattice.orbitGeometry.centerIso.y;
+            const rx = staticOrbitalLattice.orbitGeometry.radiusX;
+            const ry = staticOrbitalLattice.orbitGeometry.radiusY;
+            const px = cx + rx * cos;
+            const py = cy + ry * sin;
+            const normalX = ry * cos;
+            const normalY = rx * sin;
+            const len = Math.hypot(normalX, normalY) || 1;
+            const nx = normalX / len;
+            const ny = normalY / len;
+            return (
+              <line
+                key={`orbit-tick-${i}`}
+                x1={px - 3 * nx}
+                y1={py - 3 * ny}
+                x2={px + 3 * nx}
+                y2={py + 3 * ny}
+                stroke="#15150F"
+                strokeWidth="0.8"
+              />
+            );
+          })}
         </g>
 
         {/* Cable / Routing Connections Layer */}
