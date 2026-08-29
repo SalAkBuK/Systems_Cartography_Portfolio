@@ -12,7 +12,7 @@ export interface CapabilityIconProps {
 
 /**
  * Centrally manages technology vector mark rendering inside isometric capability nodes.
- * Inherits topology emphasis/selected colors and renders deterministic fallbacks for unmapped concepts.
+ * Inherits topology emphasis/selected colors and applies optical scale hints while maintaining exact node center (x, y).
  */
 export const CapabilityIcon: React.FC<CapabilityIconProps> = ({
   label,
@@ -25,8 +25,9 @@ export const CapabilityIcon: React.FC<CapabilityIconProps> = ({
   const icon = resolveCapabilityIcon(label);
 
   if (icon.type === 'vector') {
-    // Vector icon centered at (x, y)
-    const halfSize = size / 2;
+    // Optical scale applies only to vector geometry, maintaining center alignment at (x, y)
+    const effectiveSize = size * (icon.scale ?? 1);
+    const halfSize = effectiveSize / 2;
     return (
       <g
         transform={`translate(${x - halfSize}, ${y - halfSize})`}
@@ -34,8 +35,8 @@ export const CapabilityIcon: React.FC<CapabilityIconProps> = ({
         aria-hidden="true"
       >
         <svg
-          width={size}
-          height={size}
+          width={effectiveSize}
+          height={effectiveSize}
           viewBox={icon.viewBox || '0 0 24 24'}
           fill={color}
           className="pointer-events-none"
@@ -46,7 +47,7 @@ export const CapabilityIcon: React.FC<CapabilityIconProps> = ({
     );
   }
 
-  // Deterministic short alphanumeric glyph centered at (x, y)
+  // Deterministic short alphanumeric glyph centered at (x, y) without arbitrary brand scaling
   return (
     <text
       x={x}

@@ -80,23 +80,92 @@ test('1. Verified Simple Icons exports are directly returned for all mapped capa
 });
 
 // ---------------------------------------------------------------------------
-// 2. Verified Handling of Unavailable Brands (Playwright, BullMQ, React Native)
+// 2. Optical Scaling Metadata: Compensate for Intrinsic Whitespace/Aspect Ratios
 // ---------------------------------------------------------------------------
-test('2. Technologies unavailable in Simple Icons resolve to deterministic fallbacks or documented family marks', () => {
-  // Playwright -> Unavailable in simple-icons -> Deterministic PW fallback
+test('2. Optical scaling metadata is exposed for tuned icons while unscaled icons default cleanly', () => {
+  // Tuned technologies have scale > 1
+  const mysql = resolveCapabilityIcon('MySQL');
+  assert.equal(mysql.type, 'vector');
+  if (mysql.type === 'vector') {
+    assert.ok(typeof mysql.scale === 'number' && mysql.scale > 1.2 && mysql.scale <= 1.3, 'MySQL scale in range 1.20-1.30');
+    assert.equal(mysql.path, siMysql.path, 'Path remains official Simple Icons export');
+  }
+
+  const php = resolveCapabilityIcon('PHP');
+  assert.equal(php.type, 'vector');
+  if (php.type === 'vector') {
+    assert.ok(typeof php.scale === 'number' && php.scale >= 1.15 && php.scale <= 1.25, 'PHP scale in range 1.15-1.25');
+    assert.equal(php.path, siPhp.path, 'Path remains official Simple Icons export');
+  }
+
+  const express = resolveCapabilityIcon('Express');
+  assert.equal(express.type, 'vector');
+  if (express.type === 'vector') {
+    assert.ok(typeof express.scale === 'number' && express.scale >= 1.10 && express.scale <= 1.20, 'Express scale in range 1.10-1.20');
+    assert.equal(express.path, siExpress.path, 'Path remains official Simple Icons export');
+  }
+
+  const fastify = resolveCapabilityIcon('Fastify');
+  assert.equal(fastify.type, 'vector');
+  if (fastify.type === 'vector') {
+    assert.ok(typeof fastify.scale === 'number' && fastify.scale >= 1.05 && fastify.scale <= 1.15, 'Fastify scale in range 1.05-1.15');
+    assert.equal(fastify.path, siFastify.path, 'Path remains official Simple Icons export');
+  }
+
+  const sqlite = resolveCapabilityIcon('SQLite');
+  assert.equal(sqlite.type, 'vector');
+  if (sqlite.type === 'vector') {
+    assert.ok(typeof sqlite.scale === 'number' && sqlite.scale >= 1.08 && sqlite.scale <= 1.18, 'SQLite scale in range 1.08-1.18');
+    assert.equal(sqlite.path, siSqlite.path, 'Path remains official Simple Icons export');
+  }
+
+  const jest = resolveCapabilityIcon('Jest');
+  assert.equal(jest.type, 'vector');
+  if (jest.type === 'vector') {
+    assert.ok(typeof jest.scale === 'number' && jest.scale >= 1.0 && jest.scale <= 1.08, 'Jest scale in range 1.00-1.08');
+    assert.equal(jest.path, siJest.path, 'Path remains official Simple Icons export');
+  }
+
+  // Unscaled icons default to scale undefined
+  const react = resolveCapabilityIcon('React');
+  assert.equal(react.type, 'vector');
+  if (react.type === 'vector') {
+    assert.equal(react.scale, undefined, 'React leaves scale undefined to use default 1.0');
+  }
+
+  const postgres = resolveCapabilityIcon('PostgreSQL');
+  assert.equal(postgres.type, 'vector');
+  if (postgres.type === 'vector') {
+    assert.equal(postgres.scale, undefined, 'PostgreSQL leaves scale undefined to use default 1.0');
+  }
+
+  const docker = resolveCapabilityIcon('Docker');
+  assert.equal(docker.type, 'vector');
+  if (docker.type === 'vector') {
+    assert.equal(docker.scale, undefined, 'Docker leaves scale undefined to use default 1.0');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3. Verified Handling of Unavailable Brands (Playwright, BullMQ, React Native)
+// ---------------------------------------------------------------------------
+test('3. Technologies unavailable in Simple Icons resolve to deterministic fallbacks or documented family marks', () => {
+  // Playwright -> Unavailable in simple-icons -> Deterministic PW fallback (no scale property)
   const pw = resolveCapabilityIcon('Playwright');
   assert.equal(pw.type, 'fallback');
   if (pw.type === 'fallback') {
     assert.equal(pw.text, 'PW');
     assert.equal(pw.title, 'Playwright');
+    assert.equal((pw as unknown as { scale?: number }).scale, undefined, 'Fallback glyphs do not carry vector scale');
   }
 
-  // BullMQ -> Unavailable in simple-icons -> Deterministic BMQ fallback
+  // BullMQ -> Unavailable in simple-icons -> Deterministic BMQ fallback (no scale property)
   const bullmq = resolveCapabilityIcon('BullMQ');
   assert.equal(bullmq.type, 'fallback');
   if (bullmq.type === 'fallback') {
     assert.equal(bullmq.text, 'BMQ');
     assert.equal(bullmq.title, 'BullMQ');
+    assert.equal((bullmq as unknown as { scale?: number }).scale, undefined, 'Fallback glyphs do not carry vector scale');
   }
 
   // React Native -> Distinct key 'reactnative' and title 'React Native', reusing verified siReact.path
@@ -110,9 +179,9 @@ test('2. Technologies unavailable in Simple Icons resolve to deterministic fallb
 });
 
 // ---------------------------------------------------------------------------
-// 3. Complete Snapshot Coverage: All 24 Active Capability Nodes Resolve
+// 4. Complete Snapshot Coverage: All 24 Active Capability Nodes Resolve
 // ---------------------------------------------------------------------------
-test('3. Every capability node in the active snapshot resolves to a valid descriptor', () => {
+test('4. Every capability node in the active snapshot resolves to a valid descriptor', () => {
   const skills = GITHUB_SNAPSHOT.skills;
   assert.equal(skills.length, 24, 'Snapshot must contain exactly 24 capability skills');
 
@@ -134,9 +203,9 @@ test('3. Every capability node in the active snapshot resolves to a valid descri
 });
 
 // ---------------------------------------------------------------------------
-// 4. Normalization: Canonical Alias Resolution
+// 5. Normalization: Canonical Alias Resolution
 // ---------------------------------------------------------------------------
-test('4. normalizeCapabilityIconKey correctly normalizes technology aliases and casing', () => {
+test('5. normalizeCapabilityIconKey correctly normalizes technology aliases and casing', () => {
   // Node.js
   assert.equal(normalizeCapabilityIconKey('Node.js'), 'nodejs');
   assert.equal(normalizeCapabilityIconKey('NodeJS'), 'nodejs');
@@ -179,9 +248,9 @@ test('4. normalizeCapabilityIconKey correctly normalizes technology aliases and 
 });
 
 // ---------------------------------------------------------------------------
-// 5. Fallback System: Deterministic Glyphs for Unmapped Concepts
+// 6. Fallback System: Deterministic Glyphs for Unmapped Concepts
 // ---------------------------------------------------------------------------
-test('5. deriveFallbackGlyph generates expected uppercase glyphs for known engineering concepts', () => {
+test('6. deriveFallbackGlyph generates expected uppercase glyphs for known engineering concepts', () => {
   assert.equal(deriveFallbackGlyph('REST API'), 'API');
   assert.equal(deriveFallbackGlyph('API Architecture'), 'API');
   assert.equal(deriveFallbackGlyph('Authentication'), 'AUTH');
@@ -196,7 +265,7 @@ test('5. deriveFallbackGlyph generates expected uppercase glyphs for known engin
   assert.equal(deriveFallbackGlyph('State Management'), 'STATE');
 });
 
-test('6. Unknown technology produces deterministic initials and never throws or returns blank', () => {
+test('7. Unknown technology produces deterministic initials and never throws or returns blank', () => {
   const unknown = resolveCapabilityIcon('Hyper Dimensional Matrix');
   assert.equal(unknown.type, 'fallback');
   if (unknown.type === 'fallback') {
@@ -216,9 +285,9 @@ test('6. Unknown technology produces deterministic initials and never throws or 
 });
 
 // ---------------------------------------------------------------------------
-// 7. Provenance Invariant: Registry Imports Simple Icons & Has No Hardcoded Paths
+// 8. Provenance Invariant: Registry Imports Simple Icons & Has No Hardcoded Paths
 // ---------------------------------------------------------------------------
-test('7. capabilityIconRegistry.ts imports directly from simple-icons without hardcoded SVG paths', () => {
+test('8. capabilityIconRegistry.ts imports directly from simple-icons without hardcoded SVG paths', () => {
   const registrySource = readFileSync(resolve(process.cwd(), 'src/utils/capabilityIconRegistry.ts'), 'utf8');
 
   // Verify import from 'simple-icons'
@@ -235,9 +304,9 @@ test('7. capabilityIconRegistry.ts imports directly from simple-icons without ha
 });
 
 // ---------------------------------------------------------------------------
-// 8. Presentation Safety: Association Logic & Data Remains Pure
+// 9. Presentation Safety: Association Logic & Data Remains Pure
 // ---------------------------------------------------------------------------
-test('8. projectUsesCapability and underlying association logic remain unmodified', () => {
+test('9. projectUsesCapability and underlying association logic remain unmodified', () => {
   const sampleProject = GITHUB_SNAPSHOT.projects[0];
   assert.ok(sampleProject, 'Sample project must exist');
 
@@ -250,9 +319,9 @@ test('8. projectUsesCapability and underlying association logic remain unmodifie
 });
 
 // ---------------------------------------------------------------------------
-// 9. Source Invariant: TopologyCanvas Renders CapabilityIcon Component
+// 10. Source Invariant: TopologyCanvas Renders CapabilityIcon Component
 // ---------------------------------------------------------------------------
-test('9. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', () => {
+test('10. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', () => {
   const canvasSource = readFileSync(resolve(process.cwd(), 'src/components/TopologyCanvas.tsx'), 'utf8');
 
   // Verify CapabilityIcon import
@@ -271,9 +340,9 @@ test('9. TopologyCanvas.tsx renders CapabilityIcon inside capability plinth', ()
 });
 
 // ---------------------------------------------------------------------------
-// 10. Accessibility & Zero Network Runtime
+// 11. Accessibility & Zero Network Runtime
 // ---------------------------------------------------------------------------
-test('10. CapabilityIcon and icon registry introduce zero runtime network fetch or remote URLs', () => {
+test('11. CapabilityIcon and icon registry introduce zero runtime network fetch or remote URLs', () => {
   const registrySource = readFileSync(resolve(process.cwd(), 'src/utils/capabilityIconRegistry.ts'), 'utf8');
   const iconSource = readFileSync(resolve(process.cwd(), 'src/components/CapabilityIcon.tsx'), 'utf8');
 
@@ -282,4 +351,5 @@ test('10. CapabilityIcon and icon registry introduce zero runtime network fetch 
   assert.ok(!registrySource.includes('https://'), 'Registry must not contain https URLs');
 
   assert.ok(iconSource.includes('aria-hidden="true"'), 'CapabilityIcon must specify aria-hidden="true"');
+  assert.ok(iconSource.includes('effectiveSize'), 'CapabilityIcon computes effectiveSize centering geometry');
 });
