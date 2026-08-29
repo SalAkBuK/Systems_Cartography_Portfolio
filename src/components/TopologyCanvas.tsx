@@ -226,30 +226,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, [isPauseConditionActive]);
 
   const isOrbitRunning = !isPauseConditionActive && isResumeReady;
-  const isOrbitRunningRef = useRef(isOrbitRunning);
-  useEffect(() => {
-    isOrbitRunningRef.current = isOrbitRunning;
-  }, [isOrbitRunning]);
 
   const [orbitPhase, setOrbitPhase] = useState(0);
   const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
 
-  // The ONE requestAnimationFrame loop for the ring's entire lifetime. Reads
-  // isOrbitRunningRef each frame rather than restarting on every pause/resume,
-  // so there is never more than one loop. stepOrbitClock resets lastTimestamp
-  // to null whenever not running, so a resume (including after a long hidden
-  // tab) re-baselines instead of applying a large catch-up jump.
+  // The RAF loop is only ALIVE while isOrbitRunning is true — at most one
+  // active chain, and genuinely zero scheduled repeating callbacks while
+  // paused (compact, reduced motion, hover/selection/drag/pan, hidden tab,
+  // or an active Experience filter), rather than a mount-lifetime loop that
+  // keeps waking the browser and merely holding position. Every pause clears
+  // lastTimestamp (not the phase itself) so a later resume re-baselines
+  // instead of applying a catch-up jump for however long it was paused.
   useEffect(() => {
+    if (!isOrbitRunning) {
+      orbitClockRef.current = { phase: orbitClockRef.current.phase, lastTimestamp: null };
+      return;
+    }
+
     let rafId: number;
     const tick = (timestamp: number) => {
-      const next = stepOrbitClock(orbitClockRef.current, timestamp, isOrbitRunningRef.current);
+      const next = stepOrbitClock(orbitClockRef.current, timestamp, true);
       orbitClockRef.current = next;
       setOrbitPhase(next.phase);
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, []);
+  }, [isOrbitRunning]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
