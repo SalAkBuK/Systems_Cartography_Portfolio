@@ -336,3 +336,71 @@ test('ORBIT_RESUME_DELAY_MS is within the specified 600-1000ms neighborhood (tar
 test('ORBIT_PERIOD_MS is within the specified 90-150s neighborhood (target 120s)', () => {
   assert.ok(ORBIT_PERIOD_MS >= 90_000 && ORBIT_PERIOD_MS <= 150_000);
 });
+
+// ---------------------------------------------------------------------------
+// RAF lifecycle gating: TopologyCanvas must have ZERO scheduled repeating
+// requestAnimationFrame callbacks while orbital motion is paused — not a
+// mount-lifetime loop that keeps waking the browser merely to hold position.
+// A pure DOM-free test can't spin up React here, so this is one focused
+// structural invariant on the actual effect, not a giant string-assertion
+// suite: the effect depends on isOrbitRunning, the paused branch returns
+// before ever calling requestAnimationFrame, and cleanup cancels it.
+// ---------------------------------------------------------------------------
+
+function extractOrbitClockEffect(content: string): string {
+  const startIdx = content.indexOf('const orbitClockRef = useRef<OrbitClockState>');
+  const endIdx = content.indexOf('}, [isOrbitRunning]);', startIdx);
+  assert.ok(startIdx !== -1 && endIdx !== -1, 'orbit clock effect block must be present');
+  return content.slice(startIdx, endIdx + '}, [isOrbitRunning]);'.length);
+}
+
+test('TopologyCanvas.tsx: the orbit RAF effect is keyed on isOrbitRunning, not a mount-once ([]) effect', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractOrbitClockEffect(content);
+  assert.ok(block.endsWith('}, [isOrbitRunning]);'), 'Effect must re-run whenever isOrbitRunning changes (start/stop the loop), not run once for the whole component lifetime');
+});
+
+test('TopologyCanvas.tsx: the paused branch returns before scheduling any requestAnimationFrame — zero repeating callbacks while paused', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractOrbitClockEffect(content);
+
+  const pausedBranchIdx = block.indexOf('if (!isOrbitRunning) {');
+  const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
+  const firstRafIdx = block.indexOf('requestAnimationFrame(');
+  assert.ok(pausedBranchIdx !== -1 && pausedReturnIdx !== -1 && firstRafIdx !== -1);
+  assert.ok(pausedReturnIdx < firstRafIdx, 'The paused branch must return before any requestAnimationFrame call is reached');
+
+  const pausedBranchBlock = block.slice(pausedBranchIdx, pausedReturnIdx);
+  assert.ok(!pausedBranchBlock.includes('requestAnimationFrame('), 'Paused branch itself must not schedule a frame');
+});
+
+test('TopologyCanvas.tsx: pausing clears the timestamp baseline but preserves the phase (no reset, no catch-up)', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractOrbitClockEffect(content);
+  const pausedBranchIdx = block.indexOf('if (!isOrbitRunning) {');
+  const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
+  const pausedBranchBlock = block.slice(pausedBranchIdx, pausedReturnIdx);
+
+  assert.ok(pausedBranchBlock.includes('phase: orbitClockRef.current.phase'), 'Pausing must preserve the current phase, not reset it to 0');
+  assert.ok(pausedBranchBlock.includes('lastTimestamp: null'), 'Pausing must clear the timestamp baseline so resume does not catch up');
+});
+
+test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimationFrame chain and cancels it on cleanup', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractOrbitClockEffect(content);
+  const runningBlock = block.slice(block.indexOf('let rafId'));
+
+  const rafCallCount = (runningBlock.match(/requestAnimationFrame\(/g) || []).length;
+  assert.equal(rafCallCount, 2, 'Exactly one chain: one initial schedule plus one re-schedule inside tick (the same recursive chain, not multiple independent loops)');
+  assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame when isOrbitRunning flips or the component unmounts');
+});
+
+test('TopologyCanvas.tsx: no setInterval is used anywhere for orbital motion, and only one requestAnimationFrame call site exists in the whole file', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  assert.ok(!content.includes('setInterval('), 'setInterval must never be used for orbital motion');
+  // Two textual occurrences (initial schedule + recursive re-schedule) belong
+  // to the SAME single chain inside the one gated effect — proven above to be
+  // the only requestAnimationFrame-using effect in the component.
+  const rafOccurrences = (content.match(/requestAnimationFrame\(/g) || []).length;
+  assert.equal(rafOccurrences, 2, 'Only the one gated orbit-clock effect may reference requestAnimationFrame');
+});
