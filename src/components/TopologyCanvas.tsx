@@ -1470,44 +1470,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <span className="font-bold">APPLICATION SURFACE // CORE WORK</span>
       </div>
 
-      {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
-      {!isCompactViewport && !prefersReducedMotion && (
-        <div
-          id="orbit-rate-controls"
-          className="hidden lg:flex absolute top-3 left-1/2 -translate-x-1/2 z-30 items-stretch border border-[#15150F] bg-[#D4CDA4] font-mono"
-          onMouseDown={(event) => event.stopPropagation()}
-          onTouchStart={(event) => event.stopPropagation()}
-        >
-          <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[8.5px] font-bold text-[#C3E54E] whitespace-nowrap">
-            {orbitRateMultiplier === 0 ? 'ORBIT // PAUSED' : `ORBIT RATE // ${orbitRateMultiplier}×`}
-          </span>
-          <div role="group" aria-label="Autonomous orbit rate" className="flex divide-x divide-[#15150F]">
-            {ORBIT_RATE_MULTIPLIERS.map(rate => {
-              const isActive = orbitRateMultiplier === rate;
-              const label = rate === 0 ? 'PAUSE' : `${rate}×`;
-              return (
-                <button
-                  key={rate}
-                  type="button"
-                  aria-label={rate === 0 ? 'Pause autonomous orbit' : `Set autonomous orbit rate to ${rate} times`}
-                  aria-pressed={isActive}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setOrbitRateMultiplier(rate);
-                  }}
-                  className={`px-2 py-1 text-[8.5px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
-                    isActive
-                      ? 'bg-[#C3E54E] text-[#15150F]'
-                      : 'bg-[#D4CDA4] text-[#15150F] hover:bg-[#E2DCB9]'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Screen-positioned focus status; intentionally outside the transformed SVG scene. */}
       {selectedFocusLabel && (
@@ -1551,26 +1513,68 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       )}
 
       {/* Bottom-Left Controls & Status */}
-      <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10">
-        <div className="bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-t-2">
-          <span className="font-bold">TECHNICAL CAPABILITIES // SYSTEM BACKBONE</span>
-        </div>
-        <button
-          onClick={() => setGridSnapEnabled(prev => !prev)}
-          className={`pointer-events-auto px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1 transition-colors ${
-            gridSnapEnabled ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F]'
-          }`}
-          title="Toggle Grid Snapping & Overlap Prevention (G)"
-        >
-          <Magnet size={10} />
-          <span>GRID SNAP: {gridSnapEnabled ? 'ON (25PX)' : 'OFF'}</span>
-        </button>
-        {hasCustomLayout && (
-          <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1">
-            <Move size={10} />
-            <span>CUSTOM LAYOUT ACTIVE</span>
+      <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[9px] font-mono text-[#15150F] z-10">
+        {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
+        {!isCompactViewport && !prefersReducedMotion && (
+          <div
+            id="orbit-rate-controls"
+            className="pointer-events-auto flex items-stretch border border-[#15150F] bg-[#D4CDA4] font-mono"
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+          >
+            <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[8.5px] font-bold text-[#C3E54E] whitespace-nowrap">
+              {orbitRateMultiplier === 0 ? 'ORBIT // PAUSED' : `ORBIT RATE // ${orbitRateMultiplier}×`}
+            </span>
+            <div role="group" aria-label="Autonomous orbit rate" className="flex divide-x divide-[#15150F]">
+              {ORBIT_RATE_MULTIPLIERS.map(rate => {
+                const isActive = orbitRateMultiplier === rate;
+                const label = rate === 0 ? 'PAUSE' : `${rate}×`;
+                return (
+                  <button
+                    key={rate}
+                    type="button"
+                    aria-label={rate === 0 ? 'Pause autonomous orbit' : `Set autonomous orbit rate to ${rate} times`}
+                    aria-pressed={isActive}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOrbitRateMultiplier(rate);
+                    }}
+                    className={`px-2 py-1 text-[8.5px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
+                      isActive
+                        ? 'bg-[#C3E54E] text-[#15150F]'
+                        : 'bg-[#D4CDA4] text-[#15150F] hover:bg-[#E2DCB9]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
+
+        {/* System backbone, grid snap & custom layout status row */}
+        <div className="flex items-center gap-2">
+          <div className="bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-t-2">
+            <span className="font-bold">TECHNICAL CAPABILITIES // SYSTEM BACKBONE</span>
+          </div>
+          <button
+            onClick={() => setGridSnapEnabled(prev => !prev)}
+            className={`pointer-events-auto px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1 transition-colors ${
+              gridSnapEnabled ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F]'
+            }`}
+            title="Toggle Grid Snapping & Overlap Prevention (G)"
+          >
+            <Magnet size={10} />
+            <span>GRID SNAP: {gridSnapEnabled ? 'ON (25PX)' : 'OFF'}</span>
+          </button>
+          {hasCustomLayout && (
+            <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1">
+              <Move size={10} />
+              <span>CUSTOM LAYOUT ACTIVE</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Top-Right Viewport & Dragging Telemetry */}
