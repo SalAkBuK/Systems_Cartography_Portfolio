@@ -322,6 +322,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [orbitPhase, setOrbitPhase] = useState(0);
   const orbitPhaseRef = useRef(0);
   const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
+  // Mirrors the orbit-clock effect's in-flight requestAnimationFrame id so a
+  // release that commits a detach/reinsertion (commitOrbitReflow) can cancel
+  // it SYNCHRONOUSLY, in the same task as the mouseup/touchend handler.
+  // Waiting for the isOrbitReflowActive state change to reach this effect —
+  // a passive effect, deferred until after paint — could otherwise let one
+  // already-scheduled tick fire first, producing a visible one-frame "ring
+  // advances once more, then freezes" glitch right at the drop.
+  const orbitRafIdRef = useRef<number | null>(null);
 
   // The RAF loop is only ALIVE while isOrbitRunning is true — at most one
   // active chain, and genuinely zero scheduled repeating callbacks while
@@ -340,16 +348,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return;
     }
 
-    let rafId: number;
     const tick = (timestamp: number) => {
       const next = stepOrbitClock(orbitClockRef.current, timestamp, true, orbitRateMultiplier);
       orbitClockRef.current = next;
       orbitPhaseRef.current = next.phase;
       setOrbitPhase(next.phase);
-      rafId = requestAnimationFrame(tick);
+      orbitRafIdRef.current = requestAnimationFrame(tick);
     };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    orbitRafIdRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (orbitRafIdRef.current !== null) {
+        cancelAnimationFrame(orbitRafIdRef.current);
+        orbitRafIdRef.current = null;
+      }
+    };
   }, [isOrbitRunning, orbitRateMultiplier]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
@@ -441,6 +453,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     fromOverrides: Record<string, { x: number; y: number }> = {},
     durationMs: number = ORBIT_REFLOW_DURATION_MS
   ) => {
+    // Freeze the autonomous orbit SYNCHRONOUSLY, in the same task as the
+    // release that committed this transition, rather than waiting for the
+    // isOrbitReflowActive state update to reach the (passive, post-paint)
+    // orbit-clock effect — see orbitRafIdRef's definition for why that gap
+    // could otherwise let one more already-scheduled tick fire first.
+    if (orbitRafIdRef.current !== null) {
+      cancelAnimationFrame(orbitRafIdRef.current);
+      orbitRafIdRef.current = null;
+    }
+
     const phaseAtCommit = orbitPhaseRef.current;
     const count = newOrder.length;
     const toPositions: Record<string, { x: number; y: number }> = {};
