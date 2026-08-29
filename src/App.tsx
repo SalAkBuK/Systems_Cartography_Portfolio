@@ -321,16 +321,25 @@ export default function App() {
             <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
           ) : (
             <>
-              {/* TopologyCanvas stays mounted for the entire topology/project
-                  lifetime — drilling into a project's subsystem view must
-                  never unmount it, or every piece of its runtime-only visitor
-                  layout state (detached positions, interactiveOrbitOrder,
-                  custom skill positions, orbit rate/phase, grid snap) is lost
-                  on the way back. Instead it is hidden (display:none via the
-                  `contents`/`hidden` toggle) and made inert while drilled in,
-                  and simply revealed again on return — the SAME instance. */}
+              {/* TopologyCanvas stays mounted, full-size, and layout-
+                  measurable for the entire topology/project lifetime —
+                  drilling into a project's subsystem view must never unmount
+                  it, or every piece of its runtime-only visitor layout state
+                  (detached positions, interactiveOrbitOrder, custom skill
+                  positions, orbit rate/phase, grid snap) is lost on the way
+                  back. It is hidden purely VISUALLY (invisible +
+                  pointer-events-none) while drilled in, never via
+                  display:none/`hidden` — TopologyCanvas's own ResizeObserver
+                  reads containerRef.current.clientWidth/clientHeight to
+                  derive isCompactViewport, and isCompact is itself an
+                  autonomous-orbit pause authority, so collapsing it to 0x0
+                  would silently pause the continuous machine while the
+                  schematic is open. `absolute inset-0` keeps its real box
+                  (and thus real measured dimensions) unchanged throughout;
+                  only opacity/hit-testing/focusability change. Returning
+                  simply reveals the SAME instance again. */}
               <div
-                className={drilledProject ? 'hidden' : 'contents'}
+                className={`absolute inset-0 ${drilledProject ? 'invisible pointer-events-none' : 'visible'}`}
                 inert={Boolean(drilledProject)}
                 aria-hidden={drilledProject ? true : undefined}
               >
@@ -352,13 +361,15 @@ export default function App() {
                 />
               </div>
               {drilledProject && (
-                <ProjectSubsystemCanvas
-                  project={drilledProject}
-                  onReturnToLandscape={handleReturnToLandscape}
-                  selectedSubsystemId={selectedSubsystem?.id || null}
-                  onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
-                  onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
-                />
+                <div className="absolute inset-0 z-10">
+                  <ProjectSubsystemCanvas
+                    project={drilledProject}
+                    onReturnToLandscape={handleReturnToLandscape}
+                    selectedSubsystemId={selectedSubsystem?.id || null}
+                    onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
+                    onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
+                  />
+                </div>
               )}
             </>
           )}
