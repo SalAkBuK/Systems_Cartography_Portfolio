@@ -113,7 +113,7 @@ test('project drag, reflow, focus, compact, reduced motion, hidden document, and
   }
 });
 
-test('TopologyCanvas renders an accessible desktop-only orbit-rate console with explicit active telemetry', () => {
+test('desktop non-compact TopologyCanvas renders accessible orbit controls with explicit active telemetry', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
     source.indexOf('Desktop autonomous-orbit rate console'),
@@ -121,13 +121,34 @@ test('TopologyCanvas renders an accessible desktop-only orbit-rate console with 
   );
 
   assert.ok(controls.includes('id="orbit-rate-controls"'));
+  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'Runtime availability authorities must gate the control markup');
   assert.ok(controls.includes('hidden lg:flex absolute top-3 left-1/2'), 'Rate controls must be hidden on compact viewports');
   assert.ok(controls.includes("orbitRateMultiplier === 0 ? 'ORBIT // PAUSED'"), 'User pause must be textually explicit');
   assert.ok(controls.includes('`ORBIT RATE // ${orbitRateMultiplier}×`'), 'Active running rate must be textually explicit');
   assert.ok(controls.includes('aria-label="Autonomous orbit rate"'));
   assert.ok(controls.includes('aria-pressed={isActive}'));
   assert.ok(controls.includes("const label = rate === 0 ? 'PAUSE' : `${rate}×`"));
-  assert.ok(controls.includes('!prefersReducedMotion && ('), 'Controls must not offer motion while reduced motion is active');
+});
+
+test('orbit controls do not render when the actual canvas container is compact', () => {
+  const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const controls = source.substring(
+    source.indexOf('Desktop autonomous-orbit rate console'),
+    source.indexOf('Screen-positioned focus status')
+  );
+
+  assert.ok(source.includes('const isCompactViewport = containerDimensions.width < 1024;'));
+  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'isCompactViewport must prevent control creation even when the browser matches Tailwind lg');
+});
+
+test('orbit controls do not render under reduced motion', () => {
+  const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const controls = source.substring(
+    source.indexOf('Desktop autonomous-orbit rate console'),
+    source.indexOf('Screen-positioned focus status')
+  );
+
+  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'prefersReducedMotion must prevent control creation');
 });
 
 test('TopologyCanvas owns one shared default-1× rate and rate changes re-baseline the existing RAF effect', () => {

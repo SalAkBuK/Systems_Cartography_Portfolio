@@ -1386,7 +1386,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       </div>
 
       {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
-      {!prefersReducedMotion && (
+      {!isCompactViewport && !prefersReducedMotion && (
         <div
           id="orbit-rate-controls"
           className="hidden lg:flex absolute top-3 left-1/2 -translate-x-1/2 z-30 items-stretch border border-[#15150F] bg-[#D4CDA4] font-mono"
