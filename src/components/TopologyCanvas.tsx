@@ -58,7 +58,8 @@ import {
   wrapCalloutTitle,
   getConduitPresentationState,
   getTopologyNodeEmphasis,
-  getNodeEmphasisClassName
+  getNodeEmphasisClassName,
+  computeFitViewport
 } from '../utils/topologyLayout';
 import {
   ISO_COS,
@@ -66,7 +67,14 @@ import {
   project3DToIso,
   projectIsoTo3D
 } from '../utils/isometricProjection';
-import { getTopologyProjectDimensions } from '../utils/projectTopologyGeometry';
+import {
+  getTopologyProjectDimensions,
+  PROJECT_CALLOUT_WIDTH,
+  PROJECT_CALLOUT_SINGLE_HEIGHT,
+  PROJECT_CALLOUT_DOUBLE_HEIGHT,
+  PROJECT_CALLOUT_SINGLE_Y,
+  PROJECT_CALLOUT_DOUBLE_Y
+} from '../utils/projectTopologyGeometry';
 
 // Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
 // tests) import the isometric projection helpers from this component file. The
@@ -290,22 +298,23 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, []);
 
   // Auto-fit function to center and fit the actual static orbital lattice bounds
-  // (compact <lg and desktop aware). Frames the real ellipse + capability core
-  // instead of an approximate fixed box, so no outer project/callout clips.
+  // (compact <lg and desktop aware). Frames the real ellipse + capability core +
+  // every rendered project/callout envelope, so nothing clips. minZoom here is
+  // only a last-resort safety floor against pathological (near-zero) layouts —
+  // it must stay low enough to never bind for realistic project counts, since a
+  // binding floor would silently defeat the fit it's supposed to protect. This
+  // is independent of the manual wheel/keyboard zoom floor (0.45) used elsewhere.
   const fitAll = useCallback(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
     const isCompact = w < 1024;
-    const bounds = staticOrbitalLattice.orbitGeometry.visualBounds;
-    const boundsW = Math.max(bounds.maxX - bounds.minX, 1);
-    const boundsH = Math.max(bounds.maxY - bounds.minY, 1);
-    const midX = (bounds.minX + bounds.maxX) / 2;
-    const midY = (bounds.minY + bounds.maxY) / 2;
-    const minZoom = isCompact ? 0.35 : 0.50;
-    const fitRatio = Math.min(w / boundsW, h / boundsH) * (isCompact ? 0.92 : 0.95);
-    const fitZoom = Math.min(Math.max(fitRatio, minZoom), 1.2);
-    setViewport({ x: -midX * fitZoom, y: -midY * fitZoom, zoom: Number(fitZoom.toFixed(2)) });
+    const { zoom, x, y } = computeFitViewport(staticOrbitalLattice.orbitGeometry.visualBounds, w, h, {
+      paddingFactor: isCompact ? 0.92 : 0.95,
+      minZoom: isCompact ? 0.15 : 0.20,
+      maxZoom: 1.2,
+    });
+    setViewport({ x, y, zoom });
   }, [setViewport, staticOrbitalLattice]);
 
   // Initial mount auto-fit
@@ -1559,9 +1568,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 {(() => {
                   const titleLines = wrapCalloutTitle(project.title, 20, 2);
                   const isTwoLines = titleLines.length > 1;
-                  const cardWidth = 132;
-                  const cardHeight = isTwoLines ? 38 : 28;
-                  const cardY = isTwoLines ? -15 : -12;
+                  const cardWidth = PROJECT_CALLOUT_WIDTH;
+                  const cardHeight = isTwoLines ? PROJECT_CALLOUT_DOUBLE_HEIGHT : PROJECT_CALLOUT_SINGLE_HEIGHT;
+                  const cardY = isTwoLines ? PROJECT_CALLOUT_DOUBLE_Y : PROJECT_CALLOUT_SINGLE_Y;
 
                   return (
                     <g transform={`translate(${p3_top.x - 8}, ${p3_top.y - 30})`}>

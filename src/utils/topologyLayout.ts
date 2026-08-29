@@ -1,7 +1,17 @@
 import { ProjectData, InfrastructureSkill, TopologyViewMode } from '../types';
 import { GRID_SNAP_STEP } from './collision';
 import { project3DToIso, projectIsoTo3D } from './isometricProjection';
-import { getTopologyProjectDimensions } from './projectTopologyGeometry';
+import {
+  getTopologyProjectDimensions,
+  getTopologyProjectVisualBounds,
+  wrapCalloutTitle,
+  type TopologyVisualBounds
+} from './projectTopologyGeometry';
+
+// Re-exported for backward compatibility: TopologyCanvas and existing tests
+// import wrapCalloutTitle from this module. The canonical implementation now
+// lives alongside the rest of the project visual-geometry helpers.
+export { wrapCalloutTitle };
 
 export type { TopologyViewMode };
 
@@ -216,104 +226,6 @@ export function getNodeEmphasisClassName(level: TopologyNodeVisualLevel): string
 }
 
 /**
- * Pure SVG text wrapping utility for project callout titles.
- * Handles hyphens, word boundaries, and unbroken tokens cleanly.
- * Wraps to at most `maxLines` lines with an ellipsis on overflow.
- */
-export function wrapCalloutTitle(
-  title: string,
-  maxCharsPerLine: number = 20,
-  maxLines: number = 2
-): string[] {
-  if (!title || typeof title !== 'string') return [''];
-  const trimmed = title.trim();
-  if (trimmed.length <= maxCharsPerLine) return [trimmed];
-
-  // Tokenize by spaces, hyphens, and underscores using safe delimiter regex
-  const rawTokens = trimmed.split(/([ \-_])/).filter(Boolean);
-  const tokens: string[] = [];
-
-  // Group delimiter with previous word if applicable (e.g. "towerdesk-", "backend_")
-  for (let i = 0; i < rawTokens.length; i++) {
-    const t = rawTokens[i];
-    if ((t === '-' || t === '_' || t === ' ') && tokens.length > 0) {
-      tokens[tokens.length - 1] += t;
-    } else {
-      tokens.push(t);
-    }
-  }
-
-  const lines: string[] = [];
-  let currentLine = '';
-
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-
-    // Handle token that exceeds maxCharsPerLine
-    if (token.length > maxCharsPerLine) {
-      if (currentLine.trim()) {
-        lines.push(currentLine.trim());
-        currentLine = '';
-      }
-      if (lines.length === maxLines) break;
-
-      // Slice the oversized token across available lines
-      let rem = token;
-      while (rem.length > 0 && lines.length < maxLines) {
-        if (lines.length === maxLines - 1) {
-          // Last line: truncate with ellipsis if necessary
-          if (rem.length > maxCharsPerLine) {
-            lines.push(rem.slice(0, maxCharsPerLine - 1) + '…');
-          } else {
-            lines.push(rem);
-          }
-          rem = '';
-          break;
-        } else {
-          lines.push(rem.slice(0, maxCharsPerLine));
-          rem = rem.slice(maxCharsPerLine);
-        }
-      }
-      continue;
-    }
-
-    const candidate = currentLine ? `${currentLine}${token}` : token;
-    if (candidate.length <= maxCharsPerLine) {
-      currentLine = candidate;
-    } else {
-      if (currentLine.trim()) {
-        lines.push(currentLine.trim());
-      }
-      if (lines.length === maxLines) break;
-      currentLine = token;
-    }
-  }
-
-  if (currentLine.trim() && lines.length < maxLines) {
-    lines.push(currentLine.trim());
-  }
-
-  // Ensure ellipsis if there was remaining text beyond maxLines
-  if (lines.length === maxLines) {
-    const totalChars = lines.join('').replace(/[… ]/g, '').length;
-    const rawChars = trimmed.replace(/[ ]/g, '').length;
-    if (totalChars < rawChars) {
-      let lastLine = lines[maxLines - 1];
-      if (!lastLine.endsWith('…') && !lastLine.endsWith('...')) {
-        if (lastLine.length >= maxCharsPerLine) {
-          lastLine = lastLine.slice(0, maxCharsPerLine - 1) + '…';
-        } else {
-          lastLine = lastLine + '…';
-        }
-        lines[maxLines - 1] = lastLine;
-      }
-    }
-  }
-
-  return lines.length > 0 ? lines : [trimmed];
-}
-
-/**
  * One slot on the static project orbit ellipse. `isoX`/`isoY` are the slot's
  * position in isometric/visual space (what the ellipse looks like on screen);
  * `worldX`/`worldY` are the corresponding project TOP-LEFT origin in world
@@ -425,7 +337,16 @@ const ORBIT_CORE_CLEARANCE_ISO = 150; // breathing room (iso units) between capa
 const ORBIT_SLOT_MARGIN = 40; // additional iso-space margin reserved per project along the ellipse perimeter
 const ORBIT_RADIUS_GROWTH_STEP = 24;
 const ORBIT_MAX_GROWTH_ITERATIONS = 400;
-const ORBIT_VISUAL_BOUNDS_PADDING = 150; // accounts for callout labels extending past a project's footprint
+const FIT_VIEWPORT_PADDING = 40; // modest final padding around the union of everything actually rendered
+
+function unionVisualBounds(boxes: TopologyVisualBounds[]): TopologyVisualBounds {
+  return {
+    minX: Math.min(...boxes.map(b => b.minX)),
+    maxX: Math.max(...boxes.map(b => b.maxX)),
+    minY: Math.min(...boxes.map(b => b.minY)),
+    maxY: Math.max(...boxes.map(b => b.maxY)),
+  };
+}
 
 /**
  * Builds the single static elliptical project orbit surrounding the capability
@@ -433,11 +354,14 @@ const ORBIT_VISUAL_BOUNDS_PADDING = 150; // accounts for callout labels extendin
  * true ellipse on screen) and centered on the capability core's actual visual
  * bounds. Each project occupies exactly one evenly-spaced slot on that one
  * ellipse — growing N never adds another ring, only a larger ellipse.
+ *
+ * Canonical orbit positions are intentionally NOT grid-snapped: they are exact
+ * continuous coordinates so the rendered project center lies precisely on the
+ * ellipse track. Manual dragging remains governed by GRID_SNAP_STEP elsewhere.
  */
 function buildStaticProjectOrbit(
   sortedProjects: ProjectData[],
-  capabilityBoxes: PlacedNodeBounds[],
-  snap: (val: number, step?: number) => number
+  capabilityBoxes: PlacedNodeBounds[]
 ): { projectPositions: Record<string, { x: number; y: number }>; orbitGeometry: StaticOrbitGeometry } {
   // 1. Project the capability core into isometric/visual space to find the true visual nucleus.
   let coreMinIsoX = 0, coreMaxIsoX = 0, coreMinIsoY = 0, coreMaxIsoY = 0;
@@ -461,6 +385,7 @@ function buildStaticProjectOrbit(
   };
   const coreHalfWidthIso = (coreMaxIsoX - coreMinIsoX) / 2;
   const coreHalfHeightIso = (coreMaxIsoY - coreMinIsoY) / 2;
+  const coreIsoBounds: TopologyVisualBounds = { minX: coreMinIsoX, maxX: coreMaxIsoX, minY: coreMinIsoY, maxY: coreMaxIsoY };
 
   const projectPositions: Record<string, { x: number; y: number }> = {};
   const totalProjects = sortedProjects.length;
@@ -468,6 +393,11 @@ function buildStaticProjectOrbit(
   if (totalProjects === 0) {
     const radiusX = coreHalfWidthIso + ORBIT_CORE_CLEARANCE_ISO;
     const radiusY = coreHalfHeightIso + ORBIT_CORE_CLEARANCE_ISO;
+    const ellipseBounds: TopologyVisualBounds = {
+      minX: centerIso.x - radiusX, maxX: centerIso.x + radiusX,
+      minY: centerIso.y - radiusY, maxY: centerIso.y + radiusY,
+    };
+    const unioned = unionVisualBounds([coreIsoBounds, ellipseBounds]);
     return {
       projectPositions,
       orbitGeometry: {
@@ -476,10 +406,10 @@ function buildStaticProjectOrbit(
         radiusY,
         slots: [],
         visualBounds: {
-          minX: centerIso.x - radiusX - ORBIT_VISUAL_BOUNDS_PADDING,
-          maxX: centerIso.x + radiusX + ORBIT_VISUAL_BOUNDS_PADDING,
-          minY: centerIso.y - radiusY - ORBIT_VISUAL_BOUNDS_PADDING,
-          maxY: centerIso.y + radiusY + ORBIT_VISUAL_BOUNDS_PADDING,
+          minX: unioned.minX - FIT_VIEWPORT_PADDING,
+          maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
+          minY: unioned.minY - FIT_VIEWPORT_PADDING,
+          maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
         },
       },
     };
@@ -507,10 +437,12 @@ function buildStaticProjectOrbit(
   }
 
   // 4. Evenly distribute one slot per project, starting at the top, going clockwise.
+  // Positions are the EXACT inverse-projection of the ellipse point — no grid
+  // snapping — so the rendered project center lies precisely on the track.
   const computeSlots = (rx: number, ry: number) => {
     const slots: StaticOrbitSlot[] = [];
     const positions: Record<string, { x: number; y: number }> = {};
-    const boxes: PlacedNodeBounds[] = [];
+    const visualBoxes: TopologyVisualBounds[] = [];
 
     for (let i = 0; i < totalProjects; i++) {
       const project = sortedProjects[i];
@@ -519,10 +451,11 @@ function buildStaticProjectOrbit(
       const isoX = centerIso.x + rx * Math.cos(angle);
       const isoY = centerIso.y + ry * Math.sin(angle);
       const worldCenter = projectIsoTo3D(isoX, isoY);
-      const originX = snap(worldCenter.x - dims.width / 2);
-      const originY = snap(worldCenter.y - dims.depth / 2);
+      const originX = worldCenter.x - dims.width / 2;
+      const originY = worldCenter.y - dims.depth / 2;
+      const worldOrigin = { x: originX, y: originY };
 
-      positions[project.id] = { x: originX, y: originY };
+      positions[project.id] = worldOrigin;
       slots.push({
         projectId: project.id,
         slotIndex: i,
@@ -532,41 +465,38 @@ function buildStaticProjectOrbit(
         worldX: originX,
         worldY: originY,
       });
-      boxes.push({
-        id: project.id,
-        type: 'project',
-        ...getNodeBounds('project', { x: originX, y: originY }, dims.width, dims.depth),
-      });
+      visualBoxes.push(getTopologyProjectVisualBounds(project, worldOrigin));
     }
 
-    return { slots, positions, boxes };
+    return { slots, positions, visualBoxes };
   };
 
-  let { slots, positions, boxes } = computeSlots(radiusX, radiusY);
+  let { slots, positions, visualBoxes } = computeSlots(radiusX, radiusY);
 
+  // Overlap validation uses each project's FULL rendered visual envelope
+  // (structure + callout card, in isometric/visual space) — not just the
+  // ground-plane footprint — so orbital spacing reflects what is actually drawn.
   const hasOverlap = (): boolean => {
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        if (checkAABBOverlap(boxes[i], boxes[j], 15)) return true;
+    for (let i = 0; i < visualBoxes.length; i++) {
+      for (let j = i + 1; j < visualBoxes.length; j++) {
+        if (checkAABBOverlap(visualBoxes[i], visualBoxes[j], 0)) return true;
       }
     }
-    for (const projectBox of boxes) {
-      for (const capabilityBox of capabilityBoxes) {
-        if (checkAABBOverlap(projectBox, capabilityBox, 15)) return true;
-      }
+    for (const projectBox of visualBoxes) {
+      if (checkAABBOverlap(projectBox, coreIsoBounds, 0)) return true;
     }
     return false;
   };
 
-  // 5. Validate zero-overlap against the actual computed footprints; if the heuristic
-  // radius wasn't quite enough, grow the whole ellipse uniformly and re-place every
-  // slot (never nudge a single slot independently — the perimeter must stay one
-  // coherent ellipse).
+  // 5. Validate zero-overlap against the actual rendered visual envelopes; if the
+  // heuristic radius wasn't quite enough, grow the whole ellipse uniformly and
+  // re-place every slot (never nudge a single slot independently — the
+  // perimeter must stay one coherent ellipse).
   let validationIterations = 0;
   while (hasOverlap() && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
     radiusX += ORBIT_RADIUS_GROWTH_STEP;
     radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
-    ({ slots, positions, boxes } = computeSlots(radiusX, radiusY));
+    ({ slots, positions, visualBoxes } = computeSlots(radiusX, radiusY));
     validationIterations++;
   }
 
@@ -576,6 +506,12 @@ function buildStaticProjectOrbit(
 
   Object.assign(projectPositions, positions);
 
+  const ellipseBounds: TopologyVisualBounds = {
+    minX: centerIso.x - radiusX, maxX: centerIso.x + radiusX,
+    minY: centerIso.y - radiusY, maxY: centerIso.y + radiusY,
+  };
+  const unioned = unionVisualBounds([coreIsoBounds, ellipseBounds, ...visualBoxes]);
+
   return {
     projectPositions,
     orbitGeometry: {
@@ -584,13 +520,56 @@ function buildStaticProjectOrbit(
       radiusY,
       slots,
       visualBounds: {
-        minX: centerIso.x - radiusX - ORBIT_VISUAL_BOUNDS_PADDING,
-        maxX: centerIso.x + radiusX + ORBIT_VISUAL_BOUNDS_PADDING,
-        minY: centerIso.y - radiusY - ORBIT_VISUAL_BOUNDS_PADDING,
-        maxY: centerIso.y + radiusY + ORBIT_VISUAL_BOUNDS_PADDING,
+        minX: unioned.minX - FIT_VIEWPORT_PADDING,
+        maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
+        minY: unioned.minY - FIT_VIEWPORT_PADDING,
+        maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
       },
     },
   };
+}
+
+export interface FitViewportOptions {
+  /** Fraction of the available container to actually fill (breathing room). Default 0.95. */
+  paddingFactor?: number;
+  /** Absolute floor on zoom — only a safety net against pathological (near-zero) values. Default 0.15. */
+  minZoom?: number;
+  /** Absolute ceiling on zoom, so a tiny lattice doesn't zoom in absurdly far. Default 1.2. */
+  maxZoom?: number;
+}
+
+export interface FitViewportResult {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Pure viewport-fit calculation: given a visual bounds box and a container
+ * size, returns the zoom/pan that frames the bounds entirely, unit-testable
+ * without any DOM. `minZoom` is a last-resort floor — it must stay low enough
+ * that it never binds for realistic layouts, otherwise it silently clips the
+ * bounds it was supposed to protect.
+ */
+export function computeFitViewport(
+  bounds: TopologyVisualBounds,
+  containerWidth: number,
+  containerHeight: number,
+  options: FitViewportOptions = {}
+): FitViewportResult {
+  const paddingFactor = options.paddingFactor ?? 0.95;
+  const minZoom = options.minZoom ?? 0.15;
+  const maxZoom = options.maxZoom ?? 1.2;
+
+  const boundsWidth = Math.max(bounds.maxX - bounds.minX, 1);
+  const boundsHeight = Math.max(bounds.maxY - bounds.minY, 1);
+  const midX = (bounds.minX + bounds.maxX) / 2;
+  const midY = (bounds.minY + bounds.maxY) / 2;
+
+  const fitRatio = Math.min(containerWidth / boundsWidth, containerHeight / boundsHeight) * paddingFactor;
+  const zoom = Number(Math.min(Math.max(fitRatio, minZoom), maxZoom).toFixed(4));
+
+  return { zoom, x: -midX * zoom, y: -midY * zoom };
 }
 
 /**
@@ -720,8 +699,7 @@ export function assembleTopologyLayout(
   // `placedBoxes` at this point contains only capability (skill) boxes.
   const { projectPositions: orbitProjectPositions, orbitGeometry } = buildStaticProjectOrbit(
     sortedProjects,
-    placedBoxes,
-    snap
+    placedBoxes
   );
   Object.assign(projectPositions, orbitProjectPositions);
 
