@@ -211,6 +211,8 @@ export default function App() {
           setIsCaseStudyOpen(false);
         } else if (isResumeOpen) {
           setIsResumeOpen(false);
+        } else if (isMobileNavOpen) {
+          setIsMobileNavOpen(false);
         } else if (drilledProjectId) {
           handleReturnToLandscape();
         } else {
@@ -234,13 +236,14 @@ export default function App() {
   }, [
     isCaseStudyOpen, 
     isResumeOpen, 
+    isMobileNavOpen,
     drilledProjectId, 
     handleReturnToLandscape, 
     handleResetView
   ]);
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-[#D4CDA4] text-[#15150F] font-mono overflow-hidden select-none border-[6px] md:border-[10px] border-[#15150F]">
+    <div className="w-screen h-screen flex flex-col bg-[#D4CDA4] text-[#15150F] font-mono overflow-hidden select-none border-[6px] lg:border-[10px] border-[#15150F]">
       {/* 1. Top Telemetry Bar */}
       <TopTelemetryBar
         setActiveView={handleNavViewChange}
@@ -256,19 +259,32 @@ export default function App() {
       />
 
       {/* Mobile Drawer Trigger Bar */}
-      <div className="md:hidden flex items-center justify-between px-3 py-1.5 bg-[#CBC59B] border-b border-precision text-[10px]">
+      <div className="lg:hidden flex items-center justify-between px-3 py-1.5 bg-[#CBC59B] border-b border-[#15150F] text-[11px]">
         <button
+          type="button"
+          aria-expanded={isMobileNavOpen}
+          aria-controls="system-index-navigation"
           onClick={() => setIsMobileNavOpen(prev => !prev)}
-          className="flex items-center gap-1.5 font-bold uppercase tracking-wider bg-[#15150F] text-[#D4CDA4] px-2 py-1"
+          className="flex items-center gap-1.5 font-bold uppercase tracking-wider bg-[#15150F] text-[#D4CDA4] px-3 py-2 text-[12px] min-h-[42px] cursor-pointer"
         >
-          {isMobileNavOpen ? <X size={12} /> : <Menu size={12} />}
+          {isMobileNavOpen ? <X size={14} /> : <Menu size={14} />}
           <span>{isMobileNavOpen ? 'CLOSE INDEX' : 'SYSTEM INDEX'}</span>
         </button>
-        <span className="font-bold text-[9px]">{operator.name.toUpperCase()} // TOPOLOGY</span>
+        <span className="font-bold text-[11px] truncate max-w-[200px] sm:max-w-none">{operator.name.toUpperCase()} // TOPOLOGY</span>
       </div>
 
       {/* 2. Main Workplane Console Grid */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        {/* Compact Navigation Backdrop (Closes Drawer on Outside Tap) */}
+        {isMobileNavOpen && (
+          <button
+            type="button"
+            aria-label="Close system index"
+            onClick={() => setIsMobileNavOpen(false)}
+            className="fixed inset-0 z-40 bg-[#15150F]/40 lg:hidden cursor-pointer"
+          />
+        )}
+
         {/* Left Navigation Rail */}
         <LeftNavigationRail
           activeView={activeView}
