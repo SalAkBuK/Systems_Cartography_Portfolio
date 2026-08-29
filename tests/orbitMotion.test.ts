@@ -303,6 +303,7 @@ const idleState: OrbitPauseState = {
   prefersReducedMotion: false,
   isCompact: false,
   isExperienceSelected: false,
+  isDockingTransitionActive: false,
 };
 
 test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
@@ -320,6 +321,7 @@ const pauseTriggeringFields: Array<keyof OrbitPauseState> = [
   'prefersReducedMotion',
   'isCompact',
   'isExperienceSelected',
+  'isDockingTransitionActive',
 ];
 
 for (const field of pauseTriggeringFields) {
@@ -395,12 +397,15 @@ test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimat
   assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame when isOrbitRunning flips or the component unmounts');
 });
 
-test('TopologyCanvas.tsx: no setInterval is used anywhere for orbital motion, and only one requestAnimationFrame call site exists in the whole file', () => {
+test('TopologyCanvas.tsx: no setInterval is ever used, and exactly two gated requestAnimationFrame chains exist (orbit clock + PR23 dock settle transition)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  assert.ok(!content.includes('setInterval('), 'setInterval must never be used for orbital motion');
-  // Two textual occurrences (initial schedule + recursive re-schedule) belong
-  // to the SAME single chain inside the one gated effect — proven above to be
-  // the only requestAnimationFrame-using effect in the component.
+  assert.ok(!content.includes('setInterval('), 'setInterval must never be used for orbital or docking motion');
+  // Four textual occurrences = two independent gated chains, two calls each
+  // (initial schedule + recursive re-schedule): the PR22 orbit-clock effect
+  // (proven above to be exactly one chain) and the PR23 dock-settle-transition
+  // effect (proven separately in tests/projectDocking.test.ts). Neither is a
+  // persistent per-project loop — both are gated on a boolean and torn down
+  // via cancelAnimationFrame when that boolean goes false.
   const rafOccurrences = (content.match(/requestAnimationFrame\(/g) || []).length;
-  assert.equal(rafOccurrences, 2, 'Only the one gated orbit-clock effect may reference requestAnimationFrame');
+  assert.equal(rafOccurrences, 4, 'Exactly two gated requestAnimationFrame chains may exist in the whole component');
 });

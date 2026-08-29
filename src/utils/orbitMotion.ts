@@ -108,6 +108,8 @@ export interface OrbitPauseState {
   prefersReducedMotion: boolean;
   isCompact: boolean;
   isExperienceSelected: boolean;
+  /** PR23: a magnetic aborted-pull-return or redock settle transition is actively animating. */
+  isDockingTransitionActive: boolean;
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
@@ -121,6 +123,7 @@ export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
     state.isCompact ||
-    state.isExperienceSelected
+    state.isExperienceSelected ||
+    state.isDockingTransitionActive
   );
 }
