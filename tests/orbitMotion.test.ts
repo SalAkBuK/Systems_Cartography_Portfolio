@@ -334,6 +334,38 @@ test('isOrbitPauseConditionActive: background canvas panning alone does not paus
   assert.equal(isOrbitPauseConditionActive({ ...idleState, isCanvasPanning: true }), false);
 });
 
+test('isOrbitPauseConditionActive: background pan suppresses incidental project hover pause', () => {
+  assert.equal(isOrbitPauseConditionActive({
+    ...idleState,
+    isCanvasPanning: true,
+    isProjectHovered: true,
+  }), false);
+});
+
+test('isOrbitPauseConditionActive: background pan suppresses incidental skill hover pause', () => {
+  assert.equal(isOrbitPauseConditionActive({
+    ...idleState,
+    isCanvasPanning: true,
+    isSkillHovered: true,
+  }), false);
+});
+
+test('isOrbitPauseConditionActive: node drag still pauses during canvas pan', () => {
+  assert.equal(isOrbitPauseConditionActive({
+    ...idleState,
+    isCanvasPanning: true,
+    isNodeDragging: true,
+  }), true);
+});
+
+test('isOrbitPauseConditionActive: project selection still pauses during canvas pan', () => {
+  assert.equal(isOrbitPauseConditionActive({
+    ...idleState,
+    isCanvasPanning: true,
+    isProjectSelected: true,
+  }), true);
+});
+
 test('ORBIT_RESUME_DELAY_MS is within the specified 600-1000ms neighborhood (target ~800ms)', () => {
   assert.ok(ORBIT_RESUME_DELAY_MS >= 600 && ORBIT_RESUME_DELAY_MS <= 1000);
 });

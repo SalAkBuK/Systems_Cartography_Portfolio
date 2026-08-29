@@ -150,7 +150,8 @@ export function getDynamicOrbitalPosition(
 /**
  * Every interaction/accessibility condition is modeled in one state object.
  * Conditions that hold the ring motionless form one flat OR; canvas panning
- * is deliberately carried for observability but omitted from that OR.
+ * suppresses only incidental hover pauses while all other conditions remain
+ * authoritative.
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -158,7 +159,7 @@ export interface OrbitPauseState {
   isProjectSelected: boolean;
   isSkillSelected: boolean;
   isNodeDragging: boolean;
-  /** Informational only: viewport panning is independent from autonomous orbit motion. */
+  /** Viewport panning is independent motion and suppresses incidental hover pauses. */
   isCanvasPanning: boolean;
   isDocumentHidden: boolean;
   prefersReducedMotion: boolean;
@@ -169,9 +170,12 @@ export interface OrbitPauseState {
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
+  const isHoverPause = !state.isCanvasPanning && (
+    state.isProjectHovered || state.isSkillHovered
+  );
+
   return (
-    state.isProjectHovered ||
-    state.isSkillHovered ||
+    isHoverPause ||
     state.isProjectSelected ||
     state.isSkillSelected ||
     state.isNodeDragging ||
