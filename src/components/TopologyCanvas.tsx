@@ -76,7 +76,7 @@ import {
   PROJECT_CALLOUT_DOUBLE_Y
 } from '../utils/projectTopologyGeometry';
 import {
-  getOrbitalProjectPositionAtPhase,
+  getDynamicOrbitalPosition,
   isOrbitPauseConditionActive,
   stepOrbitClock,
   ORBIT_RESUME_DELAY_MS,
@@ -86,20 +86,24 @@ import {
 import {
   resolveProjectDockState,
   getProjectVisualCenterIso,
+  getWorldOriginForIsoCenter,
   hasCrossedDetachThreshold,
   computeResistedWorldOrigin,
   computeFreeWorldOrigin,
   computeCaptureAttraction,
   computeMagneticRenderPosition,
+  projectPointOntoOrbitEllipse,
+  resolveOrbitInsertionIndex,
   deriveDockState,
   resolveReleaseOutcome,
-  stepSettleTransition,
+  stepOrbitReflow,
   isDetachedPlacementMotionSafe,
-  REDOCK_DURATION_MS,
+  ORBIT_REFLOW_DURATION_MS,
   ABORTED_PULL_RETURN_MS,
   type ProjectDockState,
   type ProjectDockRuntimeMap,
-  type SettleTransition
+  type OrbitReflowTransition,
+  type OrbitEllipseProjection
 } from '../utils/projectDocking';
 
 // Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
@@ -194,16 +198,28 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // docked. Never written to ProjectData/GITHUB_SNAPSHOT/src/data.
   const [projectDockState, setProjectDockState] = useState<ProjectDockRuntimeMap>({});
 
-  // PR23: the single short-lived settle-animation transition (aborted-pull
-  // return OR redock settle — same mechanism, different duration). At most
-  // one project may be settling at a time. `dockTransitionRef` is the
-  // interpolation source of truth for the RAF loop; `activeDockTransitionProjectId`
-  // is the reactive flag that starts/stops that loop and feeds the orbit
-  // pause state; `dockTransitionRenderPos` is the position the render layer
-  // actually reads each frame.
-  const dockTransitionRef = useRef<(SettleTransition & { projectId: string }) | null>(null);
-  const [activeDockTransitionProjectId, setActiveDockTransitionProjectId] = useState<string | null>(null);
-  const [dockTransitionRenderPos, setDockTransitionRenderPos] = useState<{ x: number; y: number } | null>(null);
+  // PR23 product pivot — dynamic interactive orbit: a detached project no
+  // longer needs to find its own original canonical slot. `interactiveOrbitOrder`
+  // (null = canonical order from staticOrbitalLattice is authoritative; a
+  // concrete array = the visitor has changed docked membership/order) holds
+  // ONLY the currently-DOCKED identities, in their current relative order —
+  // detached identities are simply absent from it. Identity/order only, never
+  // coordinates; never written outside component runtime state — a refresh
+  // always restores the canonical constellation.
+  const [interactiveOrbitOrder, setInteractiveOrbitOrder] = useState<string[] | null>(null);
+
+  // PR23: the single shared orbital reflow transition — ONE elapsed-time-based
+  // eased progress value interpolating every affected project's position at
+  // once. Used for BOTH a single project returning to its own current ring
+  // position (aborted pull) and a whole-ring redistribution (detach or
+  // reinsertion) — the same mechanism, just a map with one entry vs many.
+  // `orbitReflowRef` is the interpolation source of truth for the RAF loop;
+  // `isOrbitReflowActive` is the reactive flag that starts/stops that loop and
+  // feeds the orbit pause state; `orbitReflowRenderPositions` is what the
+  // render layer actually reads each frame (null when idle).
+  const orbitReflowRef = useRef<OrbitReflowTransition | null>(null);
+  const [isOrbitReflowActive, setIsOrbitReflowActive] = useState(false);
+  const [orbitReflowRenderPositions, setOrbitReflowRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
 
   // ---------------------------------------------------------------------------
   // PR22: Orbital motion. ONE shared phase drives every canonical (non-custom)
@@ -247,11 +263,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     prefersReducedMotion,
     isCompact: isCompactViewport,
     isExperienceSelected: Boolean(selectedExperienceId),
-    isDockingTransitionActive: Boolean(activeDockTransitionProjectId),
+    isDockingTransitionActive: Boolean(isOrbitReflowActive),
   }), [
     hoveredProjectId, hoveredSkillId, selectedProjectId, selectedSkillId,
     draggingNode, isDragging, isDocumentHidden, prefersReducedMotion,
-    isCompactViewport, selectedExperienceId, activeDockTransitionProjectId
+    isCompactViewport, selectedExperienceId, isOrbitReflowActive
   ]);
   const isPauseConditionActive = useMemo(
     () => isOrbitPauseConditionActive(orbitPauseState),
@@ -303,126 +319,159 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
-  // Pure derivation from orbitPhase + staticOrbitalLattice + projects — no
+  // PR23 product pivot: canonical order comes straight from the static
+  // lattice's own deterministic slot order and never changes at runtime.
+  // `interactiveOrbitOrder` (null = canonical authoritative) holds only the
+  // currently-docked identities once the visitor has changed membership.
+  const canonicalOrbitOrder = useMemo(
+    () => staticOrbitalLattice.orbitGeometry.slots.map(slot => slot.projectId),
+    [staticOrbitalLattice]
+  );
+
+  // The base order (canonical or visitor-modified) filtered to currently
+  // docked identities only — a project that has become detached is excluded
+  // immediately, with every other project's relative order left untouched.
+  const dockedOrbitOrder = useMemo(() => {
+    const base = interactiveOrbitOrder ?? canonicalOrbitOrder;
+    return base.filter(id => resolveProjectDockState(projectDockState, id) === 'docked');
+  }, [interactiveOrbitOrder, canonicalOrbitOrder, projectDockState]);
+
+  const dockedProjectsInOrder = useMemo(
+    () => dockedOrbitOrder.map(id => projectsById.get(id)).filter((p): p is ProjectData => Boolean(p)),
+    [dockedOrbitOrder, projectsById]
+  );
+
+  // Pure derivation from orbitPhase + dockedProjectsInOrder — index/N based,
+  // so canonical (full membership) and visitor-modified membership share ONE
+  // formula (getDynamicOrbitalPosition) rather than two parallel systems. No
   // per-frame allocation beyond this one small map rebuild.
-  const animatedCanonicalProjectPositions = useMemo(() => {
+  const dockedProjectPositions = useMemo(() => {
     const positions: Record<string, { x: number; y: number }> = {};
-    for (const slot of staticOrbitalLattice.orbitGeometry.slots) {
-      const project = projectsById.get(slot.projectId);
-      if (!project) continue;
-      positions[slot.projectId] = getOrbitalProjectPositionAtPhase(
+    const count = dockedProjectsInOrder.length;
+    for (let i = 0; i < count; i++) {
+      const project = dockedProjectsInOrder[i];
+      positions[project.id] = getDynamicOrbitalPosition(
         project,
-        slot,
+        i,
+        count,
         staticOrbitalLattice.orbitGeometry,
         orbitPhase
       );
     }
     return positions;
-  }, [staticOrbitalLattice, projectsById, orbitPhase]);
+  }, [dockedProjectsInOrder, staticOrbitalLattice, orbitPhase]);
 
-  // Effective position maps: the animated canonical orbit as the base layer,
-  // with any manually dragged/assembled positions layered on top. Passed to
+  // Effective position maps: the animated docked orbit as the base layer,
+  // with any manually dragged/detached positions layered on top. Passed to
   // collision & snap-resolution so they always agree with what is actually
   // rendered. A project present in customProjectPositions stays fixed there —
-  // it does not resume orbiting until ASSEMBLE clears the override (a future
-  // PR will formalize this as an explicit membership state machine).
+  // it does not resume orbiting until it is redocked or ASSEMBLE/RESET clears
+  // every override.
   const effectiveProjectPositions = useMemo(
-    () => ({ ...animatedCanonicalProjectPositions, ...customProjectPositions }),
-    [animatedCanonicalProjectPositions, customProjectPositions]
+    () => ({ ...dockedProjectPositions, ...customProjectPositions }),
+    [dockedProjectPositions, customProjectPositions]
   );
   const effectiveSkillPositions = useMemo(
     () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
     [staticOrbitalLattice, customSkillPositions]
   );
 
-  // PR23: cancels any in-flight settle transition without finalizing it —
-  // used by ASSEMBLE/RESET, which resolve every project to canonical docked
-  // membership through their own explicit state clearing instead.
-  const cancelDockTransition = useCallback(() => {
-    dockTransitionRef.current = null;
-    setActiveDockTransitionProjectId(null);
-    setDockTransitionRenderPos(null);
+  // PR23 product pivot: cancels any in-flight shared orbital reflow without
+  // finalizing it — used by ASSEMBLE/RESET, which resolve every project to
+  // canonical docked membership through their own explicit state clearing.
+  const cancelOrbitReflow = useCallback(() => {
+    orbitReflowRef.current = null;
+    setIsOrbitReflowActive(false);
+    setOrbitReflowRenderPositions(null);
   }, []);
 
-  // Starts (or, under reduced motion, instantly finalizes) the settle
-  // animation that carries a project from its current rendered position to
-  // `toPos` — used for both an aborted pull (returns to the reserved slot)
-  // and a valid magnetic redock (also the reserved slot). Finalization always
-  // clears both the custom position override and the dock-runtime exception,
-  // which is a safe no-op when either was never set (e.g. an aborted pull
-  // never wrote a custom position in the first place).
-  const finalizeProjectAsDocked = useCallback((projectId: string) => {
-    setCustomProjectPositions(prev => {
-      if (!(projectId in prev)) return prev;
-      const next = { ...prev };
-      delete next[projectId];
-      return next;
-    });
-    setProjectDockState(prev => {
-      if (!(projectId in prev)) return prev;
-      const next = { ...prev };
-      delete next[projectId];
-      return next;
-    });
-  }, []);
-
-  const startSettleTransition = useCallback((
-    projectId: string,
-    fromPos: { x: number; y: number },
-    toPos: { x: number; y: number },
-    durationMs: number
+  // Starts (or, under reduced motion, instantly applies) the ONE shared
+  // reflow transition that carries every project in `newOrder` from its
+  // current position to its new equal-spacing position on the fixed orbit
+  // ellipse. Used uniformly for an aborted pull (newOrder === the unchanged
+  // docked order, only the dragged project's `from` overridden), a detach
+  // (newOrder is the docked order minus the detaching project), and a
+  // reinsertion (newOrder is the docked order with the returning project
+  // spliced back in) — one mechanism, never several competing ones. Docked-
+  // membership state (interactiveOrbitOrder/customProjectPositions/
+  // projectDockState) must already be committed by the caller BEFORE this
+  // runs, since the `to` positions are simply newOrder's authoritative
+  // interactive orbital positions — there is no separate finalize step.
+  const commitOrbitReflow = useCallback((
+    newOrder: string[],
+    fromOverrides: Record<string, { x: number; y: number }> = {},
+    durationMs: number = ORBIT_REFLOW_DURATION_MS
   ) => {
+    const count = newOrder.length;
+    const toPositions: Record<string, { x: number; y: number }> = {};
+    for (let i = 0; i < count; i++) {
+      const id = newOrder[i];
+      const proj = projectsById.get(id);
+      if (!proj) continue;
+      toPositions[id] = getDynamicOrbitalPosition(proj, i, count, staticOrbitalLattice.orbitGeometry, orbitPhase);
+    }
+    const fromPositions: Record<string, { x: number; y: number }> = {};
+    for (const id of newOrder) {
+      fromPositions[id] =
+        fromOverrides[id] ??
+        orbitReflowRenderPositions?.[id] ??
+        dockedProjectPositions[id] ??
+        toPositions[id];
+    }
+
     if (prefersReducedMotion) {
-      finalizeProjectAsDocked(projectId);
+      orbitReflowRef.current = null;
+      setIsOrbitReflowActive(false);
+      setOrbitReflowRenderPositions(null);
       return;
     }
-    dockTransitionRef.current = { projectId, fromPos, toPos, durationMs, startTimestamp: null };
-    setActiveDockTransitionProjectId(projectId);
-    setDockTransitionRenderPos(fromPos);
-  }, [prefersReducedMotion, finalizeProjectAsDocked]);
 
-  // The ONE short-lived docking-settle RAF loop — alive only while an actual
+    orbitReflowRef.current = { fromPositions, toPositions, durationMs, startTimestamp: null };
+    setOrbitReflowRenderPositions(fromPositions);
+    setIsOrbitReflowActive(true);
+  }, [projectsById, staticOrbitalLattice, orbitPhase, orbitReflowRenderPositions, dockedProjectPositions, prefersReducedMotion]);
+
+  // The ONE short-lived orbital reflow RAF loop — alive only while an actual
   // transition is in progress (never a persistent per-project loop), gated
-  // exactly like the PR22 orbit clock. Elapsed-time based via
-  // stepSettleTransition, so frame-rate variance cannot change perceived speed.
+  // exactly like the PR22 orbit clock. Elapsed-time based via stepOrbitReflow,
+  // so frame-rate variance cannot change perceived speed and every affected
+  // project shares the exact same eased progress value.
   useEffect(() => {
-    if (!activeDockTransitionProjectId) return;
+    if (!isOrbitReflowActive) return;
 
     let rafId: number;
     const tick = (timestamp: number) => {
-      const transition = dockTransitionRef.current;
+      const transition = orbitReflowRef.current;
       if (!transition) return;
 
-      const result = stepSettleTransition(transition, timestamp);
+      const result = stepOrbitReflow(transition, timestamp);
       if (transition.startTimestamp === null) {
-        dockTransitionRef.current = { ...transition, startTimestamp: timestamp };
+        orbitReflowRef.current = { ...transition, startTimestamp: timestamp };
       }
-      setDockTransitionRenderPos(result.position);
+      setOrbitReflowRenderPositions(result.positions);
 
       if (result.isComplete) {
-        const finishedProjectId = transition.projectId;
-        dockTransitionRef.current = null;
-        setActiveDockTransitionProjectId(null);
-        setDockTransitionRenderPos(null);
-        finalizeProjectAsDocked(finishedProjectId);
+        orbitReflowRef.current = null;
+        setIsOrbitReflowActive(false);
+        setOrbitReflowRenderPositions(null);
         return;
       }
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [activeDockTransitionProjectId, finalizeProjectAsDocked]);
+  }, [isOrbitReflowActive]);
 
   // Synchronized node position getters for 100% frame-accurate alignment
   const getProjectPos = useCallback((project: ProjectData) => {
     if (draggingNode?.type === 'project' && draggingNode.id === project.id) {
       return draggingNode.currentPos;
     }
-    if (activeDockTransitionProjectId === project.id && dockTransitionRenderPos) {
-      return dockTransitionRenderPos;
+    if (orbitReflowRenderPositions && orbitReflowRenderPositions[project.id]) {
+      return orbitReflowRenderPositions[project.id];
     }
     return effectiveProjectPositions[project.id] || project.gridPosition;
-  }, [draggingNode, effectiveProjectPositions, activeDockTransitionProjectId, dockTransitionRenderPos]);
+  }, [draggingNode, effectiveProjectPositions, orbitReflowRenderPositions]);
 
   const getSkillPos = useCallback((skill: InfrastructureSkill) => {
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
@@ -431,27 +480,26 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return effectiveSkillPositions[skill.id] || skill.gridPosition;
   }, [draggingNode, effectiveSkillPositions]);
 
-  // PR23: derives the actively-dragged project's magnetic dock state, distance/
-  // attraction to its own reserved slot, and whether that slot is currently
-  // blocked by another detached project. This is the single source both the
-  // live tether/marker rendering and the mouseup release decision read from —
-  // it never invents a second, disagreeing notion of "how close is capture."
+  // PR23 product pivot: derives the actively-dragged project's magnetic dock
+  // state and its whole-ellipse projection/attraction toward the shared orbit
+  // ring — not any fixed reserved slot. This is the single source both the
+  // live tether/marker rendering and the mouseup release decision read from,
+  // so they can never disagree about "how close is capture."
   const activeDockingPreview = useMemo(() => {
     if (!draggingNode || draggingNode.type !== 'project') return null;
     const project = projectsById.get(draggingNode.id);
-    const reservedOrigin = animatedCanonicalProjectPositions[draggingNode.id];
-    if (!project || !reservedOrigin) return null;
+    if (!project) return null;
 
     const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
     const crossed = draggingNode.crossedDetachThreshold ?? false;
     const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
 
     let attraction = computeCaptureAttraction(Infinity);
+    let projection: OrbitEllipseProjection | null = null;
     if (crossed || persisted === 'detached') {
       const rawCenter = getProjectVisualCenterIso(project, rawPos);
-      const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
-      const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
-      attraction = computeCaptureAttraction(distanceIso);
+      projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+      attraction = computeCaptureAttraction(projection.distanceIso);
     }
 
     const dockState = deriveDockState({
@@ -461,12 +509,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       isWithinCaptureRadius: attraction.isWithinCaptureRadius,
     });
 
-    const isBlocked = dockState === 'capturing'
-      ? checkCollisions('project', draggingNode.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills).hasCollision
-      : false;
-
-    return { project, reservedOrigin, dockState, attraction, isBlocked, rawPos };
-  }, [draggingNode, projectsById, animatedCanonicalProjectPositions, projectDockState, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
+    return { project, projection, dockState, attraction, rawPos };
+  }, [draggingNode, projectsById, projectDockState, staticOrbitalLattice]);
 
   // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -527,18 +571,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, []);
 
   // PR23: ASSEMBLE/RESET both mean "restore complete canonical orbital
-  // system" — cancel any active drag, cancel any in-flight settle animation
+  // system" — cancel any active drag, cancel any in-flight shared reflow
   // (no 18-project physics pass, this is instant), clear every custom
   // position AND every dock-runtime exception so all projects become docked,
   // then reset phase to 0. Motion resumes only if PR22's pause rules allow it.
   const restoreCanonicalDockMembership = useCallback(() => {
     setDraggingNode(null);
-    cancelDockTransition();
+    cancelOrbitReflow();
     setCustomProjectPositions({});
     setCustomSkillPositions({});
     setProjectDockState({});
+    setInteractiveOrbitOrder(null);
     resetOrbitPhaseToCanonical();
-  }, [cancelDockTransition, resetOrbitPhaseToCanonical]);
+  }, [cancelOrbitReflow, resetOrbitPhaseToCanonical]);
 
   const resetAllPositions = useCallback(() => {
     restoreCanonicalDockMembership();
@@ -548,8 +593,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   // Restores the canonical static orbital lattice by clearing manual overrides
   // and resetting the shared orbit phase to 0. The lattice is now the default
-  // fallback itself (see staticOrbitalLattice/animatedCanonicalProjectPositions
-  // above), so ASSEMBLE no longer needs to copy coordinates into custom state.
+  // fallback itself (see staticOrbitalLattice/dockedProjectPositions above),
+  // so ASSEMBLE no longer needs to copy coordinates into custom state.
   // No snapping/tweening animation for the restore itself — a future PR may add one.
   const handleAssemble = useCallback(() => {
     restoreCanonicalDockMembership();
@@ -557,14 +602,46 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setTimeout(() => setSnapNotice(null), 2400);
   }, [restoreCanonicalDockMembership]);
 
-  const hasCustomPositions = useMemo(() => {
+  const hasCustomLayout = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
-      Object.keys(customSkillPositions).length > 0;
-  }, [customProjectPositions, customSkillPositions]);
+      Object.keys(customSkillPositions).length > 0 ||
+      Object.keys(projectDockState).length > 0 ||
+      interactiveOrbitOrder !== null;
+  }, [customProjectPositions, customSkillPositions, projectDockState, interactiveOrbitOrder]);
 
   // Real-time preview calculation of snapped & collision-free landing spot
   const dragResolution = useMemo(() => {
     if (!draggingNode || !draggingNode.hasMoved) return null;
+
+    if (draggingNode.type === 'project') {
+      if (activeDockingPreview?.dockState !== 'detached') return null;
+      const project = projectsById.get(draggingNode.id);
+      if (!project) return null;
+
+      const wasDocked = resolveProjectDockState(projectDockState, draggingNode.id) === 'docked';
+      const futureOrder = wasDocked
+        ? dockedOrbitOrder.filter(id => id !== draggingNode.id)
+        : dockedOrbitOrder;
+      const dockedProjectsForSweep = futureOrder
+        .map(id => projectsById.get(id))
+        .filter((p): p is ProjectData => Boolean(p));
+      const isCandidateValid = (pos: { x: number; y: number }) =>
+        isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, dockedProjectsForSweep);
+
+      return findNearestValidGridPosition(
+        'project',
+        draggingNode.id,
+        activeDockingPreview.rawPos,
+        effectiveProjectPositions,
+        effectiveSkillPositions,
+        projects,
+        activeSkills,
+        GRID_SNAP_STEP,
+        gridSnapEnabled,
+        isCandidateValid
+      );
+    }
+
     return findNearestValidGridPosition(
       draggingNode.type,
       draggingNode.id,
@@ -576,7 +653,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       GRID_SNAP_STEP,
       gridSnapEnabled
     );
-  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills, gridSnapEnabled]);
+  }, [
+    draggingNode, activeDockingPreview, projectsById, projectDockState,
+    dockedOrbitOrder, staticOrbitalLattice, effectiveProjectPositions,
+    effectiveSkillPositions, projects, activeSkills, gridSnapEnabled
+  ]);
 
   // Real-time raw collision warning if directly hovering over another node
   const liveCollision = useMemo(() => {
@@ -736,26 +817,23 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           rawPos = computeFreeWorldOrigin(baseline.worldPos, freeDeltaX, freeDeltaY);
         }
 
-        // Magnetic capture preview: only once free of resistance, blend the
-        // RENDERED position toward the (live, phase-frozen-by-pause) reserved
-        // slot without ever touching rawPos itself — and never if the target
-        // is currently blocked by another detached project.
+        // Magnetic capture preview (whole-ellipse): only once free of
+        // resistance, project the raw drag position onto the nearest point of
+        // the shared orbit ellipse — at ANY angle, not any fixed slot — and
+        // blend the RENDERED position toward it. rawPos itself is never
+        // touched; there is no "blocked" concept for whole-ellipse capture
+        // since a redistribution-based insertion is always geometrically
+        // valid once the ring's radii are proven sufficient.
         let renderedPos = rawPos;
         if (crossedDetachThreshold) {
           const project = projectsById.get(prev.id);
-          const reservedOrigin = animatedCanonicalProjectPositions[prev.id];
-          if (project && reservedOrigin) {
+          if (project) {
             const rawCenter = getProjectVisualCenterIso(project, rawPos);
-            const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
-            const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
-            const attraction = computeCaptureAttraction(distanceIso);
+            const projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+            const attraction = computeCaptureAttraction(projection.distanceIso);
             if (attraction.isWithinCaptureRadius) {
-              const blocked = checkCollisions(
-                'project', prev.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills
-              ).hasCollision;
-              if (!blocked) {
-                renderedPos = computeMagneticRenderPosition(rawPos, reservedOrigin, attraction.strength);
-              }
+              const projectedOrbitWorldOrigin = getWorldOriginForIsoCenter(project, projection.projectedPoint);
+              renderedPos = computeMagneticRenderPosition(rawPos, projectedOrbitWorldOrigin, attraction.strength);
             }
           }
         }
@@ -806,17 +884,21 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       }
 
       const project = projectsById.get(draggingNode.id);
-      const reservedOrigin = animatedCanonicalProjectPositions[draggingNode.id];
+      if (!project) {
+        setDraggingNode(null);
+        return;
+      }
+
       const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
       const crossed = draggingNode.crossedDetachThreshold ?? false;
       const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
 
       let attraction = computeCaptureAttraction(Infinity);
-      if ((crossed || persisted === 'detached') && project && reservedOrigin) {
+      let projection: OrbitEllipseProjection | null = null;
+      if (crossed || persisted === 'detached') {
         const rawCenter = getProjectVisualCenterIso(project, rawPos);
-        const reservedCenter = getProjectVisualCenterIso(project, reservedOrigin);
-        const distanceIso = Math.hypot(rawCenter.x - reservedCenter.x, rawCenter.y - reservedCenter.y);
-        attraction = computeCaptureAttraction(distanceIso);
+        projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+        attraction = computeCaptureAttraction(projection.distanceIso);
       }
 
       const dockStateAtRelease = deriveDockState({
@@ -826,45 +908,63 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         isWithinCaptureRadius: attraction.isWithinCaptureRadius,
       });
 
-      const isBlocked = dockStateAtRelease === 'capturing' && reservedOrigin
-        ? checkCollisions('project', draggingNode.id, reservedOrigin, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills).hasCollision
-        : false;
+      // Whole-ellipse capture has no "blocked" concept — a redistribution-
+      // based insertion is always geometrically valid by construction.
+      const outcome = resolveReleaseOutcome(dockStateAtRelease, false);
 
-      const outcome = resolveReleaseOutcome(dockStateAtRelease, isBlocked);
+      if (outcome === 'docked') {
+        if (dockStateAtRelease === 'detaching') {
+          // Aborted pull: never actually left the docked ring — no membership
+          // change, just a single-project reflow back to its current slot.
+          commitOrbitReflow(dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
+          setSnapNotice({ message: 'MAGNETIC RELEASE // RETURNING TO SLOT', type: 'snap' });
+          setTimeout(() => setSnapNotice(null), 1800);
+        } else {
+          // Valid capture: insert the returning project at the angular
+          // location it was released over, preserving every other project's
+          // relative order exactly, then redistribute the whole new ring.
+          const theta = projection!.theta;
+          const insertionIndex = resolveOrbitInsertionIndex(theta, orbitPhase, dockedOrbitOrder.length);
+          const newOrder = [...dockedOrbitOrder];
+          newOrder.splice(insertionIndex, 0, draggingNode.id);
 
-      if (outcome === 'docked' && reservedOrigin) {
-        // Magnetic dock has drop priority — this branch runs BEFORE any grid
-        // snap is even considered. Aborted pull and valid redock share the
-        // same settle mechanism; only the duration differs.
-        const duration = dockStateAtRelease === 'detaching' ? ABORTED_PULL_RETURN_MS : REDOCK_DURATION_MS;
-        startSettleTransition(draggingNode.id, draggingNode.currentPos, reservedOrigin, duration);
-        setSnapNotice({
-          message: dockStateAtRelease === 'detaching'
-            ? 'MAGNETIC RELEASE // RETURNING TO SLOT'
-            : 'DOCK TARGET ACQUIRED // REDOCKING',
-          type: 'snap',
-        });
-        setTimeout(() => setSnapNotice(null), 1800);
+          setInteractiveOrbitOrder(newOrder);
+          setCustomProjectPositions(prev => {
+            if (!(draggingNode.id in prev)) return prev;
+            const next = { ...prev };
+            delete next[draggingNode.id];
+            return next;
+          });
+          setProjectDockState(prev => {
+            if (!(draggingNode.id in prev)) return prev;
+            const next = { ...prev };
+            delete next[draggingNode.id];
+            return next;
+          });
+          commitOrbitReflow(newOrder, { [draggingNode.id]: draggingNode.currentPos });
+
+          setSnapNotice({ message: 'DOCK TARGET ACQUIRED // ORBIT REALIGNED', type: 'snap' });
+          setTimeout(() => setSnapNotice(null), 1800);
+        }
       } else {
         // Ordinary free placement: existing grid-snap/collision resolution,
         // persisted as a detached custom position. ADDITIONALLY validated
         // against the future orbital sweep — every project that will still be
-        // docked (i.e. NOT this one and NOT any other already-detached
-        // project, both of which are stationary and already covered by the
-        // ordinary current-position collision check above) keeps orbiting the
-        // full ellipse, so a spot that's clear right now can still be swept
-        // through later. isCandidateValid is an ADDITIONAL gate on top of the
-        // existing expanding grid search — never a second search algorithm.
-        const movingProjects = new Map<string, ProjectData>();
-        for (const p of projects) {
-          if (p.id === draggingNode.id) continue;
-          if (resolveProjectDockState(projectDockState, p.id) === 'detached') continue;
-          movingProjects.set(p.id, p);
-        }
-        const isCandidateValid = project
-          ? (pos: { x: number; y: number }) =>
-              isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, movingProjects)
-          : undefined;
+        // docked (using the CURRENT interactive docked order/count, so this
+        // stays correct for any membership size or visitor-reordered
+        // sequence, not just the original full 18-project ring) keeps
+        // orbiting the full ellipse, so a spot that's clear right now can
+        // still be swept through later. isCandidateValid is an ADDITIONAL
+        // gate on top of the existing expanding grid search — never a second
+        // search algorithm.
+        const wasDocked = persisted === 'docked';
+        const newOrder = wasDocked ? dockedOrbitOrder.filter(id => id !== draggingNode.id) : dockedOrbitOrder;
+        const dockedProjectsForSweep = newOrder
+          .map(id => projectsById.get(id))
+          .filter((p): p is ProjectData => Boolean(p));
+
+        const isCandidateValid = (pos: { x: number; y: number }) =>
+          isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, dockedProjectsForSweep);
 
         const resolved = findNearestValidGridPosition(
           'project', draggingNode.id, rawPos,
@@ -875,6 +975,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         const finalPos = { x: resolved.x, y: resolved.y };
         setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
         setProjectDockState(prev => ({ ...prev, [draggingNode.id]: { state: 'detached' } }));
+
+        if (wasDocked) {
+          setInteractiveOrbitOrder(newOrder);
+          commitOrbitReflow(newOrder);
+        }
+
         if (resolved.wasAdjustedForValidatorOnly) {
           setSnapNotice({ message: 'ORBITAL CLEARANCE // PLACEMENT SHIFTED', type: 'collision' });
           setTimeout(() => setSnapNotice(null), 2500);
@@ -913,8 +1019,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, [
     draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions,
     gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills,
-    projectsById, animatedCanonicalProjectPositions, projectDockState, startSettleTransition,
-    staticOrbitalLattice
+    projectsById, dockedOrbitOrder, projectDockState, commitOrbitReflow,
+    orbitPhase, staticOrbitalLattice
   ]);
 
   // Handle Pan & Drag on canvas surface
@@ -1244,7 +1350,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           <Magnet size={10} />
           <span>GRID SNAP: {gridSnapEnabled ? 'ON (25PX)' : 'OFF'}</span>
         </button>
-        {hasCustomPositions && (
+        {hasCustomLayout && (
           <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1">
             <Move size={10} />
             <span>CUSTOM LAYOUT ACTIVE</span>
@@ -1311,7 +1417,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           <Magnet size={13} />
         </button>
 
-        {hasCustomPositions && (
+        {hasCustomLayout && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1493,9 +1599,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={skill.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
-                  // PR23: one node interaction/settle transition at a time — a
-                  // new drag must never start while another project is mid-settle.
-                  if (activeDockTransitionProjectId) return;
+                  // PR23: one node interaction/reflow at a time — a new drag
+                  // must never start while the project ring is mid-reflow.
+                  if (isOrbitReflowActive) return;
                   setDraggingNode({
                     type: 'skill',
                     id: skill.id,
@@ -1508,7 +1614,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
-                  if (activeDockTransitionProjectId) return;
+                  if (isOrbitReflowActive) return;
                   if (e.touches.length === 1) {
                     setDraggingNode({
                       type: 'skill',
@@ -1739,19 +1845,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const isHovered = hoveredProjectId === project.id;
             const isThisDragging = draggingNode?.type === 'project' && draggingNode.id === project.id;
 
-            // PR23: magnetic docking render state. The actively-dragged project's
-            // dockState comes from activeDockingPreview (the single source shared
-            // with the mouseup release decision); a project mid-settle-animation
-            // is rendered as 'capturing' until the transition completes; every
-            // other project reads its persisted (docked/detached) state.
-            const isThisRedocking = activeDockTransitionProjectId === project.id;
+            // PR23 product pivot: the actively-dragged project's dockState
+            // comes from activeDockingPreview (the single source shared with
+            // the mouseup release decision); every other project simply reads
+            // its persisted (docked/detached) state. A project participating
+            // in a shared orbital reflow needs no separate render-state flag —
+            // it just renders at its interpolated position via getProjectPos.
             const liveDockInfo = isThisDragging ? activeDockingPreview : null;
             const persistedDockState = resolveProjectDockState(projectDockState, project.id);
-            const renderDockState: ProjectDockState = isThisRedocking
-              ? 'capturing'
-              : (liveDockInfo?.dockState ?? persistedDockState);
-            const isDockStateVisible = renderDockState !== 'docked';
-            const isCapturingBlocked = Boolean(liveDockInfo?.dockState === 'capturing' && liveDockInfo.isBlocked);
+            const renderDockState: ProjectDockState = liveDockInfo?.dockState ?? persistedDockState;
 
             const isProjectConnectedToHoveredSkill = hoveredSkillId ? focusedConnectedProjectIds.has(project.id) : (selectedSkillId ? focusedConnectedProjectIds.has(project.id) : false);
             const selectedExp = selectedExperienceId ? activeExperience.find(e => e.id === selectedExperienceId) : null;
@@ -1843,10 +1945,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={project.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
-                  // PR23: one node interaction/settle transition at a time — a
-                  // new drag must never start while another project is mid-settle
-                  // (the settle is only 120-180ms; just let it finish).
-                  if (activeDockTransitionProjectId) return;
+                  // PR23: one node interaction/reflow at a time — a new drag
+                  // must never start while the project ring is mid-reflow.
+                  if (isOrbitReflowActive) return;
                   const startPos = { x: originX, y: originY };
                   const persisted = resolveProjectDockState(projectDockState, project.id);
                   setDraggingNode({
@@ -1869,7 +1970,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
-                  if (activeDockTransitionProjectId) return;
+                  if (isOrbitReflowActive) return;
                   if (e.touches.length === 1) {
                     const startPos = { x: originX, y: originY };
                     const persisted = resolveProjectDockState(projectDockState, project.id);
@@ -2091,51 +2192,48 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   );
                 })()}
 
-                {/* PR23: Reserved orbital slot marker + tether. The slot itself
-                    keeps revolving with the ring even while this project sits
-                    detached — never a duplicate project cube, never another
-                    orbital ellipse, just a small drafting-style diamond mark.
-                    The tether only appears while actively dragging/redocking
-                    (an idle detached project shows the marker alone). */}
-                {isDockStateVisible && (() => {
-                  const reservedSlotOrigin = animatedCanonicalProjectPositions[project.id];
-                  if (!reservedSlotOrigin) return null;
-                  const reservedCenterIso = getProjectVisualCenterIso(project, reservedSlotOrigin);
+                {/* PR23 product pivot: insertion marker + optional tether. No
+                    idle reserved-slot marker anymore — a detached project sits
+                    with no permanent orbital vacancy mark. Only while THIS
+                    project is actively being dragged and has broken free of
+                    dock resistance do we show a small technical marker at the
+                    point on the shared ellipse it would insert at — subtle
+                    outside the capture band, a lime drafting diamond/crosshair
+                    once inside it. */}
+                {isThisDragging && liveDockInfo?.projection && (liveDockInfo.dockState === 'detached' || liveDockInfo.dockState === 'capturing') && (() => {
+                  const projectedPoint = liveDockInfo.projection.projectedPoint;
+                  const isCapturingActive = liveDockInfo.dockState === 'capturing';
                   // Ground-plane center of the CURRENT rendered box — same corners
                   // already computed above for the main structure, so this always
-                  // matches exactly what's on screen (resisted, free-drag, or settling).
+                  // matches exactly what's on screen (free-drag or magnetic blend).
                   const currentCenterIso = {
                     x: (p0_ground.x + p2_ground.x) / 2,
                     y: (p0_ground.y + p2_ground.y) / 2,
                   };
-                  const showTether = isThisDragging || isThisRedocking;
-                  const isCapturingActive = renderDockState === 'capturing' && !isCapturingBlocked;
-                  const markerColor = isCapturingBlocked ? '#E5534E' : isCapturingActive ? '#C3E54E' : '#15150F';
-                  const markerOpacity = isCapturingActive ? 0.9 : isCapturingBlocked ? 0.75 : 0.4;
+                  const markerColor = isCapturingActive ? '#C3E54E' : '#15150F';
+                  const markerOpacity = isCapturingActive ? 0.9 : 0.35;
                   const m = 6;
 
                   return (
                     <g className="pointer-events-none">
-                      {showTether && (
-                        <line
-                          x1={reservedCenterIso.x}
-                          y1={reservedCenterIso.y}
-                          x2={currentCenterIso.x}
-                          y2={currentCenterIso.y}
-                          stroke={isCapturingBlocked ? '#E5534E' : isCapturingActive ? '#C3E54E' : 'rgba(21, 21, 15, 0.5)'}
-                          strokeWidth={isCapturingActive ? 1.1 : 0.8}
-                          strokeDasharray="3 3"
-                          opacity={isCapturingActive ? 0.7 : 0.45}
-                        />
-                      )}
+                      <line
+                        x1={projectedPoint.x}
+                        y1={projectedPoint.y}
+                        x2={currentCenterIso.x}
+                        y2={currentCenterIso.y}
+                        stroke={isCapturingActive ? '#C3E54E' : 'rgba(21, 21, 15, 0.35)'}
+                        strokeWidth={isCapturingActive ? 1.1 : 0.6}
+                        strokeDasharray="3 3"
+                        opacity={isCapturingActive ? 0.7 : 0.3}
+                      />
                       <path
-                        d={`M ${reservedCenterIso.x} ${reservedCenterIso.y - m} L ${reservedCenterIso.x + m} ${reservedCenterIso.y} L ${reservedCenterIso.x} ${reservedCenterIso.y + m} L ${reservedCenterIso.x - m} ${reservedCenterIso.y} Z`}
+                        d={`M ${projectedPoint.x} ${projectedPoint.y - m} L ${projectedPoint.x + m} ${projectedPoint.y} L ${projectedPoint.x} ${projectedPoint.y + m} L ${projectedPoint.x - m} ${projectedPoint.y} Z`}
                         fill="none"
                         stroke={markerColor}
                         strokeWidth={isCapturingActive ? 1.4 : 1}
                         opacity={markerOpacity}
                       />
-                      <circle cx={reservedCenterIso.x} cy={reservedCenterIso.y} r={1.2} fill={markerColor} opacity={markerOpacity} />
+                      <circle cx={projectedPoint.x} cy={projectedPoint.y} r={1.2} fill={markerColor} opacity={markerOpacity} />
                     </g>
                   );
                 })()}

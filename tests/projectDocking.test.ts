@@ -5,29 +5,33 @@ import path from 'node:path';
 import {
   DETACH_THRESHOLD_ISO,
   PULL_RESISTANCE,
-  CAPTURE_RADIUS_ISO,
+  ORBIT_CAPTURE_BAND_ISO,
   MAX_CAPTURE_PULL,
-  REDOCK_DURATION_MS,
   ABORTED_PULL_RETURN_MS,
+  ORBIT_REFLOW_DURATION_MS,
   resolveProjectDockState,
   getProjectVisualCenterIso,
+  getWorldOriginForIsoCenter,
   lerpPoint,
   hasCrossedDetachThreshold,
   computeResistedWorldOrigin,
   computeFreeWorldOrigin,
   computeCaptureAttraction,
   computeMagneticRenderPosition,
+  projectPointOntoOrbitEllipse,
+  resolveOrbitInsertionIndex,
   deriveDockState,
   resolveReleaseOutcome,
-  stepSettleTransition,
+  stepOrbitReflow,
   isDetachedPlacementMotionSafe,
   ORBITAL_CLEARANCE_SAMPLE_COUNT,
   type ProjectDockRuntimeMap,
+  type OrbitReflowTransition,
 } from '../src/utils/projectDocking.ts';
 import { project3DToIso } from '../src/utils/isometricProjection.ts';
 import { getTopologyProjectDimensions, getTopologyProjectVisualBounds } from '../src/utils/projectTopologyGeometry.ts';
-import { assembleTopologyLayout, getNodeBounds, checkAABBOverlap } from '../src/utils/topologyLayout.ts';
-import { getOrbitalProjectPositionAtPhase, isOrbitPauseConditionActive, type OrbitPauseState } from '../src/utils/orbitMotion.ts';
+import { assembleTopologyLayout, checkAABBOverlap, getNodeBounds, type StaticOrbitGeometry } from '../src/utils/topologyLayout.ts';
+import { getDynamicOrbitalPosition, getOrbitalProjectPositionAtPhase, isOrbitPauseConditionActive, type OrbitPauseState } from '../src/utils/orbitMotion.ts';
 import { checkCollisions, findNearestValidGridPosition } from '../src/utils/collision.ts';
 import { GITHUB_SNAPSHOT } from '../src/data/githubSnapshot.generated.ts';
 import { ProjectData, InfrastructureSkill } from '../src/types.ts';
@@ -79,6 +83,12 @@ function generateMockProjects(count: number, customWidths?: number[]): ProjectDa
   });
 }
 
+// A helper that builds a docked order (array of ids, in relative order) plus
+// the projects those ids resolve to, from the first N of a generated set.
+function dockedOrderOf(projects: ProjectData[]): string[] {
+  return projects.map(p => p.id);
+}
+
 // ---------------------------------------------------------------------------
 // A. absent dock-state entry resolves to docked
 // ---------------------------------------------------------------------------
@@ -104,7 +114,6 @@ test('deriveDockState: docked pointer interaction enters detaching', () => {
 });
 
 test('deriveDockState: below-threshold movement remains detaching', () => {
-  // Repeated calls with hasCrossedThresholdThisGesture still false must keep returning 'detaching'.
   for (let i = 0; i < 5; i++) {
     const state = deriveDockState({ persistedState: 'docked', isDragging: true, hasCrossedThresholdThisGesture: false, isWithinCaptureRadius: false });
     assert.equal(state, 'detaching');
@@ -146,12 +155,8 @@ test('resolveReleaseOutcome: aborted pull (still detaching at release) ends dock
   assert.equal(resolveReleaseOutcome('detaching', false), 'docked');
 });
 
-test('resolveReleaseOutcome: normal release away from slot ends detached', () => {
+test('resolveReleaseOutcome: normal release away from the orbit ends detached', () => {
   assert.equal(resolveReleaseOutcome('detached', false), 'detached');
-});
-
-test('resolveReleaseOutcome: a blocked capture falls through to detached free placement', () => {
-  assert.equal(resolveReleaseOutcome('capturing', true), 'detached');
 });
 
 // ---------------------------------------------------------------------------
@@ -163,22 +168,12 @@ test('computeResistedWorldOrigin: iso-space pull magnitude = pointer delta * PUL
   const start = { x: 0, y: 0 };
   const isoDelta = 20;
   const resisted = computeResistedWorldOrigin(start, isoDelta, 0);
-  // Re-project the resulting world delta back into iso space to measure the
-  // ACTUAL visual displacement produced, rather than assuming world-space
-  // magnitude equals iso-space magnitude (the projection is not an isometry).
   const resistedIso = project3DToIso(resisted.x, resisted.y, 0);
   const magnitude = Math.hypot(resistedIso.x, resistedIso.y);
   assert.ok(Math.abs(magnitude - isoDelta * PULL_RESISTANCE) < 1e-9, `expected ~${isoDelta * PULL_RESISTANCE}, got ${magnitude}`);
 });
 
 test('computeResistedWorldOrigin: resistance is independent of viewport zoom (the function only ever sees an already-normalized iso-space delta)', () => {
-  // The component divides the raw pointer delta by viewport.zoom BEFORE calling
-  // this function — computeResistedWorldOrigin itself takes no zoom parameter,
-  // so identical iso-space deltas always produce identical results regardless
-  // of what zoom the user is actually at. This is the whole zoom-consistency
-  // contract: the SAME physical/logical drag at 0.5x and 1.0x normalizes to
-  // the SAME iso-space delta, and is therefore guaranteed to produce the SAME
-  // magnetic result.
   const start = { x: 100, y: 200 };
   const a = computeResistedWorldOrigin(start, 20, -10);
   const b = computeResistedWorldOrigin(start, 20, -10);
@@ -193,46 +188,34 @@ test('breakaway continuity: rendered position does not jump when the detach thre
   const start = { x: 0, y: 0 };
   const epsilon = 0.05;
 
-  // Movement immediately BEFORE the threshold: still resisted.
   const justBefore = computeResistedWorldOrigin(start, DETACH_THRESHOLD_ISO - epsilon, 0);
-
-  // Movement immediately AT/AFTER the threshold: this becomes the breakaway baseline.
   assert.ok(hasCrossedDetachThreshold(DETACH_THRESHOLD_ISO + epsilon, 0));
   const atCrossing = computeResistedWorldOrigin(start, DETACH_THRESHOLD_ISO + epsilon, 0);
 
   const jumpDistance = Math.hypot(atCrossing.x - justBefore.x, atCrossing.y - justBefore.y);
-  // A genuine jump (28% -> 100% of pointer displacement) would be on the order
-  // of DETACH_THRESHOLD_ISO * (1 - PULL_RESISTANCE) in world units — many times
-  // larger than what two epsilon-apart resisted samples can differ by.
   assert.ok(jumpDistance < 1, `breakaway produced a visible jump of ${jumpDistance} world units`);
 
-  // Free drag must establish a NEW baseline at breakaway: zero further pointer
-  // movement from the crossing instant must render EXACTLY at the captured position.
   const immediatelyAfterBreakaway = computeFreeWorldOrigin(atCrossing, 0, 0);
   assert.deepEqual(immediatelyAfterBreakaway, atCrossing);
 });
 
 test('breakaway continuity: this transition happens exactly once per gesture (caller-owned sticky flag, not re-derived every tick)', () => {
-  // Once the caller has recorded crossedDetachThreshold = true, subsequent
-  // calls to hasCrossedDetachThreshold are never consulted again for THIS
-  // gesture — deriveDockState never returns to 'detaching' once persistedState
-  // is no longer 'docked' or the sticky flag is true.
   const afterCrossing = deriveDockState({ persistedState: 'docked', isDragging: true, hasCrossedThresholdThisGesture: true, isWithinCaptureRadius: false });
   assert.notEqual(afterCrossing, 'detaching');
 });
 
 // ---------------------------------------------------------------------------
-// Capture tests
+// Capture attraction tests
 // ---------------------------------------------------------------------------
 
-test('computeCaptureAttraction: beyond the capture radius yields zero strength (detached, not capturing)', () => {
-  const result = computeCaptureAttraction(CAPTURE_RADIUS_ISO + 1);
+test('computeCaptureAttraction: beyond the capture band yields zero strength (detached, not capturing)', () => {
+  const result = computeCaptureAttraction(ORBIT_CAPTURE_BAND_ISO + 1);
   assert.equal(result.isWithinCaptureRadius, false);
   assert.equal(result.strength, 0);
 });
 
-test('computeCaptureAttraction: just inside the radius yields weak attraction; near the target yields stronger attraction; monotonic throughout', () => {
-  const samples = [CAPTURE_RADIUS_ISO - 1, CAPTURE_RADIUS_ISO * 0.75, CAPTURE_RADIUS_ISO * 0.5, CAPTURE_RADIUS_ISO * 0.25, 5, 0.5];
+test('computeCaptureAttraction: just inside the band yields weak attraction; near the target yields stronger attraction; monotonic throughout', () => {
+  const samples = [ORBIT_CAPTURE_BAND_ISO - 1, ORBIT_CAPTURE_BAND_ISO * 0.75, ORBIT_CAPTURE_BAND_ISO * 0.5, ORBIT_CAPTURE_BAND_ISO * 0.25, 5, 0.5];
   let previousStrength = -1;
   for (const distance of samples) {
     const result = computeCaptureAttraction(distance);
@@ -243,17 +226,17 @@ test('computeCaptureAttraction: just inside the radius yields weak attraction; n
   assert.ok(previousStrength > 0);
 });
 
-test('computeCaptureAttraction: at distance 0, attraction caps at MAX_CAPTURE_PULL exactly (preview never fully snaps — only the settle animation does)', () => {
+test('computeCaptureAttraction: at distance 0, attraction caps at MAX_CAPTURE_PULL exactly (preview never fully snaps)', () => {
   assert.equal(MAX_CAPTURE_PULL, 0.40);
   const result = computeCaptureAttraction(0);
   assert.equal(result.proximity, 1);
   assert.equal(result.strength, MAX_CAPTURE_PULL);
 });
 
-test('computeCaptureAttraction: no discontinuity exactly at the capture radius boundary', () => {
-  const justInside = computeCaptureAttraction(CAPTURE_RADIUS_ISO - 0.001);
-  const exactlyAt = computeCaptureAttraction(CAPTURE_RADIUS_ISO);
-  const justOutside = computeCaptureAttraction(CAPTURE_RADIUS_ISO + 0.001);
+test('computeCaptureAttraction: no discontinuity exactly at the capture band boundary', () => {
+  const justInside = computeCaptureAttraction(ORBIT_CAPTURE_BAND_ISO - 0.001);
+  const exactlyAt = computeCaptureAttraction(ORBIT_CAPTURE_BAND_ISO);
+  const justOutside = computeCaptureAttraction(ORBIT_CAPTURE_BAND_ISO + 0.001);
   assert.ok(justInside.strength < 0.001);
   assert.equal(exactlyAt.strength, 0);
   assert.equal(justOutside.strength, 0);
@@ -263,111 +246,408 @@ test('computeCaptureAttraction: no discontinuity exactly at the capture radius b
 
 test('computeMagneticRenderPosition: never teleports — blends smoothly and equals raw position at zero strength', () => {
   const raw = { x: 100, y: 200 };
-  const reserved = { x: 300, y: 250 };
-  assert.deepEqual(computeMagneticRenderPosition(raw, reserved, 0), raw);
-  const blended = computeMagneticRenderPosition(raw, reserved, 0.2);
-  assert.deepEqual(blended, lerpPoint(raw, reserved, 0.2));
-  // Blended point must lie strictly between raw and reserved, never past either.
-  assert.ok(blended.x > raw.x && blended.x < reserved.x);
+  const projectedOrbitPoint = { x: 300, y: 250 };
+  assert.deepEqual(computeMagneticRenderPosition(raw, projectedOrbitPoint, 0), raw);
+  const blended = computeMagneticRenderPosition(raw, projectedOrbitPoint, 0.2);
+  assert.deepEqual(blended, lerpPoint(raw, projectedOrbitPoint, 0.2));
+  assert.ok(blended.x > raw.x && blended.x < projectedOrbitPoint.x);
 });
 
 // ---------------------------------------------------------------------------
-// Slot movement: reserved slot moves with the orbit; a detached project does not
+// Whole-ellipse orbit projection: capture works at ANY angle, not a fixed slot.
 // ---------------------------------------------------------------------------
 
-test('slot movement: the reserved slot position changes with orbit phase; a detached custom position does not depend on phase at all', () => {
-  const projects = generateMockProjects(10);
-  const skills = generateMockSkills(5);
-  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
-  const slot = orbitGeometry.slots[0];
-  const project = projects.find(p => p.id === slot.projectId)!;
+test('projectPointOntoOrbitEllipse: projects onto the top, right, bottom, and left of the ellipse', () => {
+  const orbitGeometry = { centerIso: { x: 0, y: 0 }, radiusX: 100, radiusY: 50 };
 
-  const positionAtPhaseA = getOrbitalProjectPositionAtPhase(project, slot, orbitGeometry, 0);
-  const positionAtPhaseB = getOrbitalProjectPositionAtPhase(project, slot, orbitGeometry, Math.PI / 2);
-  assert.notDeepEqual(positionAtPhaseA, positionAtPhaseB, 'The reserved slot must move as orbit phase advances');
+  const top = projectPointOntoOrbitEllipse({ x: 0, y: -200 }, orbitGeometry);
+  assert.ok(Math.abs(top.projectedPoint.x) < 1e-6);
+  assert.ok(Math.abs(top.projectedPoint.y - (-50)) < 1e-6);
 
-  // A detached project's persisted position is just a plain {x,y} — nothing
-  // about its representation is a function of phase, so it is definitionally
-  // fixed regardless of how far the reserved slot has moved.
-  const detachedCustomPosition = { x: -500, y: 300 };
-  assert.deepEqual(detachedCustomPosition, { x: -500, y: 300 });
+  const right = projectPointOntoOrbitEllipse({ x: 400, y: 0 }, orbitGeometry);
+  assert.ok(Math.abs(right.projectedPoint.x - 100) < 1e-6);
+  assert.ok(Math.abs(right.projectedPoint.y) < 1e-6);
+
+  const bottom = projectPointOntoOrbitEllipse({ x: 0, y: 300 }, orbitGeometry);
+  assert.ok(Math.abs(bottom.projectedPoint.x) < 1e-6);
+  assert.ok(Math.abs(bottom.projectedPoint.y - 50) < 1e-6);
+
+  const left = projectPointOntoOrbitEllipse({ x: -900, y: 0 }, orbitGeometry);
+  assert.ok(Math.abs(left.projectedPoint.x - (-100)) < 1e-6);
+  assert.ok(Math.abs(left.projectedPoint.y) < 1e-6);
 });
 
-// ---------------------------------------------------------------------------
-// Mandatory redock handoff test: zero position jump at handoff
-// ---------------------------------------------------------------------------
-
-test('redock handoff: settle animation final position exactly equals the canonical rendered position after the override is removed', () => {
-  const projects = generateMockProjects(8);
-  const skills = generateMockSkills(6);
-  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
-  const slot = orbitGeometry.slots[0];
-  const project = projects.find(p => p.id === slot.projectId)!;
-  const frozenPhase = 2.1; // orbit is paused throughout the whole docking gesture, so this is fixed
-
-  const reservedPosition = getOrbitalProjectPositionAtPhase(project, slot, orbitGeometry, frozenPhase);
-
-  const transition = { projectId: project.id, fromPos: { x: -900, y: 400 }, toPos: reservedPosition, durationMs: REDOCK_DURATION_MS, startTimestamp: 0 };
-  const finalStep = stepSettleTransition(transition, REDOCK_DURATION_MS); // exactly at/after duration -> complete
-  assert.equal(finalStep.isComplete, true);
-
-  // "Remove the custom override" == the canonical position is re-derived at
-  // the SAME frozen phase — must be identical to the settle animation's final position.
-  const canonicalAfterHandoff = getOrbitalProjectPositionAtPhase(project, slot, orbitGeometry, frozenPhase);
-  assert.deepEqual(finalStep.position, canonicalAfterHandoff);
+test('projectPointOntoOrbitEllipse: works at arbitrary diagonal angles too, always landing exactly on the ellipse', () => {
+  const orbitGeometry = { centerIso: { x: 50, y: -30 }, radiusX: 200, radiusY: 120 };
+  for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1], [3, 1], [-2, 5]]) {
+    const point = { x: orbitGeometry.centerIso.x + dx * 500, y: orbitGeometry.centerIso.y + dy * 500 };
+    const { projectedPoint } = projectPointOntoOrbitEllipse(point, orbitGeometry);
+    const normalized =
+      ((projectedPoint.x - orbitGeometry.centerIso.x) ** 2) / (orbitGeometry.radiusX ** 2) +
+      ((projectedPoint.y - orbitGeometry.centerIso.y) ** 2) / (orbitGeometry.radiusY ** 2);
+    assert.ok(Math.abs(normalized - 1) < 1e-9, `projected point must lie exactly on the ellipse (dx=${dx},dy=${dy})`);
+  }
 });
 
-test('stepSettleTransition: elapsed-time based ease-out with no overshoot, reaching exactly toPos at/after the duration', () => {
-  const transition = { projectId: 'p', fromPos: { x: 0, y: 0 }, toPos: { x: 100, y: 0 }, durationMs: ABORTED_PULL_RETURN_MS, startTimestamp: 1000 };
-  const midStep = stepSettleTransition(transition, 1000 + ABORTED_PULL_RETURN_MS / 2);
-  assert.ok(midStep.position.x > 0 && midStep.position.x < 100, 'must be strictly between start and end mid-flight');
-  assert.ok(!midStep.isComplete);
-
-  const overStep = stepSettleTransition(transition, 1000 + ABORTED_PULL_RETURN_MS + 50);
-  assert.equal(overStep.isComplete, true);
-  assert.deepEqual(overStep.position, transition.toPos);
-
-  // No overshoot at any sampled point.
-  for (let t = 0; t <= ABORTED_PULL_RETURN_MS; t += 10) {
-    const step = stepSettleTransition(transition, 1000 + t);
-    assert.ok(step.position.x >= -1e-6 && step.position.x <= 100 + 1e-6, `overshoot detected at t=${t}: x=${step.position.x}`);
+test('capture band works uniformly around the entire ellipse, not just at any one project\'s original slot', () => {
+  const orbitGeometry = { centerIso: { x: 0, y: 0 }, radiusX: 300, radiusY: 200 };
+  const angles = [0, Math.PI / 4, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 2.1, -1.4];
+  for (const angle of angles) {
+    const onEllipse = { x: orbitGeometry.radiusX * Math.cos(angle), y: orbitGeometry.radiusY * Math.sin(angle) };
+    const nudged = { x: onEllipse.x * 1.02, y: onEllipse.y * 1.02 }; // just outside, small nudge
+    const { distanceIso } = projectPointOntoOrbitEllipse(nudged, orbitGeometry);
+    const attraction = computeCaptureAttraction(distanceIso);
+    assert.ok(attraction.isWithinCaptureRadius, `a small nudge off the ellipse at angle=${angle} must remain within the capture band`);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Mandatory blocked-target test (reuses existing collision.ts infrastructure)
+// resolveOrbitInsertionIndex: phase compensation + relative-order preservation
 // ---------------------------------------------------------------------------
 
-test('blocked redock: a reserved slot occupied by another detached project rejects capture via the existing checkCollisions infrastructure', () => {
-  const projectA = generateMockProjects(1)[0];
-  projectA.id = 'project-A';
-  const projectB = generateMockProjects(1)[0];
-  projectB.id = 'project-B';
-  const projects = [projectA, projectB];
+test('resolveOrbitInsertionIndex: a point at slot 0\'s own angle inserts after it (index 1) — ties resolve consistently', () => {
+  const N = 5;
+  const step = (2 * Math.PI) / N;
+  const theta = -Math.PI / 2; // exactly index 0's angle at phase 0
+  const index = resolveOrbitInsertionIndex(theta, 0, N);
+  assert.equal(index, 1);
+  void step;
+});
 
-  const reservedOriginA = { x: 0, y: 0 };
-  const dimsA = getTopologyProjectDimensions(projectA);
+test('resolveOrbitInsertionIndex: matches the spec\'s own worked example — dropping between E and F inserts exactly there, preserving every other project\'s relative order', () => {
+  // current docked order: A B D E F (E=index3, F=index4 at phase 0)
+  const order = ['A', 'B', 'D', 'E', 'F'];
+  const N = order.length;
+  const angleOf = (i: number) => -Math.PI / 2 + (i / N) * 2 * Math.PI;
+  const thetaBetweenEandF = (angleOf(3) + angleOf(4)) / 2; // strictly between E and F
 
-  // Project B is manually detached such that its footprint occupies A's reserved slot.
-  const effectiveProjectPositions: Record<string, { x: number; y: number }> = {
-    [projectA.id]: { x: 500, y: 500 }, // A is currently elsewhere, mid-drag toward its own slot
-    [projectB.id]: { x: reservedOriginA.x + dimsA.width / 2, y: reservedOriginA.y + dimsA.depth / 2 },
+  const insertionIndex = resolveOrbitInsertionIndex(thetaBetweenEandF, 0, N);
+  const newOrder = [...order];
+  newOrder.splice(insertionIndex, 0, 'C');
+
+  assert.deepEqual(newOrder, ['A', 'B', 'D', 'E', 'C', 'F'], 'C must land strictly between E and F, matching the spec example exactly');
+});
+
+test('resolveOrbitInsertionIndex: accounts for orbitPhase — the same absolute visual angle produces different logical insertion points as the ring rotates', () => {
+  const N = 4;
+  const absoluteTheta = 0; // fixed visual angle
+  const indexAtPhase0 = resolveOrbitInsertionIndex(absoluteTheta, 0, N);
+  const indexAtPhaseQuarterTurn = resolveOrbitInsertionIndex(absoluteTheta, Math.PI / 2, N);
+  assert.notEqual(indexAtPhase0, indexAtPhaseQuarterTurn, 'rotating the ring by a quarter turn must change which logical gap a fixed visual angle falls into');
+});
+
+test('resolveOrbitInsertionIndex: subtracting the CORRECT frozen phase recovers the same logical insertion point regardless of how far the ring had rotated', () => {
+  const N = 6;
+  const order = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5'];
+  const angleOf = (i: number, phase: number) => -Math.PI / 2 + (i / N) * 2 * Math.PI + phase;
+
+  for (const phase of [0, 0.7, Math.PI, 4.2, -1.9]) {
+    const thetaBetween2and3 = (angleOf(2, phase) + angleOf(3, phase)) / 2;
+    const insertionIndex = resolveOrbitInsertionIndex(thetaBetween2and3, phase, N);
+    const newOrder = [...order];
+    newOrder.splice(insertionIndex, 0, 'NEW');
+    assert.deepEqual(newOrder, ['P0', 'P1', 'P2', 'NEW', 'P3', 'P4', 'P5'], `phase=${phase} must resolve to the same logical gap`);
+  }
+});
+
+test('resolveOrbitInsertionIndex: index 0 request wraps to the empty-ring default and general results always stay in [0, N]', () => {
+  assert.equal(resolveOrbitInsertionIndex(0, 0, 0), 0);
+  const N = 7;
+  for (let s = 0; s < 72; s++) {
+    const theta = (s / 72) * 2 * Math.PI - Math.PI;
+    const index = resolveOrbitInsertionIndex(theta, 0.3, N);
+    assert.ok(index >= 0 && index <= N, `index ${index} out of [0, ${N}] range at theta=${theta}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// getDynamicOrbitalPosition: canonical/interactive unification, redistribution
+// ---------------------------------------------------------------------------
+
+test('getDynamicOrbitalPosition: at full membership (index == canonical slot index, N == total), matches the canonical per-slot formula exactly', () => {
+  const projects = generateMockProjects(10);
+  const skills = generateMockSkills(5);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+
+  for (const slot of orbitGeometry.slots) {
+    const project = projects.find(p => p.id === slot.projectId)!;
+    const phase = 0.85;
+    const dynamicPos = getDynamicOrbitalPosition(project, slot.slotIndex, orbitGeometry.slots.length, orbitGeometry, phase);
+    const canonicalPos = getOrbitalProjectPositionAtPhase(project, slot, orbitGeometry, phase);
+    assert.ok(Math.abs(dynamicPos.x - canonicalPos.x) < 1e-6, `x mismatch for slot ${slot.slotIndex}`);
+    assert.ok(Math.abs(dynamicPos.y - canonicalPos.y) < 1e-6, `y mismatch for slot ${slot.slotIndex}`);
+  }
+
+  const slot0 = orbitGeometry.slots[0];
+  const project0 = projects.find(p => p.id === slot0.projectId)!;
+  const atPhaseZero = getDynamicOrbitalPosition(project0, slot0.slotIndex, orbitGeometry.slots.length, orbitGeometry, 0);
+  assert.ok(Math.abs(atPhaseZero.x - slot0.worldX) < 1e-6);
+  assert.ok(Math.abs(atPhaseZero.y - slot0.worldY) < 1e-6);
+});
+
+test('getDynamicOrbitalPosition: canonical order is deterministic — same inputs always produce the same position', () => {
+  const projects = generateMockProjects(8);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const a = getDynamicOrbitalPosition(projects[3], 3, 8, orbitGeometry, 1.2);
+  const b = getDynamicOrbitalPosition(projects[3], 3, 8, orbitGeometry, 1.2);
+  assert.deepEqual(a, b);
+});
+
+test('getDynamicOrbitalPosition: detaching one project removes only that identity — remaining relative order stays identical and produces exact 2π/(N-1) spacing', () => {
+  const projects = generateMockProjects(6);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const fullOrder = orbitGeometry.slots.map(s => s.projectId).sort((a, b) =>
+    orbitGeometry.slots.find(s => s.projectId === a)!.slotIndex - orbitGeometry.slots.find(s => s.projectId === b)!.slotIndex
+  );
+
+  const detachedId = fullOrder[2];
+  const remainingOrder = fullOrder.filter(id => id !== detachedId);
+  assert.equal(remainingOrder.length, 5);
+  // Relative order of every OTHER identity must be unchanged (no resort).
+  assert.deepEqual(remainingOrder, fullOrder.filter(id => id !== detachedId));
+
+  const angleStep = (2 * Math.PI) / remainingOrder.length;
+  for (let i = 0; i < remainingOrder.length; i++) {
+    const project = projects.find(p => p.id === remainingOrder[i])!;
+    const pos = getDynamicOrbitalPosition(project, i, remainingOrder.length, orbitGeometry, 0);
+    const expectedAngle = -Math.PI / 2 + i * angleStep;
+    const expectedIso = {
+      x: orbitGeometry.centerIso.x + orbitGeometry.radiusX * Math.cos(expectedAngle),
+      y: orbitGeometry.centerIso.y + orbitGeometry.radiusY * Math.sin(expectedAngle),
+    };
+    const actualIso = project3DToIso(pos.x + getTopologyProjectDimensions(project).width / 2, pos.y + getTopologyProjectDimensions(project).depth / 2, 0);
+    assert.ok(Math.abs(actualIso.x - expectedIso.x) < 1e-6, `iso x mismatch at index ${i}`);
+    assert.ok(Math.abs(actualIso.y - expectedIso.y) < 1e-6, `iso y mismatch at index ${i}`);
+  }
+});
+
+test('getDynamicOrbitalPosition: the SAME fixed ellipse (center/radii) is reused after membership changes — the ring never contracts or expands', () => {
+  const projects = generateMockProjects(6);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const posAt6 = getDynamicOrbitalPosition(projects[0], 0, 6, orbitGeometry, 0);
+  const posAt5 = getDynamicOrbitalPosition(projects[0], 0, 5, orbitGeometry, 0);
+  // Both must be exactly on the SAME ellipse (same center/radii) — only the
+  // angular position (governed by N) differs, never the ellipse's shape.
+  const isoAt6 = project3DToIso(posAt6.x + getTopologyProjectDimensions(projects[0]).width / 2, posAt6.y + getTopologyProjectDimensions(projects[0]).depth / 2, 0);
+  const isoAt5 = project3DToIso(posAt5.x + getTopologyProjectDimensions(projects[0]).width / 2, posAt5.y + getTopologyProjectDimensions(projects[0]).depth / 2, 0);
+  const onEllipse = (p: { x: number; y: number }) =>
+    ((p.x - orbitGeometry.centerIso.x) ** 2) / (orbitGeometry.radiusX ** 2) + ((p.y - orbitGeometry.centerIso.y) ** 2) / (orbitGeometry.radiusY ** 2);
+  assert.ok(Math.abs(onEllipse(isoAt6) - 1) < 1e-9);
+  assert.ok(Math.abs(onEllipse(isoAt5) - 1) < 1e-9);
+  // Index 0 sits at the same base angle (-π/2) regardless of N, so both are identical.
+  assert.ok(Math.abs(isoAt6.x - isoAt5.x) < 1e-6 && Math.abs(isoAt6.y - isoAt5.y) < 1e-6);
+});
+
+test('getDynamicOrbitalPosition: reinserting a project (N-1 -> N) yields exact 2π/N spacing with no empty dedicated slot left behind', () => {
+  const projects = generateMockProjects(6);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const order = orbitGeometry.slots.slice().sort((a, b) => a.slotIndex - b.slotIndex).map(s => s.projectId);
+
+  // detach index 2, then reinsert at the same spot -> back to 6, exact 2π/6 spacing, no gap.
+  const reduced = order.filter((_, i) => i !== 2);
+  const reinserted = [...reduced];
+  reinserted.splice(2, 0, order[2]);
+  assert.deepEqual(reinserted, order, 'reinserting at the same logical position must exactly reproduce the original order');
+
+  const angleStep = (2 * Math.PI) / reinserted.length;
+  for (let i = 0; i < reinserted.length; i++) {
+    const project = projects.find(p => p.id === reinserted[i])!;
+    const pos = getDynamicOrbitalPosition(project, i, reinserted.length, orbitGeometry, 0);
+    const dims = getTopologyProjectDimensions(project);
+    const iso = project3DToIso(pos.x + dims.width / 2, pos.y + dims.depth / 2, 0);
+    const expectedAngle = -Math.PI / 2 + i * angleStep;
+    assert.ok(Math.abs(iso.x - (orbitGeometry.centerIso.x + orbitGeometry.radiusX * Math.cos(expectedAngle))) < 1e-6);
+    assert.ok(Math.abs(iso.y - (orbitGeometry.centerIso.y + orbitGeometry.radiusY * Math.sin(expectedAngle))) < 1e-6);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Shared orbital reflow transition (stepOrbitReflow) — ONE eased progress
+// value applied to every affected project's position at once.
+// ---------------------------------------------------------------------------
+
+test('stepOrbitReflow: elapsed-time based ease-out with no overshoot, reaching exactly toPositions at/after the duration', () => {
+  const transition: OrbitReflowTransition = {
+    fromPositions: { a: { x: 0, y: 0 } },
+    toPositions: { a: { x: 100, y: 0 } },
+    durationMs: ABORTED_PULL_RETURN_MS,
+    startTimestamp: 1000,
   };
+  const midStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS / 2);
+  assert.ok(midStep.positions.a.x > 0 && midStep.positions.a.x < 100, 'must be strictly between start and end mid-flight');
+  assert.ok(!midStep.isComplete);
 
-  const blockCheck = checkCollisions('project', projectA.id, reservedOriginA, effectiveProjectPositions, {}, projects, []);
-  assert.equal(blockCheck.hasCollision, true, 'Redock target occupied by another detached project must be reported as blocked');
+  const overStep = stepOrbitReflow(transition, 1000 + ABORTED_PULL_RETURN_MS + 50);
+  assert.equal(overStep.isComplete, true);
+  assert.deepEqual(overStep.positions, transition.toPositions);
 
-  // Normal free-placement behavior remains available regardless (checkCollisions
-  // is a plain query — it never prevents ordinary dragging/dropping elsewhere).
-  const elsewhereCheck = checkCollisions('project', projectA.id, { x: 900, y: 900 }, effectiveProjectPositions, {}, projects, []);
-  assert.equal(elsewhereCheck.hasCollision, false);
+  for (let t = 0; t <= ABORTED_PULL_RETURN_MS; t += 10) {
+    const step = stepOrbitReflow(transition, 1000 + t);
+    assert.ok(step.positions.a.x >= -1e-6 && step.positions.a.x <= 100 + 1e-6, `overshoot detected at t=${t}: x=${step.positions.a.x}`);
+  }
+});
+
+test('stepOrbitReflow: every affected project shares the EXACT SAME eased progress value — no project ever lags behind another', () => {
+  const transition: OrbitReflowTransition = {
+    fromPositions: { a: { x: 0, y: 0 }, b: { x: 0, y: 100 }, c: { x: -50, y: -50 } },
+    toPositions: { a: { x: 200, y: 0 }, b: { x: 0, y: 400 }, c: { x: 150, y: -50 } },
+    durationMs: ORBIT_REFLOW_DURATION_MS,
+    startTimestamp: 0,
+  };
+  const step = stepOrbitReflow(transition, ORBIT_REFLOW_DURATION_MS * 0.4);
+  const tA = (step.positions.a.x - 0) / (200 - 0);
+  const tB = (step.positions.b.y - 100) / (400 - 100);
+  const tC = (step.positions.c.x - (-50)) / (150 - (-50));
+  assert.ok(Math.abs(tA - tB) < 1e-9 && Math.abs(tB - tC) < 1e-9, 'all three projects must interpolate by the identical fraction at any given tick');
+  assert.ok(Math.abs(tA - step.progress) < 1e-9, 'per-project fraction must equal the single shared progress value');
+});
+
+test('stepOrbitReflow: with no startTimestamp yet (first tick), holds fromPositions with zero progress rather than jumping ahead', () => {
+  const transition: OrbitReflowTransition = {
+    fromPositions: { a: { x: 5, y: 5 } },
+    toPositions: { a: { x: 500, y: 500 } },
+    durationMs: 220,
+    startTimestamp: null,
+  };
+  const result = stepOrbitReflow(transition, 12345);
+  assert.deepEqual(result.positions, transition.fromPositions);
+  assert.equal(result.progress, 0);
+  assert.equal(result.isComplete, false);
+});
+
+// ---------------------------------------------------------------------------
+// isDetachedPlacementMotionSafe — array-based docked order (dynamic pivot)
+// ---------------------------------------------------------------------------
+
+function buildSmallOrbitScenario() {
+  const projects = generateMockProjects(5);
+  const skills = generateMockSkills(4);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const dockedOrder = dockedOrderOf(projects);
+
+  const currentPositions: Record<string, { x: number; y: number }> = {};
+  for (let i = 0; i < dockedOrder.length; i++) {
+    const p = projects.find(pr => pr.id === dockedOrder[i])!;
+    currentPositions[p.id] = getDynamicOrbitalPosition(p, i, dockedOrder.length, orbitGeometry, 0);
+  }
+
+  const candidateProject = { ...generateMockProjects(1)[0], id: 'project-detached-candidate' };
+
+  let candidateOrigin: { x: number; y: number } | null = null;
+  for (let s = 1; s < ORBITAL_CLEARANCE_SAMPLE_COUNT; s++) {
+    const phase = (s / ORBITAL_CLEARANCE_SAMPLE_COUNT) * 2 * Math.PI;
+    const origin = getDynamicOrbitalPosition(candidateProject, 0, dockedOrder.length, orbitGeometry, phase);
+    const check = checkCollisions('project', candidateProject.id, origin, currentPositions, {}, projects, []);
+    if (!check.hasCollision) {
+      candidateOrigin = origin;
+      break;
+    }
+  }
+  assert.ok(candidateOrigin, 'test setup: must find at least one sampled phase where the candidate is current-safe');
+
+  const dockedProjectsForSweep = dockedOrder.map(id => projects.find(p => p.id === id)!);
+
+  return { projects, skills, orbitGeometry, currentPositions, candidateProject, candidateOrigin: candidateOrigin!, dockedProjectsForSweep };
+}
+
+test('delayed-collision regression: a candidate that is collision-free RIGHT NOW is still rejected because a docked project sweeps through it later', () => {
+  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, dockedProjectsForSweep } = buildSmallOrbitScenario();
+
+  const currentCheck = checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []);
+  assert.equal(currentCheck.hasCollision, false, 'The candidate must be genuinely collision-free against the CURRENT (phase-frozen) orbit positions');
+
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, dockedProjectsForSweep);
+  assert.equal(isSafe, false, 'A point exactly on the shared ellipse must be rejected — every docked project eventually sweeps through every point on the track');
+});
+
+test('delayed-collision regression: a sufficiently separated detached position is accepted as motion-safe', () => {
+  const { orbitGeometry, candidateProject, dockedProjectsForSweep } = buildSmallOrbitScenario();
+  const farAwayOrigin = {
+    x: orbitGeometry.centerIso.x + orbitGeometry.radiusX * 20,
+    y: orbitGeometry.centerIso.y + orbitGeometry.radiusY * 20,
+  };
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, farAwayOrigin, orbitGeometry, dockedProjectsForSweep);
+  assert.equal(isSafe, true, 'A position far outside the entire orbit must never be rejected');
+});
+
+test('delayed-collision regression: an EMPTY docked order (nothing left orbiting) makes any candidate trivially motion-safe', () => {
+  const { candidateProject, candidateOrigin, orbitGeometry } = buildSmallOrbitScenario();
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, []);
+  assert.equal(isSafe, true, 'An empty docked order must never reject any candidate');
+});
+
+test('isDetachedPlacementMotionSafe: uses INDEX within the supplied docked order, not any fixed canonical slot — stays correct for any membership size', () => {
+  // Same candidate/origin, but with only 3 of the 5 projects still docked (as
+  // if 2 had already been detached) — the sweep must reflect 3-way spacing.
+  const { projects, orbitGeometry, candidateProject } = buildSmallOrbitScenario();
+  const threeDocked = projects.slice(0, 3);
+  const currentPositions: Record<string, { x: number; y: number }> = {};
+  for (let i = 0; i < threeDocked.length; i++) {
+    currentPositions[threeDocked[i].id] = getDynamicOrbitalPosition(threeDocked[i], i, threeDocked.length, orbitGeometry, 0);
+  }
+
+  let candidateOrigin: { x: number; y: number } | null = null;
+  for (let s = 1; s < ORBITAL_CLEARANCE_SAMPLE_COUNT; s++) {
+    const phase = (s / ORBITAL_CLEARANCE_SAMPLE_COUNT) * 2 * Math.PI;
+    const origin = getDynamicOrbitalPosition(candidateProject, 0, threeDocked.length, orbitGeometry, phase);
+    if (!checkCollisions('project', candidateProject.id, origin, currentPositions, {}, projects, []).hasCollision) {
+      candidateOrigin = origin;
+      break;
+    }
+  }
+  assert.ok(candidateOrigin);
+  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin!, orbitGeometry, threeDocked);
+  assert.equal(isSafe, false, 'A 3-way sweep must still catch the same class of delayed collision');
+});
+
+// ---------------------------------------------------------------------------
+// Search resolution: the EXISTING findNearestValidGridPosition expanding-ring
+// search is reused, not duplicated — isCandidateValid is an additional gate.
+// ---------------------------------------------------------------------------
+
+test('search resolution: findNearestValidGridPosition rejects a current-safe-but-future-unsafe candidate and continues through the EXISTING search to a position safe on BOTH counts', () => {
+  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, dockedProjectsForSweep } = buildSmallOrbitScenario();
+
+  const isCandidateValid = (pos: { x: number; y: number }) =>
+    isDetachedPlacementMotionSafe(candidateProject, pos, orbitGeometry, dockedProjectsForSweep);
+
+  assert.equal(checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []).hasCollision, false);
+  assert.equal(isCandidateValid(candidateOrigin), false);
+
+  const resolved = findNearestValidGridPosition(
+    'project', candidateProject.id, candidateOrigin,
+    currentPositions, {}, projects, [],
+    25, false,
+    isCandidateValid
+  );
+
+  assert.equal(resolved.wasAdjusted, true, 'The resolver must move off the naive candidate');
+  assert.equal(resolved.wasAdjustedForValidatorOnly, true, 'The shift must be attributed to the validator, not an ordinary current-node collision');
+
+  const finalCollision = checkCollisions('project', candidateProject.id, { x: resolved.x, y: resolved.y }, currentPositions, {}, projects, []);
+  assert.equal(finalCollision.hasCollision, false, 'Final position must remain collision-free against current nodes');
+  assert.equal(isCandidateValid({ x: resolved.x, y: resolved.y }), true, 'Final position must be motion-safe against the future orbital sweep');
+});
+
+test('search resolution: an ordinary candidate with no orbital-clearance concern is unaffected — isCandidateValid is a pure additive gate, default behavior unchanged', () => {
+  const { projects, currentPositions } = buildSmallOrbitScenario();
+  const farAwayProject = { ...generateMockProjects(1)[0], id: 'project-far-away' };
+  const farAwayRawPos = { x: 100000, y: 100000 };
+  const withoutValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true);
+  const withAlwaysTrueValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true, () => true);
+  assert.deepEqual(withoutValidator, withAlwaysTrueValidator, 'Supplying an always-true validator must be indistinguishable from omitting it entirely');
+  assert.equal(withoutValidator.wasAdjusted, false);
 });
 
 // ---------------------------------------------------------------------------
 // Orbit integration: pause conditions
 // ---------------------------------------------------------------------------
 
-test('isOrbitPauseConditionActive: docking transition pauses the orbit', () => {
+test('isOrbitPauseConditionActive: an active orbital reflow/settle transition pauses the orbit', () => {
   const state: OrbitPauseState = {
     isProjectHovered: false, isSkillHovered: false, isProjectSelected: false, isSkillSelected: false,
     isNodeDragging: false, isCanvasPanning: false, isDocumentHidden: false, prefersReducedMotion: false,
@@ -376,55 +656,52 @@ test('isOrbitPauseConditionActive: docking transition pauses the orbit', () => {
   assert.equal(isOrbitPauseConditionActive(state), true);
 });
 
-test('TopologyCanvas.tsx: orbitPauseState is not derived from the mere existence of detached projects — an idle detached project does not itself stop the orbit', () => {
+test('TopologyCanvas.tsx: orbitPauseState is not derived from the mere existence of detached/interactively-reordered projects — idle membership changes do not themselves stop the orbit', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const pauseStateIdx = content.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
   const pauseStateBlock = content.slice(pauseStateIdx, content.indexOf('}), [', pauseStateIdx));
-  // The pause state may reference draggingNode (active interaction) and
-  // activeDockTransitionProjectId (an active settle animation), but must NOT
-  // read projectDockState directly — merely having detached projects sitting
-  // elsewhere is not itself a pause condition.
   assert.ok(!pauseStateBlock.includes('projectDockState'), 'orbitPauseState must not pause merely because some project is detached at rest');
-  assert.ok(pauseStateBlock.includes('activeDockTransitionProjectId'), 'orbitPauseState must pause during an active settle animation');
+  assert.ok(!pauseStateBlock.includes('interactiveOrbitOrder'), 'orbitPauseState must not pause merely because membership/order has been visitor-modified');
+  assert.ok(pauseStateBlock.includes('isOrbitReflowActive'), 'orbitPauseState must pause during an active shared orbital reflow');
 });
 
 // ---------------------------------------------------------------------------
-// RAF lifecycle for the dock-settle transition (mirrors the PR22 orbit-clock proof)
+// RAF lifecycle for the shared orbital reflow (mirrors the PR22 orbit-clock proof)
 // ---------------------------------------------------------------------------
 
-function extractDockTransitionEffect(content: string): string {
-  const guardIdx = content.indexOf('if (!activeDockTransitionProjectId) return;');
-  assert.ok(guardIdx !== -1, 'dock transition effect guard must be present');
+function extractOrbitReflowEffect(content: string): string {
+  const guardIdx = content.indexOf('if (!isOrbitReflowActive) return;');
+  assert.ok(guardIdx !== -1, 'orbit reflow effect guard must be present');
   const startIdx = content.lastIndexOf('useEffect(() => {', guardIdx);
-  assert.ok(startIdx !== -1, 'dock transition effect block must be present');
-  const endIdx = content.indexOf('}, [activeDockTransitionProjectId, finalizeProjectAsDocked]);', startIdx);
+  assert.ok(startIdx !== -1, 'orbit reflow effect block must be present');
+  const endIdx = content.indexOf('}, [isOrbitReflowActive]);', startIdx);
   assert.ok(endIdx !== -1);
-  return content.slice(startIdx, endIdx + '}, [activeDockTransitionProjectId, finalizeProjectAsDocked]);'.length);
+  return content.slice(startIdx, endIdx + '}, [isOrbitReflowActive]);'.length);
 }
 
-test('TopologyCanvas.tsx: idle (no active transition) schedules zero docking RAF callbacks', () => {
+test('TopologyCanvas.tsx: idle (no active reflow) schedules zero reflow RAF callbacks', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const block = extractDockTransitionEffect(content);
-  const guardIdx = block.indexOf('if (!activeDockTransitionProjectId) return;');
+  const block = extractOrbitReflowEffect(content);
+  const guardIdx = block.indexOf('if (!isOrbitReflowActive) return;');
   const firstRafIdx = block.indexOf('requestAnimationFrame(');
   assert.ok(guardIdx !== -1 && firstRafIdx !== -1);
   assert.ok(guardIdx < firstRafIdx, 'The idle-guard must return before any requestAnimationFrame call is reached');
 });
 
-test('TopologyCanvas.tsx: an active redock schedules exactly one docking RAF chain, cancelled on cleanup/completion', () => {
+test('TopologyCanvas.tsx: an active reflow schedules exactly ONE RAF chain (not one per project), cancelled on cleanup/completion', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const block = extractDockTransitionEffect(content);
+  const block = extractOrbitReflowEffect(content);
   const runningBlock = block.slice(block.indexOf('let rafId'));
   const rafCallCount = (runningBlock.match(/requestAnimationFrame\(/g) || []).length;
   assert.equal(rafCallCount, 2, 'Exactly one chain: one initial schedule plus one re-schedule inside tick');
   assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame');
-  assert.ok(runningBlock.includes('setActiveDockTransitionProjectId(null)'), 'Completion must clear the reactive flag, tearing the loop down (zero docking RAF once finished)');
+  assert.ok(runningBlock.includes('setIsOrbitReflowActive(false)'), 'Completion must clear the reactive flag, tearing the loop down (zero reflow RAF once finished)');
 });
 
-test('TopologyCanvas.tsx: finish/cancel path finalizes the project as docked (clears custom position and dock-runtime exception)', () => {
+test('TopologyCanvas.tsx: reflow completion clears the render-position map so getProjectPos falls back to the authoritative interactive orbital position with no handoff jump', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const block = extractDockTransitionEffect(content);
-  assert.ok(block.includes('finalizeProjectAsDocked(finishedProjectId)'), 'Completing a settle transition must finalize canonical dock membership');
+  const block = extractOrbitReflowEffect(content);
+  assert.ok(block.includes('setOrbitReflowRenderPositions(null)'), 'Completing a reflow must clear the render-position override so effectiveProjectPositions/dockedProjectPositions become authoritative again');
 });
 
 // ---------------------------------------------------------------------------
@@ -435,7 +712,7 @@ test('real committed snapshot: every project has exactly one reserved slot, and 
   const projects = GITHUB_SNAPSHOT.projects;
   const skills = GITHUB_SNAPSHOT.skills;
   const layout1 = assembleTopologyLayout(projects, skills);
-  const layout2 = assembleTopologyLayout(projects, skills); // simulates "re-render after some project detached" — dock state is not an input here at all
+  const layout2 = assembleTopologyLayout(projects, skills);
 
   assert.equal(layout1.orbitGeometry.slots.length, projects.length, 'Every project must have exactly one reserved slot');
   const uniqueProjectIds = new Set(layout1.orbitGeometry.slots.map(s => s.projectId));
@@ -444,207 +721,239 @@ test('real committed snapshot: every project has exactly one reserved slot, and 
   assert.deepEqual(layout1.orbitGeometry.slots, layout2.orbitGeometry.slots, 'Slot assignment must be identical regardless of any transient dock/detach activity, since dock state is not an input to layout at all');
 });
 
-test('real committed snapshot: redock target for any project resolves to that project\'s own canonical slot at a given phase', () => {
+test('real committed snapshot: canonical order derived from staticOrbitalLattice.orbitGeometry.slots contains all 18 real projects exactly once', () => {
   const projects = GITHUB_SNAPSHOT.projects;
   const skills = GITHUB_SNAPSHOT.skills;
   const { orbitGeometry } = assembleTopologyLayout(projects, skills);
-  const targetProject = projects[5];
-  const slot = orbitGeometry.slots.find(s => s.projectId === targetProject.id)!;
-  assert.ok(slot, 'Target project must have a slot');
+  const canonicalOrder = orbitGeometry.slots.map(s => s.projectId);
 
-  const phase = 1.5;
-  const reservedA = getOrbitalProjectPositionAtPhase(targetProject, slot, orbitGeometry, phase);
-  const reservedB = getOrbitalProjectPositionAtPhase(targetProject, slot, orbitGeometry, phase);
-  assert.deepEqual(reservedA, reservedB, 'The same project + same phase must always resolve to the same reserved target — never a neighboring or reassigned slot');
+  assert.equal(canonicalOrder.length, projects.length);
+  assert.equal(new Set(canonicalOrder).size, projects.length, 'no duplicate identities');
+  for (const p of projects) {
+    assert.ok(canonicalOrder.includes(p.id), `${p.id} must appear in the canonical order`);
+  }
 });
 
-test('real committed snapshot: ASSEMBLE source path clears dock-runtime state for all projects (18/18 return to canonical membership)', () => {
+test('real committed snapshot: detaching one real project (18 -> 17) preserves identity integrity — no duplicate, no missing, relative order otherwise unchanged', () => {
+  const projects = GITHUB_SNAPSHOT.projects;
+  const skills = GITHUB_SNAPSHOT.skills;
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const canonicalOrder = orbitGeometry.slots.map(s => s.projectId);
+
+  const detachedId = canonicalOrder[7];
+  const after = canonicalOrder.filter(id => id !== detachedId);
+
+  assert.equal(after.length, 17);
+  assert.equal(new Set(after).size, 17, 'no duplicate identities after detach');
+  assert.ok(!after.includes(detachedId));
+  assert.deepEqual(after, canonicalOrder.filter(id => id !== detachedId), 'relative order of every other identity is untouched — no resort');
+});
+
+test('real committed snapshot: reinserting a detached real project (17 -> 18) preserves identity integrity', () => {
+  const projects = GITHUB_SNAPSHOT.projects;
+  const skills = GITHUB_SNAPSHOT.skills;
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const canonicalOrder = orbitGeometry.slots.map(s => s.projectId);
+
+  const detachedId = canonicalOrder[3];
+  const reduced = canonicalOrder.filter(id => id !== detachedId);
+  const reinserted = [...reduced];
+  reinserted.splice(3, 0, detachedId);
+
+  assert.equal(reinserted.length, 18);
+  assert.equal(new Set(reinserted).size, 18, 'no duplicate identities after reinsertion');
+  assert.deepEqual(reinserted, canonicalOrder, 'reinserting at the same logical position must exactly reproduce the original canonical order');
+});
+
+test('real committed snapshot: ASSEMBLE/RESET restore interactiveOrbitOrder to null and clear every dock-runtime exception (byte-for-byte canonical restoration)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  assert.ok(content.includes('setProjectDockState({});'), 'The canonical-restore routine must clear the ENTIRE dock-runtime map at once (not per-project), covering all 18 real projects uniformly');
+  const restoreIdx = content.indexOf('const restoreCanonicalDockMembership = useCallback(() => {');
+  assert.ok(restoreIdx !== -1);
+  const restoreBlock = content.slice(restoreIdx, content.indexOf('}, [cancelOrbitReflow, resetOrbitPhaseToCanonical]);', restoreIdx));
+  assert.ok(restoreBlock.includes('setProjectDockState({});'), 'must clear the ENTIRE dock-runtime map at once');
+  assert.ok(restoreBlock.includes('setInteractiveOrbitOrder(null);'), 'must restore canonical order authority — null means the static lattice slot order is used again');
+  assert.ok(restoreBlock.includes('setCustomProjectPositions({});'), 'must clear every custom/detached position override');
+
+  // Once interactiveOrbitOrder is null again, re-deriving canonical order from
+  // the (unchanged) static lattice must byte-for-byte reproduce the original
+  // sequence — the lattice's own slot order never mutates.
+  const { orbitGeometry } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
+  const before = orbitGeometry.slots.map(s => s.projectId);
+  const { orbitGeometry: orbitGeometryAfter } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
+  const after = orbitGeometryAfter.slots.map(s => s.projectId);
+  assert.deepEqual(after, before);
 });
 
 // ---------------------------------------------------------------------------
-// Issue 1 (review round 2): no new node drag may begin during an active
-// settle transition — one node interaction/settle transition at a time.
+// No new drag during an active reflow (preserves the prior independent-review fix)
 // ---------------------------------------------------------------------------
 
-test('TopologyCanvas.tsx: all four node drag-start handlers (skill mouse/touch, project mouse/touch) check activeDockTransitionProjectId before starting a drag', () => {
+test('TopologyCanvas.tsx: all four node drag-start handlers (skill mouse/touch, project mouse/touch) check isOrbitReflowActive before starting a drag', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const starts = [...content.matchAll(/on(?:MouseDown|TouchStart)=\{\(e\) => \{/g)];
-  assert.ok(starts.length >= 4, 'expected at least the four inline node drag-start handlers (canvas pan uses named function references, not inline arrows, so it is not counted here)');
+  assert.ok(starts.length >= 4, 'expected at least the four inline node drag-start handlers');
 
   let guardedHandlerCount = 0;
   for (const match of starts) {
     const idx = match.index!;
     const window = content.slice(idx, idx + 700);
     const setDraggingIdx = window.indexOf('setDraggingNode(');
-    if (setDraggingIdx === -1) continue; // not a drag-start handler
-    const guardIdx = window.indexOf('if (activeDockTransitionProjectId) return;');
-    assert.ok(guardIdx !== -1 && guardIdx < setDraggingIdx, `Drag-start handler at file offset ${idx} must check activeDockTransitionProjectId BEFORE calling setDraggingNode`);
+    if (setDraggingIdx === -1) continue;
+    const guardIdx = window.indexOf('if (isOrbitReflowActive) return;');
+    assert.ok(guardIdx !== -1 && guardIdx < setDraggingIdx, `Drag-start handler at file offset ${idx} must check isOrbitReflowActive BEFORE calling setDraggingNode`);
     guardedHandlerCount++;
   }
   assert.equal(guardedHandlerCount, 4, 'Exactly four node drag-start handlers must exist and all must be guarded');
 });
 
-test('deriveDockState/architecture: settle transitions and draggingNode are mutually exclusive by construction (only one node interaction exists at a time)', () => {
-  // This is an architectural invariant proven by the source guard above plus
-  // the fact that starting a settle transition (startSettleTransition) is
-  // only ever called from the release path AFTER setDraggingNode(null) — so a
-  // settle transition and an active draggingNode never coexist for the
-  // SAME gesture, and the guard above prevents a DIFFERENT node from
-  // starting a new draggingNode while one is settling.
+test('architecture: a reflow is committed before the drag session itself is cleared, so no new drag can begin in between', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const releaseIdx = content.indexOf('const processRelease = () => {');
   const nextEffectIdx = content.indexOf('const handleWindowMouseMove', releaseIdx);
   const releaseBlock = content.slice(releaseIdx, nextEffectIdx === -1 ? undefined : nextEffectIdx);
-  const startSettleIdx = releaseBlock.indexOf('startSettleTransition(');
+  const commitIdx = releaseBlock.indexOf('commitOrbitReflow(');
   const finalNullIdx = releaseBlock.lastIndexOf('setDraggingNode(null);');
-  assert.ok(startSettleIdx !== -1 && finalNullIdx !== -1);
-  assert.ok(startSettleIdx < finalNullIdx, 'A settle transition is started before the drag session itself is cleared, and no new drag can begin in between (single-threaded event handling + the guard above)');
+  assert.ok(commitIdx !== -1 && finalNullIdx !== -1);
+  assert.ok(commitIdx < finalNullIdx, 'A reflow is committed before the drag session itself is cleared');
+});
+
+test('TopologyCanvas.tsx: a detach commit builds the future-clearance sweep set from the CURRENT interactive docked order, excluding the project being dropped', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const idx = content.indexOf('const newOrder = wasDocked ? dockedOrbitOrder.filter(id => id !== draggingNode.id) : dockedOrbitOrder;');
+  assert.ok(idx !== -1, 'the future-clearance sweep set must be derived from the current interactive docked order, not any fixed canonical slot list');
+  const nearby = content.slice(idx, idx + 500);
+  assert.ok(nearby.includes('isDetachedPlacementMotionSafe('), 'must reuse the existing motion-safety validator, not a duplicate search algorithm');
 });
 
 // ---------------------------------------------------------------------------
-// Issue 2 (review round 2): motion-safe detached placement. Demonstrates the
-// ACTUAL delayed-collision bug — a spot that is collision-free at drop time
-// can still be swept through later by a docked project traversing the full
-// orbit — and proves the new validator rejects it while ordinary current-
-// position collision checking alone would have accepted it.
+// Mandatory arbitrary-adjacency regression: every ordered pair of the 18 real
+// distinct projects, as adjacent neighbors anywhere on the densest 18-project
+// ring, across every adjacent slot location and 72 sampled global phases,
+// using the FULL visual/callout envelope. Reports PASS (current radii) or
+// FAILS with the exact offending pair/index/angle/phase.
 // ---------------------------------------------------------------------------
 
-function buildSmallOrbitScenario() {
-  const projects = generateMockProjects(5);
-  const skills = generateMockSkills(4);
-  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
-  const slot0 = orbitGeometry.slots.find(s => s.projectId === projects[0].id)!;
+test('arbitrary interactive order safety: every real project pair, adjacent at any ring position/phase, never overlaps (full visual/callout envelope)', () => {
+  const projects = GITHUB_SNAPSHOT.projects;
+  const skills = GITHUB_SNAPSHOT.skills;
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills) as { orbitGeometry: StaticOrbitGeometry };
+  const N = projects.length;
+  assert.equal(N, 18, 'this regression is defined against the real, densest 18-project ring');
 
-  // Positions "right now" (frozen orbit phase = 0, i.e. ordinary docked
-  // membership at rest) — matches how effectiveProjectPositions looks at the
-  // instant of a drop, since the orbit is paused throughout any drag.
-  const currentPositions: Record<string, { x: number; y: number }> = {};
-  for (const slot of orbitGeometry.slots) {
-    const p = projects.find(pr => pr.id === slot.projectId)!;
-    currentPositions[p.id] = getOrbitalProjectPositionAtPhase(p, slot, orbitGeometry, 0);
+  // getTopologyProjectVisualBounds/project3DToIso are both linear in the
+  // world-space translation applied — so a project's visual envelope at any
+  // iso-space center is its envelope at visual-center (0,0), translated by
+  // that iso point. Precomputing the center-relative envelope once per project
+  // turns the O(pairs * positions * phases) sweep into pure arithmetic.
+  const envelopeOffsetByProjectId = new Map<string, ReturnType<typeof getTopologyProjectVisualBounds>>();
+  for (const p of projects) {
+    const centeredOrigin = getWorldOriginForIsoCenter(p, { x: 0, y: 0 });
+    envelopeOffsetByProjectId.set(p.id, getTopologyProjectVisualBounds(p, centeredOrigin));
   }
 
-  // The candidate detached project: same shape as the mocks, a distinct id.
-  const candidateProject = { ...generateMockProjects(1)[0], id: 'project-detached-candidate' };
+  function envelopeAt(projectId: string, isoCenter: { x: number; y: number }) {
+    const offset = envelopeOffsetByProjectId.get(projectId)!;
+    return {
+      minX: offset.minX + isoCenter.x,
+      maxX: offset.maxX + isoCenter.x,
+      minY: offset.minY + isoCenter.y,
+      maxY: offset.maxY + isoCenter.y,
+    };
+  }
 
-  // Because every project shares the same phase and the same ellipse, a
-  // rotationally-symmetric ring of identically-sized projects means ANY point
-  // exactly on the shared ellipse is, over a full revolution, eventually
-  // occupied by EVERY project — not just one. So rather than hand-deriving a
-  // "safe right now" angle (which depends on exact packing geometry), find
-  // one empirically: project[0]'s own position at some non-zero sampled phase
-  // that happens to be clear of every OTHER project's CURRENT (phase-0)
-  // position. This is exactly the real-world scenario: the ring has moved
-  // since the projects were last at rest, and the user drops a project into
-  // a gap that looks clear right now.
-  let candidateOrigin: { x: number; y: number } | null = null;
-  let dangerousSampleIndex = -1;
-  for (let s = 1; s < ORBITAL_CLEARANCE_SAMPLE_COUNT; s++) {
-    const phase = (s / ORBITAL_CLEARANCE_SAMPLE_COUNT) * 2 * Math.PI;
-    const origin = getOrbitalProjectPositionAtPhase(candidateProject, slot0, orbitGeometry, phase);
-    const check = checkCollisions('project', candidateProject.id, origin, currentPositions, {}, projects, []);
-    if (!check.hasCollision) {
-      candidateOrigin = origin;
-      dangerousSampleIndex = s;
-      break;
+  function isoCenterAtIndex(i: number, n: number, phase: number) {
+    const angle = -Math.PI / 2 + (i / n) * 2 * Math.PI + phase;
+    return {
+      x: orbitGeometry.centerIso.x + orbitGeometry.radiusX * Math.cos(angle),
+      y: orbitGeometry.centerIso.y + orbitGeometry.radiusY * Math.sin(angle),
+    };
+  }
+
+  const SAMPLE_PHASES = 72;
+  let offender: { a: string; b: string; slotIndex: number; phase: number } | null = null;
+
+  outer:
+  for (let ai = 0; ai < projects.length && !offender; ai++) {
+    for (let bi = 0; bi < projects.length; bi++) {
+      if (ai === bi) continue;
+      const a = projects[ai].id;
+      const b = projects[bi].id;
+      for (let k = 0; k < N; k++) {
+        const kNext = (k + 1) % N;
+        for (let s = 0; s < SAMPLE_PHASES; s++) {
+          const phase = (s / SAMPLE_PHASES) * 2 * Math.PI;
+          const centerA = isoCenterAtIndex(k, N, phase);
+          const centerB = isoCenterAtIndex(kNext, N, phase);
+          const boxA = envelopeAt(a, centerA);
+          const boxB = envelopeAt(b, centerB);
+          if (checkAABBOverlap(boxA, boxB, 0)) {
+            offender = { a, b, slotIndex: k, phase };
+            break outer;
+          }
+        }
+      }
     }
   }
-  assert.ok(candidateOrigin, 'test setup: must find at least one sampled phase where the candidate is current-safe');
 
-  const movingProjects = new Map(projects.map(p => [p.id, p]));
-
-  return { projects, skills, orbitGeometry, currentPositions, candidateProject, candidateOrigin: candidateOrigin!, movingProjects, dangerousSampleIndex };
-}
-
-test('delayed-collision regression: a candidate that is collision-free RIGHT NOW is still rejected because a docked project sweeps through it later', () => {
-  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, movingProjects } = buildSmallOrbitScenario();
-
-  // 1. Ordinary CURRENT-position collision checking alone accepts it.
-  const currentCheck = checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []);
-  assert.equal(currentCheck.hasCollision, false, 'The candidate must be genuinely collision-free against the CURRENT (phase-frozen) orbit positions');
-
-  // 2. Future-orbit motion safety rejects it, because project[0] occupies
-  // overlapping visual bounds at a later sampled phase (PI/2).
-  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, movingProjects);
-  assert.equal(isSafe, false, 'A point exactly on the shared ellipse must be rejected — every docked project eventually sweeps through every point on the track');
+  if (offender) {
+    assert.fail(
+      `FAIL: adjacent-pair overlap found — projects ${offender.a} and ${offender.b} adjacent at ` +
+      `slot index ${offender.slotIndex}/${offender.slotIndex + 1} (mod ${N}), phase=${offender.phase.toFixed(4)} rad. ` +
+      `Current radii radiusX=${orbitGeometry.radiusX.toFixed(2)}, radiusY=${orbitGeometry.radiusY.toFixed(2)} are insufficient ` +
+      `for arbitrary visitor reordering; the smallest deterministic radius increase must be found before shipping interactive reordering.`
+    );
+  } else {
+    // PASS: report the exact accepted radii so the report can cite them.
+    assert.ok(true, `PASS: radiusX=${orbitGeometry.radiusX.toFixed(2)}, radiusY=${orbitGeometry.radiusY.toFixed(2)} are safe for every real adjacent pair, position, and phase.`);
+  }
 });
 
-test('delayed-collision regression: a sufficiently separated detached position is accepted as motion-safe', () => {
-  const { orbitGeometry, candidateProject, movingProjects } = buildSmallOrbitScenario();
-  // Far outside the entire orbit in every direction.
-  const farAwayOrigin = {
-    x: orbitGeometry.centerIso.x + orbitGeometry.radiusX * 20,
-    y: orbitGeometry.centerIso.y + orbitGeometry.radiusY * 20,
+test('arbitrary interactive order safety: every real project clears the capability core at every dynamic slot and phase', () => {
+  const projects = GITHUB_SNAPSHOT.projects;
+  const skills = GITHUB_SNAPSHOT.skills;
+  const { orbitGeometry, skillPositions } = assembleTopologyLayout(projects, skills);
+  const N = orbitGeometry.slots.length;
+
+  const coreCorners: { x: number; y: number }[] = [];
+  for (const skill of skills) {
+    const bounds = getNodeBounds('skill', skillPositions[skill.id], 48, 48);
+    coreCorners.push(project3DToIso(bounds.minX, bounds.minY, 0));
+    coreCorners.push(project3DToIso(bounds.maxX, bounds.minY, 0));
+    coreCorners.push(project3DToIso(bounds.maxX, bounds.maxY, 0));
+    coreCorners.push(project3DToIso(bounds.minX, bounds.maxY, 0));
+  }
+  const coreBounds = {
+    minX: Math.min(...coreCorners.map(c => c.x)),
+    maxX: Math.max(...coreCorners.map(c => c.x)),
+    minY: Math.min(...coreCorners.map(c => c.y)),
+    maxY: Math.max(...coreCorners.map(c => c.y)),
   };
-  const isSafe = isDetachedPlacementMotionSafe(candidateProject, farAwayOrigin, orbitGeometry, movingProjects);
-  assert.equal(isSafe, true, 'A position far outside the entire orbit must never be rejected');
-});
 
-test('delayed-collision regression: the moving set is exactly what the caller supplies — with no projects left orbiting, nothing can ever be swept', () => {
-  // With a ring of identically-sized, evenly-spaced projects sharing one
-  // phase, ANY point on the shared ellipse is eventually reachable by EVERY
-  // project over a full revolution (not just one) — so this function's
-  // exclusion contract cannot be demonstrated by removing a single mover from
-  // a symmetric ring. What it CAN prove directly: the function trusts the
-  // caller's moving set completely rather than re-deriving it from
-  // orbitGeometry itself, so an empty moving set (as if every other project
-  // were also persisted-detached) makes any candidate — including the exact
-  // dangerous one above — trivially motion-safe.
-  const { candidateProject, candidateOrigin, orbitGeometry } = buildSmallOrbitScenario();
-  const isSafe = isDetachedPlacementMotionSafe(candidateProject, candidateOrigin, orbitGeometry, new Map());
-  assert.equal(isSafe, true, 'An empty moving set must never reject any candidate');
-});
-
-test('TopologyCanvas.tsx: the moving-projects set built for orbital-clearance validation excludes both the project being dropped and every OTHER persisted-detached project', () => {
-  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const movingIdx = content.indexOf('const movingProjects = new Map<string, ProjectData>();');
-  assert.ok(movingIdx !== -1, 'the moving-projects construction must exist');
-  const movingBlock = content.slice(movingIdx, content.indexOf('const isCandidateValid', movingIdx));
-  assert.ok(movingBlock.includes("if (p.id === draggingNode.id) continue;"), 'must exclude the project currently being dropped');
-  assert.ok(movingBlock.includes("resolveProjectDockState(projectDockState, p.id) === 'detached') continue;"), 'must exclude every other project that is itself persisted-detached (stationary, already covered by ordinary collision checks)');
+  for (const project of projects) {
+    for (let index = 0; index < N; index++) {
+      for (let sample = 0; sample < ORBITAL_CLEARANCE_SAMPLE_COUNT; sample++) {
+        const phase = (sample / ORBITAL_CLEARANCE_SAMPLE_COUNT) * 2 * Math.PI;
+        const dynamicPos = getDynamicOrbitalPosition(project, index, N, orbitGeometry, phase);
+        const projectBounds = getTopologyProjectVisualBounds(project, dynamicPos);
+        assert.equal(
+          checkAABBOverlap(projectBounds, coreBounds, 0),
+          false,
+          `${project.id} invades the capability core at dynamic index ${index}, phase sample ${sample}`
+        );
+      }
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
-// Search resolution: the EXISTING findNearestValidGridPosition expanding-ring
-// search is reused, not duplicated — isCandidateValid is an additional gate.
+// getWorldOriginForIsoCenter: inverse of getProjectVisualCenterIso
 // ---------------------------------------------------------------------------
 
-test('search resolution: findNearestValidGridPosition rejects a current-safe-but-future-unsafe candidate and continues through the EXISTING search to a position safe on BOTH counts', () => {
-  const { projects, orbitGeometry, currentPositions, candidateProject, candidateOrigin, movingProjects } = buildSmallOrbitScenario();
-
-  const isCandidateValid = (pos: { x: number; y: number }) =>
-    isDetachedPlacementMotionSafe(candidateProject, pos, orbitGeometry, movingProjects);
-
-  // Sanity: the naive candidate is current-safe but motion-UNsafe (same fact
-  // proven above), so acceptance must come from continuing the ring search.
-  assert.equal(checkCollisions('project', candidateProject.id, candidateOrigin, currentPositions, {}, projects, []).hasCollision, false);
-  assert.equal(isCandidateValid(candidateOrigin), false);
-
-  const resolved = findNearestValidGridPosition(
-    'project', candidateProject.id, candidateOrigin,
-    currentPositions, {}, projects, [],
-    25, false, // grid snapping disabled to keep the arithmetic exact for this test
-    isCandidateValid
-  );
-
-  assert.equal(resolved.wasAdjusted, true, 'The resolver must move off the naive candidate');
-  assert.equal(resolved.wasAdjustedForValidatorOnly, true, 'The shift must be attributed to the validator, not an ordinary current-node collision (no real node was in the way right now)');
-
-  // The FINAL position returned by the SAME existing search must satisfy BOTH
-  // conditions — proving no second, independent search algorithm was needed.
-  const finalCollision = checkCollisions('project', candidateProject.id, { x: resolved.x, y: resolved.y }, currentPositions, {}, projects, []);
-  assert.equal(finalCollision.hasCollision, false, 'Final position must remain collision-free against current nodes');
-  assert.equal(isCandidateValid({ x: resolved.x, y: resolved.y }), true, 'Final position must be motion-safe against the future orbital sweep');
-});
-
-test('search resolution: an ordinary candidate with no orbital-clearance concern is unaffected — isCandidateValid is a pure additive gate, default behavior unchanged', () => {
-  const { projects, currentPositions } = buildSmallOrbitScenario();
-  const farAwayProject = { ...generateMockProjects(1)[0], id: 'project-far-away' };
-  const farAwayRawPos = { x: 100000, y: 100000 }; // nowhere near anything
-  const withoutValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true);
-  const withAlwaysTrueValidator = findNearestValidGridPosition('project', farAwayProject.id, farAwayRawPos, currentPositions, {}, projects, [], 25, true, () => true);
-  assert.deepEqual(withoutValidator, withAlwaysTrueValidator, 'Supplying an always-true validator must be indistinguishable from omitting it entirely');
-  assert.equal(withoutValidator.wasAdjusted, false);
+test('getWorldOriginForIsoCenter: is the exact inverse of getProjectVisualCenterIso', () => {
+  const project = generateMockProjects(1)[0];
+  const worldOrigin = { x: 123, y: -45 };
+  const isoCenter = getProjectVisualCenterIso(project, worldOrigin);
+  const recovered = getWorldOriginForIsoCenter(project, isoCenter);
+  assert.ok(Math.abs(recovered.x - worldOrigin.x) < 1e-6);
+  assert.ok(Math.abs(recovered.y - worldOrigin.y) < 1e-6);
 });
