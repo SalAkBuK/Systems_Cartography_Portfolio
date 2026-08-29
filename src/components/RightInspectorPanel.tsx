@@ -141,10 +141,10 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
       }`}
     >
       {/* Inspector Title Bar (Desktop + Mobile Sheet Bar) */}
-      <div className="p-2 sm:p-3 bg-[#CBC59B]/80 border-b border-[#15150F] flex items-center justify-between shrink-0">
+      <div className="p-2.5 sm:p-3 bg-[#CBC59B]/80 border-b border-[#15150F] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          <Terminal size={12} className="text-[#15150F] shrink-0" />
-          <span className="text-[10px] font-bold tracking-widest uppercase truncate">
+          <Terminal size={13} className="text-[#15150F] shrink-0" />
+          <span className="text-[11.5px] lg:text-[10px] font-bold tracking-widest uppercase truncate">
             {selectedProject 
               ? `INSPECTOR // ${selectedProject.code} · ${selectedProject.title}` 
               : selectedSkill 
@@ -164,7 +164,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden sm:inline-block text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+          <span className="hidden sm:inline-block text-[9.5px] lg:text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
             LIVE TELEMETRY
           </span>
 
@@ -172,7 +172,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           <div className="flex items-center gap-1 lg:hidden">
             <button
               onClick={() => setIsMobileExpanded(prev => !prev)}
-              className="px-2 py-0.5 bg-[#15150F] text-[#C3E54E] text-[8.5px] font-bold border border-[#15150F] flex items-center gap-0.5 cursor-pointer"
+              className="px-2.5 py-1 bg-[#15150F] text-[#C3E54E] text-[10.5px] font-bold border border-[#15150F] flex items-center gap-0.5 cursor-pointer min-h-[30px]"
               title={isMobileExpanded ? 'Minimize inspector' : 'Expand inspector'}
             >
               <span>{isMobileExpanded ? '↓ MINIMIZE' : '↑ EXPAND'}</span>
@@ -183,7 +183,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   setIsMobileExpanded(false);
                   onClearSelection?.();
                 }}
-                className="px-1.5 py-0.5 bg-[#CBC59B] text-[#15150F] text-[8.5px] font-bold border border-[#15150F] cursor-pointer hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+                className="px-2 py-1 bg-[#CBC59B] text-[#15150F] text-[10.5px] font-bold border border-[#15150F] cursor-pointer hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors min-h-[30px]"
                 title="Clear Selection"
               >
                 ✕ CLEAR
@@ -195,10 +195,10 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
       {/* Sub-Tabs for Projects */}
       {selectedProject && (
-        <div className="flex border-b border-[#15150F] bg-[#DCD6B2]/80 divide-x divide-[#15150F] text-[9px] font-mono font-semibold">
+        <div className="flex border-b border-[#15150F] bg-[#DCD6B2]/80 divide-x divide-[#15150F] text-[11.5px] lg:text-[9px] font-mono font-semibold">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`flex-1 py-1.5 text-center uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2 lg:py-1.5 min-h-[38px] lg:min-h-[28px] text-center uppercase tracking-wider transition-colors ${
               activeTab === 'overview' ? 'bg-[#15150F] text-[#D4CDA4] font-bold' : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
             }`}
           >
@@ -206,7 +206,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('architecture')}
-            className={`flex-1 py-1.5 text-center uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2 lg:py-1.5 min-h-[38px] lg:min-h-[28px] text-center uppercase tracking-wider transition-colors ${
               activeTab === 'architecture' ? 'bg-[#15150F] text-[#D4CDA4] font-bold' : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
             }`}
           >
@@ -214,7 +214,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('metrics')}
-            className={`flex-1 py-1.5 text-center uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2 lg:py-1.5 min-h-[38px] lg:min-h-[28px] text-center uppercase tracking-wider transition-colors ${
               activeTab === 'metrics' ? 'bg-[#15150F] text-[#D4CDA4] font-bold' : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
             }`}
           >
@@ -222,7 +222,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('manifest')}
-            className={`flex-1 py-1.5 text-center uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2 lg:py-1.5 min-h-[38px] lg:min-h-[28px] text-center uppercase tracking-wider transition-colors ${
               activeTab === 'manifest' ? 'bg-[#15150F] text-[#D4CDA4] font-bold' : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
             }`}
           >
@@ -232,7 +232,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
       )}
 
       {/* Inspector Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 font-mono text-[11px] leading-relaxed">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 font-mono text-[12.5px] lg:text-[11px] leading-relaxed">
         {/* CASE 1: SELECTED PROJECT */}
         {selectedProject && (
           <div className="flex flex-col gap-4">
@@ -240,16 +240,16 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             <div className="flex flex-col gap-1 border-b border-[#15150F] pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-[13.5px] font-bold text-[#15150F]">{selectedProject.code} // {selectedProject.title}</span>
+                  <span className="text-[14px] lg:text-[13.5px] font-bold text-[#15150F]">{selectedProject.code} // {selectedProject.title}</span>
                 </div>
-                <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+                <span className="text-[9.5px] lg:text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
                   ● {selectedProject.status}
                 </span>
               </div>
-              <p className="text-[10px] text-[#3D3A2C] font-medium leading-snug">
+              <p className="text-[12px] lg:text-[10px] text-[#3D3A2C] font-medium leading-snug">
                 {selectedProject.tagline}
               </p>
-              <div className="flex items-center gap-3 text-[9px] text-[#5C5946] mt-1">
+              <div className="flex items-center gap-3 text-[10.5px] lg:text-[9px] text-[#5C5946] mt-1">
                 <span>YEAR: {selectedProject.year}</span>
                 <span>·</span>
                 <span>GRID: {selectedProject.dimensions.width}x{selectedProject.dimensions.height}</span>
@@ -531,17 +531,17 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 <div className="flex flex-col gap-2 mt-2">
                   <button
                     onClick={() => onDrillIntoProject(selectedProject.id)}
-                    className="w-full py-2.5 bg-[#15150F] text-[#C3E54E] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full min-h-[44px] lg:min-h-[34px] py-2.5 bg-[#15150F] text-[#C3E54E] font-bold text-[12px] lg:text-[10px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <span>ENTER SYSTEM DECOMPOSITION</span>
-                    <ArrowUpRight size={13} />
+                    <ArrowUpRight size={14} />
                   </button>
 
                   <button
                     onClick={onOpenCaseStudy}
-                    className="w-full py-2 bg-[#E2DCB9] text-[#15150F] font-bold text-[10px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full min-h-[42px] lg:min-h-[32px] py-2 bg-[#E2DCB9] text-[#15150F] font-bold text-[12px] lg:text-[10px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <FileText size={12} />
+                    <FileText size={13} />
                     <span>OPEN FULL ARCHITECTURE SPEC</span>
                   </button>
 
@@ -550,9 +550,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                       href={selectedProject.links.github}
                       target="_blank"
                       rel="noreferrer"
-                      className="w-full py-1.5 bg-[#CBC59B] text-[#15150F] font-semibold text-[9.5px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors"
+                      className="w-full min-h-[38px] lg:min-h-[28px] py-2 lg:py-1.5 bg-[#CBC59B] text-[#15150F] font-semibold text-[11.5px] lg:text-[9.5px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <Github size={12} />
+                      <Github size={13} />
                       <span>VIEW SOURCE CODE (GITHUB)</span>
                     </a>
                   )}
@@ -562,9 +562,9 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                       href={selectedProject.links.demo}
                       target="_blank"
                       rel="noreferrer"
-                      className="w-full py-1.5 bg-[#C3E54E] text-[#15150F] font-bold text-[9.5px] tracking-wider border border-[#15150F] hover:bg-[#B2D63B] flex items-center justify-center gap-1.5 transition-colors"
+                      className="w-full min-h-[38px] lg:min-h-[28px] py-2 lg:py-1.5 bg-[#C3E54E] text-[#15150F] font-bold text-[11.5px] lg:text-[9.5px] tracking-wider border border-[#15150F] hover:bg-[#B2D63B] flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <ExternalLink size={12} />
+                      <ExternalLink size={13} />
                       <span>LIVE SYSTEM TELEMETRY / DEMO</span>
                     </a>
                   )}
