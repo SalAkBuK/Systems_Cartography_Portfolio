@@ -1754,7 +1754,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
-        {/* Orbital Field Guides: subtle drafting-style guide ellipse, registration ticks, and tier annotations */}
+        {/* Orbital Field Guides: subtle drafting-style guide ellipse and registration ticks */}
         <g id="orbital-field-guides" pointerEvents="none" className="pointer-events-none" opacity={0.25}>
           <ellipse
             cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
@@ -1793,12 +1793,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               />
             );
           })}
+        </g>
 
-          {/* Static Hierarchy Drafting Annotations */}
+        {/* Orbital Field Annotations: hierarchy drafting labels */}
+        <g
+          id="orbital-field-annotations"
+          pointerEvents="none"
+          className="pointer-events-none"
+          opacity={0.55}
+        >
           <text
             x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.centerIso.y - 120}
-            fontSize="8"
+            y={staticOrbitalLattice.orbitGeometry.centerIso.y + 120}
+            fontSize="18"
             fontWeight="bold"
             fill="#5C5946"
             fontFamily="monospace"
@@ -1809,8 +1816,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           </text>
           <text
             x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.centerIso.y - staticOrbitalLattice.orbitGeometry.radiusY - 14}
-            fontSize="8"
+            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 12}
+            fontSize="18"
             fontWeight="bold"
             fill="#5C5946"
             fontFamily="monospace"
