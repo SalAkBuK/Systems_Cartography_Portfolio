@@ -27,6 +27,7 @@ export interface VectorIconDescriptor {
   path: string;
   viewBox?: string;
   title: string;
+  scale?: number;
 }
 
 export interface FallbackIconDescriptor {
@@ -41,30 +42,31 @@ export type CapabilityIconDescriptor = VectorIconDescriptor | FallbackIconDescri
  * Direct mapping of normalized technology keys to their verified Simple Icons exports.
  * Only technologies present in the current capability inventory are mapped.
  * Note: React Native reuses the verified React family atom mark from Simple Icons under its distinct identity.
+ * Optional optical scale compensates for varying intrinsic whitespace/aspect ratios.
  */
-const VECTOR_ICON_MAP: Record<string, { path: string; title: string; viewBox?: string }> = {
+const VECTOR_ICON_MAP: Record<string, { path: string; title: string; viewBox?: string; scale?: number }> = {
   react: { path: siReact.path, title: siReact.title },
   typescript: { path: siTypescript.path, title: siTypescript.title },
   tailwindcss: { path: siTailwindcss.path, title: siTailwindcss.title },
   nodejs: { path: siNodedotjs.path, title: siNodedotjs.title },
-  express: { path: siExpress.path, title: siExpress.title },
+  express: { path: siExpress.path, title: siExpress.title, scale: 1.15 },
   javascript: { path: siJavascript.path, title: siJavascript.title },
   nextjs: { path: siNextdotjs.path, title: siNextdotjs.title },
   vitest: { path: siVitest.path, title: siVitest.title },
-  jest: { path: siJest.path, title: siJest.title },
+  jest: { path: siJest.path, title: siJest.title, scale: 1.05 },
   socketdotio: { path: siSocketdotio.path, title: siSocketdotio.title },
   docker: { path: siDocker.path, title: siDocker.title },
   postgresql: { path: siPostgresql.path, title: siPostgresql.title },
   python: { path: siPython.path, title: siPython.title },
   reactnative: { path: siReact.path, title: 'React Native' },
-  fastify: { path: siFastify.path, title: siFastify.title },
+  fastify: { path: siFastify.path, title: siFastify.title, scale: 1.10 },
   mongodb: { path: siMongodb.path, title: siMongodb.title },
-  mysql: { path: siMysql.path, title: siMysql.title },
+  mysql: { path: siMysql.path, title: siMysql.title, scale: 1.24 },
   nestjs: { path: siNestjs.path, title: siNestjs.title },
-  php: { path: siPhp.path, title: siPhp.title },
+  php: { path: siPhp.path, title: siPhp.title, scale: 1.20 },
   prisma: { path: siPrisma.path, title: siPrisma.title },
   redis: { path: siRedis.path, title: siRedis.title },
-  sqlite: { path: siSqlite.path, title: siSqlite.title }
+  sqlite: { path: siSqlite.path, title: siSqlite.title, scale: 1.12 }
 };
 
 /**
@@ -206,7 +208,8 @@ export function resolveCapabilityIcon(rawLabel: string): CapabilityIconDescripto
       type: 'vector',
       path: mapped.path,
       viewBox: mapped.viewBox || '0 0 24 24',
-      title: mapped.title
+      title: mapped.title,
+      scale: mapped.scale
     };
   }
 
