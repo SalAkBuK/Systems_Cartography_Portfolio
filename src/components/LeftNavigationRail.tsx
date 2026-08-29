@@ -7,7 +7,8 @@ import {
   Layers, 
   Share2, 
   Search,
-  Github
+  Github,
+  X
 } from 'lucide-react';
 import { ActiveView, ProjectData, InfrastructureSkill, ExperienceNode, TopologyViewMode } from '../types';
 import {
@@ -81,19 +82,30 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
     <aside 
       id="system-index-navigation"
       className={`
-        fixed inset-y-0 left-0 z-40 w-72 sm:w-80 lg:w-72 bg-[#D4CDA4] border-r border-[#15150F] flex flex-col transition-transform duration-200 ease-out
-        lg:static lg:translate-x-0 shrink-0 select-none
+        fixed inset-y-0 left-0 z-50 w-72 sm:w-80 lg:w-72 bg-[#D4CDA4] border-r border-[#15150F] flex flex-col transition-transform duration-200 ease-out
+        lg:static lg:z-auto lg:translate-x-0 shrink-0 select-none
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}
     >
       {/* Technical Index Header */}
       <div className="p-3 border-b border-[#15150F] bg-[#CBC59B]/50 flex items-center justify-between">
-        <h2 className="text-[12px] lg:text-[11px] font-bold uppercase tracking-tighter opacity-70">
-          Owner Technical Index
-        </h2>
-        <span className="text-[10px] lg:text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
-          INDX // 00-05
-        </span>
+        <div className="flex items-center gap-2">
+          <h2 className="text-[12px] lg:text-[11px] font-bold uppercase tracking-tighter opacity-70">
+            Owner Technical Index
+          </h2>
+          <span className="text-[10px] lg:text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono">
+            INDX // 00-05
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileOpen(false)}
+          className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] bg-[#15150F] text-[#D4CDA4] hover:text-[#C3E54E] text-[11px] font-bold font-mono border border-[#15150F] cursor-pointer"
+          aria-label="Close system index"
+        >
+          <X size={13} />
+          <span>CLOSE</span>
+        </button>
       </div>
 
       {/* Main Navigation Matrix */}

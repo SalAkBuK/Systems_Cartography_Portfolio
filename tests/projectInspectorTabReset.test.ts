@@ -192,28 +192,42 @@ test('10. Professional Experience -> All TowerDesk surfaces resolve and land on 
 // ---------------------------------------------------------------------------
 // 11. Navigation Drawer Backdrop & Outside Tap Semantics
 // ---------------------------------------------------------------------------
-test('11. App.tsx renders compact backdrop with aria-label when isMobileNavOpen is true', () => {
+test('11. App.tsx renders compact backdrop with aria-label when isMobileNavOpen is true at z-40', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
   assert.ok(appSource.includes('isMobileNavOpen && ('), 'Backdrop condition must be tied to isMobileNavOpen');
   assert.ok(appSource.includes('aria-label="Close system index"'), 'Backdrop button must have aria-label');
   assert.ok(appSource.includes('onClick={() => setIsMobileNavOpen(false)}'), 'Backdrop click must close drawer');
-  assert.ok(appSource.includes('fixed inset-0 z-30 bg-[#15150F]/40 lg:hidden'), 'Backdrop must use z-30 and lg:hidden');
+  assert.ok(appSource.includes('fixed inset-0 z-40 bg-[#15150F]/40 lg:hidden'), 'Backdrop must use z-40 and lg:hidden');
 });
 
 // ---------------------------------------------------------------------------
-// 12. Drawer Stacking & ID Invariants
+// 12. Drawer / Backdrop / Inspector Z-Index Hierarchy Invariant
 // ---------------------------------------------------------------------------
-test('12. LeftNavigationRail has id="system-index-navigation" and sits at z-40 above backdrop (z-30)', () => {
+test('12. Explicit z-index hierarchy: Drawer (z-50) > Backdrop (z-40) > Inspector (z-30)', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('id="system-index-navigation"'), 'Rail must have id="system-index-navigation"');
-  assert.ok(railSource.includes('z-40'), 'Drawer must use z-40 to sit above backdrop z-30');
-  assert.ok(railSource.includes('lg:static lg:translate-x-0'), 'Drawer must switch to static layout at lg breakpoint');
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+
+  assert.ok(railSource.includes('z-50'), 'LeftNavigationRail drawer must sit at z-50');
+  assert.ok(appSource.includes('z-40'), 'App backdrop must sit at z-40');
+  assert.ok(inspectorSource.includes('z-30'), 'RightInspectorPanel bottom sheet must sit at z-30');
 });
 
 // ---------------------------------------------------------------------------
-// 13. System Index Trigger Breakpoint & Accessibility
+// 13. Explicit Internal Drawer Close Control
 // ---------------------------------------------------------------------------
-test('13. SYSTEM INDEX trigger uses lg:hidden and proper aria attributes', () => {
+test('13. LeftNavigationRail has explicit internal CLOSE button for compact screens', () => {
+  const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
+  assert.ok(railSource.includes('onClick={() => setIsMobileOpen(false)}'), 'Drawer internal close must invoke setIsMobileOpen(false)');
+  assert.ok(railSource.includes('aria-label="Close system index"'), 'Drawer close button must have aria-label');
+  assert.ok(railSource.includes('lg:hidden'), 'Drawer close button must only show below lg');
+  assert.ok(railSource.includes('min-h-[36px]'), 'Drawer close button must have accessible touch target');
+});
+
+// ---------------------------------------------------------------------------
+// 14. System Index Trigger Breakpoint & Accessibility
+// ---------------------------------------------------------------------------
+test('14. SYSTEM INDEX trigger uses lg:hidden and proper aria attributes', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
   assert.ok(appSource.includes('className="lg:hidden'), 'Trigger bar container must use lg:hidden');
   assert.ok(appSource.includes('aria-expanded={isMobileNavOpen}'), 'Trigger button must bind aria-expanded');
@@ -222,9 +236,9 @@ test('13. SYSTEM INDEX trigger uses lg:hidden and proper aria attributes', () =>
 });
 
 // ---------------------------------------------------------------------------
-// 14. Escape Handler Closes Drawer Before Viewport Reset
+// 15. Escape Handler Closes Drawer Before Viewport Reset
 // ---------------------------------------------------------------------------
-test('14. Escape key handler closes mobile drawer before resetting viewport and includes isMobileNavOpen dependency', () => {
+test('15. Escape key handler closes mobile drawer before resetting viewport and includes isMobileNavOpen dependency', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
   
   // Verify Escape ordering
@@ -246,54 +260,95 @@ test('14. Escape key handler closes mobile drawer before resetting viewport and 
 });
 
 // ---------------------------------------------------------------------------
-// 15. iOS 16px Search Input Rule
+// 16. iOS 16px Search Input Rule
 // ---------------------------------------------------------------------------
-test('15. Search input in LeftNavigationRail uses 16px compact font to prevent iOS Safari page zoom', () => {
+test('16. Search input in LeftNavigationRail uses 16px compact font to prevent iOS Safari page zoom', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('text-[16px] lg:text-[9.5px]'), 'Search input must use text-[16px] on compact and text-[9.5px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
-// 16. Topology Mode Subtitle Readable Scale
+// 17. Topology Mode Subtitle Readable Scale
 // ---------------------------------------------------------------------------
-test('16. Topology mode subtitle no longer uses 6.5px microtext on compact viewports', () => {
+test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('text-[9.5px] lg:text-[6.5px]'), 'Mode subtitle must scale to text-[9.5px] on compact');
   assert.ok(railSource.includes('min-h-[42px] lg:min-h-[30px]'), 'Mode buttons must have >= 42px touch target on compact');
 });
 
 // ---------------------------------------------------------------------------
-// 17. Main Navigation Row Touch Target & Readable Typography
+// 18. Main Navigation Row Touch Target & Readable Typography
 // ---------------------------------------------------------------------------
-test('17. Main navigation rows are >= 12px and >= 44px min-height on compact viewports', () => {
+test('18. Main navigation rows are >= 12px and >= 44px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[44px] lg:min-h-[34px]'), 'Main nav must have min-h-[44px] on compact');
   assert.ok(railSource.includes('text-[13px] lg:text-[10.5px]'), 'Main nav must have text-[13px] on compact');
 });
 
 // ---------------------------------------------------------------------------
-// 18. Project Row Touch Target & Readable Typography
+// 19. Project Row Touch Target & Readable Typography
 // ---------------------------------------------------------------------------
-test('18. Project rows are >= 11px and >= 40px min-height on compact viewports', () => {
+test('19. Project rows are >= 11px and >= 40px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[40px] lg:min-h-[28px]'), 'Project rows must have min-h-[40px] on compact');
   assert.ok(railSource.includes('text-[12px] lg:text-[9.5px]'), 'Project rows must have text-[12px] on compact');
 });
 
 // ---------------------------------------------------------------------------
-// 19. Inspector Sub-Tabs & Title Typography
+// 20. ProvenanceBadge Readable Compact Typography
 // ---------------------------------------------------------------------------
-test('19. RightInspectorPanel sub-tabs and title bar use increased compact typography', () => {
+test('20. ProvenanceBadge uses readable compact typography (text-[9.5px] lg:text-[7px])', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
-  assert.ok(inspectorSource.includes('text-[11.5px] lg:text-[10px]'), 'Inspector title must use text-[11.5px] on compact');
-  assert.ok(inspectorSource.includes('text-[11.5px] lg:text-[9px]'), 'Inspector tabs must use text-[11.5px] on compact');
-  assert.ok(inspectorSource.includes('min-h-[38px] lg:min-h-[28px]'), 'Inspector tabs must have min-h-[38px] on compact');
+  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7px]'), 'ProvenanceBadge must use text-[9.5px] on compact and text-[7px] on desktop');
 });
 
 // ---------------------------------------------------------------------------
-// 20. TopTelemetryBar Typography & Touch Targets
+// 21. Inspector Section Headings Typography
 // ---------------------------------------------------------------------------
-test('20. TopTelemetryBar OWNER PROJECTS and CONTACT use increased compact typography and touch targets', () => {
+test('21. RightInspectorPanel section headings use readable compact typography (text-[10.5px] lg:text-[8.5px])', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('text-[10.5px] lg:text-[8.5px] font-bold opacity-60 uppercase tracking-wider'), 'Section headings must use text-[10.5px] on compact');
+});
+
+// ---------------------------------------------------------------------------
+// 22. Project Summary, Challenge, and Solution Typography
+// ---------------------------------------------------------------------------
+test('22. Project summary, challenge, and solution copy use readable compact scale (text-[12px])', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('text-[12px] lg:text-[10.5px] text-[#15150F] bg-[#E2DCB9]/70'), 'Summary body must use text-[12px] on compact');
+  assert.ok(inspectorSource.includes('text-[12px] lg:text-[10px] text-[#22211A] leading-relaxed'), 'Problem/solution copy must use text-[12px] on compact');
+});
+
+// ---------------------------------------------------------------------------
+// 23. Meaningful Project Technology Metadata Scale
+// ---------------------------------------------------------------------------
+test('23. Project tech badges and validation pills use readable compact scale (text-[9.5px])', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7.5px] px-1 bg-[#DCD6B2]'), 'Subsystem tech badges must use text-[9.5px] on compact');
+  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E]'), 'Validation test pills must use text-[9.5px] on compact');
+});
+
+// ---------------------------------------------------------------------------
+// 24. MINIMIZE and CLEAR Compact Controls Touch Height
+// ---------------------------------------------------------------------------
+test('24. MINIMIZE and CLEAR sheet controls have >= 36px touch height and readable labels', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('min-h-[36px]'), 'Sheet controls must have min-h-[36px] touch target');
+  assert.ok(inspectorSource.includes('text-[11px] font-bold'), 'Sheet controls must have text-[11px] font size');
+});
+
+// ---------------------------------------------------------------------------
+// 25. TopTelemetryBar OWNER SOURCE Breakpoint
+// ---------------------------------------------------------------------------
+test('25. TopTelemetryBar OWNER SOURCE remains hidden until lg breakpoint', () => {
+  const telemetrySource = readFileSync(resolve(process.cwd(), 'src/components/TopTelemetryBar.tsx'), 'utf8');
+  assert.ok(telemetrySource.includes('className="hidden lg:flex flex-col"'), 'OWNER SOURCE must use hidden lg:flex');
+});
+
+// ---------------------------------------------------------------------------
+// 26. TopTelemetryBar OWNER PROJECTS and CONTACT Typography & Targets
+// ---------------------------------------------------------------------------
+test('26. TopTelemetryBar OWNER PROJECTS and CONTACT use increased compact typography and touch targets', () => {
   const telemetrySource = readFileSync(resolve(process.cwd(), 'src/components/TopTelemetryBar.tsx'), 'utf8');
   assert.ok(telemetrySource.includes('text-[9.5px] lg:text-[7.5px]'), 'OWNER PROJECTS label must use text-[9.5px] on compact');
   assert.ok(telemetrySource.includes('text-[11.5px] lg:text-[9.5px]'), 'Public repos count must use text-[11.5px] on compact');

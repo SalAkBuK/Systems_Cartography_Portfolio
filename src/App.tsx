@@ -281,7 +281,7 @@ export default function App() {
             type="button"
             aria-label="Close system index"
             onClick={() => setIsMobileNavOpen(false)}
-            className="fixed inset-0 z-30 bg-[#15150F]/40 lg:hidden cursor-pointer"
+            className="fixed inset-0 z-40 bg-[#15150F]/40 lg:hidden cursor-pointer"
           />
         )}
 
