@@ -168,6 +168,17 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
             LIVE TELEMETRY
           </span>
 
+          {(selectedProject || selectedSkill || selectedExperience || selectedSubsystem) && (
+            <button
+              onClick={onClearSelection}
+              className="hidden lg:inline-flex items-center px-2 py-1 bg-[#CBC59B] text-[#15150F] text-[8.5px] font-bold border border-[#15150F] cursor-pointer hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+              title="Clear selection"
+              aria-label="Clear selection"
+            >
+              ✕ CLEAR
+            </button>
+          )}
+
           {/* Mobile Sheet Controls */}
           <div className="flex items-center gap-1.5 lg:hidden">
             <button
