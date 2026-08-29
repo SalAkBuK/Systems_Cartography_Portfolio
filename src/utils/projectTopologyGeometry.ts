@@ -147,14 +147,14 @@ export function wrapCalloutTitle(
 // that actually gets drawn.
 // ---------------------------------------------------------------------------
 
-export const PROJECT_CALLOUT_WIDTH = 132;
+export const PROJECT_CALLOUT_WIDTH = 120;
 export const PROJECT_CALLOUT_SINGLE_HEIGHT = 28;
 export const PROJECT_CALLOUT_DOUBLE_HEIGHT = 38;
 export const PROJECT_CALLOUT_SINGLE_Y = -12;
 export const PROJECT_CALLOUT_DOUBLE_Y = -15;
 
 /** Small breathing margin (iso/visual units) added around a project's full visual envelope. */
-export const PROJECT_VISUAL_MARGIN = 12;
+export const PROJECT_VISUAL_MARGIN = 8;
 
 export interface TopologyVisualBounds {
   minX: number;
