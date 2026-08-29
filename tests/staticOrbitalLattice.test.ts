@@ -7,6 +7,7 @@ import {
   getNodeBounds,
   checkAABBOverlap,
   computeFitViewport,
+  getConduitPresentationState,
 } from '../src/utils/topologyLayout.ts';
 import { project3DToIso } from '../src/utils/isometricProjection.ts';
 import {
@@ -333,14 +334,16 @@ test('TopologyCanvas.tsx: position precedence is drag > custom/manual > canonica
   const effectiveFallbackIdx = getProjectPosBlock.indexOf('effectiveProjectPositions[project.id] || project.gridPosition');
   assert.ok(dragCheckIdx !== -1 && effectiveFallbackIdx !== -1 && dragCheckIdx < effectiveFallbackIdx, 'Drag position must be checked before the canonical/custom fallback');
 
-  // effectiveProjectPositions: lattice spread first, custom spread second (custom wins on key collision)
+  // effectiveProjectPositions: animated canonical orbit spread first, custom
+  // spread second (custom wins on key collision — a manually dragged project
+  // stays fixed and does not resume orbiting until ASSEMBLE clears it).
   assert.ok(
-    content.includes('{ ...staticOrbitalLattice.projectPositions, ...customProjectPositions }'),
-    'Custom positions must be layered on top of (spread after) the canonical lattice'
+    content.includes('{ ...animatedCanonicalProjectPositions, ...customProjectPositions }'),
+    'Custom positions must be layered on top of (spread after) the animated canonical orbit'
   );
   assert.ok(
     content.includes('{ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }'),
-    'Custom skill positions must be layered on top of (spread after) the canonical lattice'
+    'Custom skill positions must be layered on top of (spread after) the canonical lattice (capabilities do not orbit)'
   );
 });
 
@@ -360,11 +363,12 @@ test('TopologyCanvas.tsx: collision and snap-resolution read from effective (can
   );
 });
 
-test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts: zero autonomous motion, zero magnetic/docking implementation', () => {
+// PR22 legitimately introduces orbitPhase/requestAnimationFrame (autonomous
+// motion is the point of this PR). What remains explicitly out of scope is
+// the PR23 docking/detachment/magnetic contract — that boundary is what this
+// test guards now.
+test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts & orbitMotion.ts: zero magnetic/docking implementation (PR23 scope)', () => {
   const forbidden = [
-    'orbitPhase',
-    'requestAnimationFrame',
-    'setInterval(',
     'dockState',
     'detaching',
     'detached',
@@ -379,6 +383,7 @@ test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts: zero 
     'src/utils/topologyLayout.ts',
     'src/utils/projectTopologyGeometry.ts',
     'src/utils/isometricProjection.ts',
+    'src/utils/orbitMotion.ts',
   ];
   for (const file of files) {
     const content = fs.readFileSync(path.resolve(file), 'utf8');
@@ -474,4 +479,102 @@ test('computeFitViewport: centers the bounds midpoint (pure, DOM-free)', () => {
   const midY = (bounds.minY + bounds.maxY) / 2;
   assert.ok(Math.abs(x - (-midX * zoom)) < 1e-6);
   assert.ok(Math.abs(y - (-midY * zoom)) < 1e-6);
+});
+
+// ---------------------------------------------------------------------------
+// PR22: focused/background relationship conduit presentation hierarchy.
+// Association logic (getConduitPresentationState, projectUsesCapability,
+// calculateConduitGeometry) is UNCHANGED — see topologyLegibility.test.ts
+// tests 1-8 and 16, still passing unmodified. Only rendering weight changed.
+// ---------------------------------------------------------------------------
+
+function extractConduitRenderBlock(content: string): string {
+  const startIdx = content.indexOf("if (presentationState === 'background') {");
+  const endIdx = content.indexOf('return connections;', startIdx);
+  return content.slice(startIdx, endIdx === -1 ? undefined : endIdx);
+}
+
+test('TopologyCanvas.tsx: background relationships remain thin/subdued (no lime highway at rest)', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractConduitRenderBlock(content);
+  const backgroundBlock = block.slice(0, block.indexOf('Focused or Dragging state'));
+
+  assert.ok(!backgroundBlock.includes('#C3E54E'), 'Background (at-rest) conduits must not use the lime accent color');
+  assert.ok(/strokeWidth=\{0\.7\}/.test(backgroundBlock), 'Background conduit stroke must be thin (~0.7)');
+  assert.ok(backgroundBlock.includes('strokeDasharray="3 3"'), 'Background conduits remain dashed/schematic');
+});
+
+test('TopologyCanvas.tsx: focused conduits no longer use the oversized highway treatment (no 5px/3.5px glow halo, no 3px+ ink line, no 3.5px+ endpoints)', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractConduitRenderBlock(content);
+  const focusedBlock = block.slice(block.indexOf('Focused or Dragging state'));
+
+  assert.ok(!focusedBlock.includes('strokeWidth={isDirectHover ? 5 : 3.5}'), 'Old oversized glow halo width must be gone');
+  assert.ok(!focusedBlock.includes('strokeWidth={isDirectHover ? 3 : 2.2}'), 'Old oversized main-path width must be gone');
+  assert.ok(!focusedBlock.includes('r={3.5}'), 'Old oversized 3.5px anchor ports must be gone');
+  assert.ok(!focusedBlock.includes('animate-ping'), 'No animate-ping midpoint halo for every active conduit');
+  assert.ok(!focusedBlock.includes('coreTech.length'), 'No floating per-conduit technology tag box (redundant pile of labels)');
+
+  // New tighter treatment is present.
+  assert.ok(focusedBlock.includes('strokeWidth={isDirectHover ? 2.2 : 1.8}'), 'New subtle lime support stroke must be present');
+  assert.ok(focusedBlock.includes('strokeWidth={isDirectHover ? 1.2 : 0.9}'), 'New thin ink main path must be present');
+});
+
+test('TopologyCanvas.tsx: continuous signal animation only ever renders under direct hover, never for every focused/selected conduit unconditionally', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  const block = extractConduitRenderBlock(content);
+  const focusedBlock = block.slice(block.indexOf('Focused or Dragging state'));
+
+  const signalIdx = focusedBlock.indexOf('signal-conduit-fast');
+  assert.ok(signalIdx !== -1, 'signal animation class must still exist for direct-hover use');
+  const guardIdx = focusedBlock.lastIndexOf('isDirectHover &&', signalIdx);
+  assert.ok(guardIdx !== -1 && signalIdx - guardIdx < 300, 'Signal animation must be gated immediately behind an isDirectHover && conditional, not rendered unconditionally');
+});
+
+// ---------------------------------------------------------------------------
+// PR22: reduced-motion and compact-viewport wiring regression. The pure
+// isOrbitPauseConditionActive contract itself is exhaustively tested in
+// tests/orbitMotion.test.ts; this proves TopologyCanvas actually WIRES
+// prefersReducedMotion and the compact-viewport check into it, not just that
+// the pure function would handle them correctly in isolation.
+// ---------------------------------------------------------------------------
+
+test('TopologyCanvas.tsx: prefers-reduced-motion is read via matchMedia and fed into the orbit pause state', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  assert.ok(content.includes("matchMedia('(prefers-reduced-motion: reduce)')"), 'Must query the reduced-motion media feature');
+  assert.ok(content.includes("mediaQuery.addEventListener('change'"), 'Must react to reduced-motion preference changes while running, not just at mount');
+  const pauseStateIdx = content.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
+  const pauseStateBlock = content.slice(pauseStateIdx, content.indexOf('}), [', pauseStateIdx));
+  assert.ok(pauseStateBlock.includes('prefersReducedMotion,'), 'orbitPauseState must include prefersReducedMotion');
+});
+
+test('TopologyCanvas.tsx: compact viewport (<1024px) is derived from containerDimensions and feeds the orbit pause state — no separate mobile autoplay path', () => {
+  const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
+  assert.ok(content.includes('const isCompactViewport = containerDimensions.width < 1024;'), 'Compact threshold must be derived from the existing container width state');
+  const pauseStateIdx = content.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
+  const pauseStateBlock = content.slice(pauseStateIdx, content.indexOf('}), [', pauseStateIdx));
+  assert.ok(pauseStateBlock.includes('isCompact: isCompactViewport,'), 'orbitPauseState must include the compact-viewport flag');
+  assert.ok(!content.includes('swipe-to-spin') && !content.includes('long-press detach') && !content.includes('touch magnetic'), 'No mobile autoplay/swipe/long-press motion features may be introduced');
+});
+
+test('topologyLayout.ts: getConduitPresentationState association/state-machine rules are unchanged by PR22 (styling-only change)', () => {
+  // Behavioral proof that the decision layer itself was not touched: the exact
+  // same rule set from PR21 (tests 1-8 in topologyLegibility.test.ts) still holds.
+  const hidden = getConduitPresentationState({
+    isConnected: true, isProjectHovered: false, isSkillHovered: false,
+    isProjectSelected: false, isSkillSelected: false, isDraggingThisProject: false,
+    isDraggingThisSkill: false, isAnyProjectHovered: false, isAnySkillHovered: false,
+    isAnyProjectSelected: false, isAnySkillSelected: false, isAnyDragging: false,
+    showBackgroundRelationships: false,
+  });
+  assert.equal(hidden, 'hidden');
+
+  const focused = getConduitPresentationState({
+    isConnected: true, isProjectHovered: true, isSkillHovered: false,
+    isProjectSelected: false, isSkillSelected: false, isDraggingThisProject: false,
+    isDraggingThisSkill: false, isAnyProjectHovered: true, isAnySkillHovered: false,
+    isAnyProjectSelected: false, isAnySkillSelected: false, isAnyDragging: false,
+    showBackgroundRelationships: false,
+  });
+  assert.equal(focused, 'focused');
 });

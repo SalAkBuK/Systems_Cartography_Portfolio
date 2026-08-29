@@ -5,7 +5,8 @@ import {
   getTopologyProjectDimensions,
   getTopologyProjectVisualBounds,
   wrapCalloutTitle,
-  type TopologyVisualBounds
+  type TopologyVisualBounds,
+  type TopologyProjectDimensions
 } from './projectTopologyGeometry';
 
 // Re-exported for backward compatibility: TopologyCanvas and existing tests
@@ -251,6 +252,16 @@ export interface StaticOrbitGeometry {
   radiusY: number;
   slots: StaticOrbitSlot[];
   visualBounds: { minX: number; maxX: number; minY: number; maxY: number };
+  /**
+   * Conservative bounds that stay valid across the ENTIRE revolution (PR22
+   * orbital motion), not just the phase-0 static arrangement. Computed once,
+   * analytically — never recomputed per animation frame. Because project
+   * orientation never rotates, each project's visual envelope offset relative
+   * to its own orbiting center is invariant under translation along the
+   * ellipse; the worst-case offset in each direction, applied to the full
+   * ellipse bounding box, bounds every possible phase.
+   */
+  motionVisualBounds: { minX: number; maxX: number; minY: number; maxY: number };
 }
 
 export interface AssembledTopologyPositions {
@@ -398,6 +409,12 @@ function buildStaticProjectOrbit(
       minY: centerIso.y - radiusY, maxY: centerIso.y + radiusY,
     };
     const unioned = unionVisualBounds([coreIsoBounds, ellipseBounds]);
+    const paddedBounds = {
+      minX: unioned.minX - FIT_VIEWPORT_PADDING,
+      maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
+      minY: unioned.minY - FIT_VIEWPORT_PADDING,
+      maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
+    };
     return {
       projectPositions,
       orbitGeometry: {
@@ -405,12 +422,8 @@ function buildStaticProjectOrbit(
         radiusX,
         radiusY,
         slots: [],
-        visualBounds: {
-          minX: unioned.minX - FIT_VIEWPORT_PADDING,
-          maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
-          minY: unioned.minY - FIT_VIEWPORT_PADDING,
-          maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
-        },
+        visualBounds: paddedBounds,
+        motionVisualBounds: paddedBounds,
       },
     };
   }
@@ -439,6 +452,24 @@ function buildStaticProjectOrbit(
   // 4. Evenly distribute one slot per project, starting at the top, going clockwise.
   // Positions are the EXACT inverse-projection of the ellipse point — no grid
   // snapping — so the rendered project center lies precisely on the track.
+  //
+  // `angleOffset` mirrors PR22's shared orbit phase: this same base-angle
+  // formula plus a uniform offset is exactly what orbitMotion.ts's
+  // getOrbitalProjectPositionAtPhase computes at runtime. Duplicated here
+  // (rather than imported) so this module stays self-contained; the two are
+  // covered by cross-checking tests.
+  const positionAtAngle = (
+    dims: TopologyProjectDimensions,
+    angle: number,
+    rx: number,
+    ry: number
+  ): { isoX: number; isoY: number; origin: { x: number; y: number } } => {
+    const isoX = centerIso.x + rx * Math.cos(angle);
+    const isoY = centerIso.y + ry * Math.sin(angle);
+    const worldCenter = projectIsoTo3D(isoX, isoY);
+    return { isoX, isoY, origin: { x: worldCenter.x - dims.width / 2, y: worldCenter.y - dims.depth / 2 } };
+  };
+
   const computeSlots = (rx: number, ry: number) => {
     const slots: StaticOrbitSlot[] = [];
     const positions: Record<string, { x: number; y: number }> = {};
@@ -446,64 +477,73 @@ function buildStaticProjectOrbit(
 
     for (let i = 0; i < totalProjects; i++) {
       const project = sortedProjects[i];
-      const dims = getTopologyProjectDimensions(project);
+      const dims = projectDims[i];
       const angle = (i / totalProjects) * 2 * Math.PI - Math.PI / 2;
-      const isoX = centerIso.x + rx * Math.cos(angle);
-      const isoY = centerIso.y + ry * Math.sin(angle);
-      const worldCenter = projectIsoTo3D(isoX, isoY);
-      const originX = worldCenter.x - dims.width / 2;
-      const originY = worldCenter.y - dims.depth / 2;
-      const worldOrigin = { x: originX, y: originY };
+      const { isoX, isoY, origin } = positionAtAngle(dims, angle, rx, ry);
 
-      positions[project.id] = worldOrigin;
+      positions[project.id] = origin;
       slots.push({
         projectId: project.id,
         slotIndex: i,
         angle,
         isoX,
         isoY,
-        worldX: originX,
-        worldY: originY,
+        worldX: origin.x,
+        worldY: origin.y,
       });
-      visualBoxes.push(getTopologyProjectVisualBounds(project, worldOrigin));
+      visualBoxes.push(getTopologyProjectVisualBounds(project, origin));
     }
 
     return { slots, positions, visualBoxes };
   };
 
-  let { slots, positions, visualBoxes } = computeSlots(radiusX, radiusY);
+  // PR22 introduces autonomous orbital motion: every project shares one phase
+  // and revolves through EVERY angular position over a full revolution, not
+  // just its phase-0 slot. A radius that is collision-safe only at phase 0 is
+  // NOT proven safe through the whole revolution — slot chord distances vary
+  // around an ellipse, and project footprints/callouts differ in size, so a
+  // wide project rotating into a "tight" arc position (or past a mismatched
+  // neighbor) can overlap even when the phase-0 arrangement was clear. So the
+  // authority for growing the ellipse is a full-revolution sweep, not a
+  // single static check.
+  const MOTION_SWEEP_SAMPLES = 72; // 5-degree increments
 
-  // Overlap validation uses each project's FULL rendered visual envelope
-  // (structure + callout card, in isometric/visual space) — not just the
-  // ground-plane footprint — so orbital spacing reflects what is actually drawn.
-  const hasOverlap = (): boolean => {
-    for (let i = 0; i < visualBoxes.length; i++) {
-      for (let j = i + 1; j < visualBoxes.length; j++) {
-        if (checkAABBOverlap(visualBoxes[i], visualBoxes[j], 0)) return true;
+  const hasOverlapAcrossRevolution = (rx: number, ry: number): boolean => {
+    for (let s = 0; s < MOTION_SWEEP_SAMPLES; s++) {
+      const angleOffset = (s / MOTION_SWEEP_SAMPLES) * 2 * Math.PI;
+      const boxes: TopologyVisualBounds[] = [];
+      for (let i = 0; i < totalProjects; i++) {
+        const angle = (i / totalProjects) * 2 * Math.PI - Math.PI / 2 + angleOffset;
+        const { origin } = positionAtAngle(projectDims[i], angle, rx, ry);
+        boxes.push(getTopologyProjectVisualBounds(sortedProjects[i], origin));
       }
-    }
-    for (const projectBox of visualBoxes) {
-      if (checkAABBOverlap(projectBox, coreIsoBounds, 0)) return true;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          if (checkAABBOverlap(boxes[i], boxes[j], 0)) return true;
+        }
+        if (checkAABBOverlap(boxes[i], coreIsoBounds, 0)) return true;
+      }
     }
     return false;
   };
 
-  // 5. Validate zero-overlap against the actual rendered visual envelopes; if the
-  // heuristic radius wasn't quite enough, grow the whole ellipse uniformly and
-  // re-place every slot (never nudge a single slot independently — the
-  // perimeter must stay one coherent ellipse).
+  // 5. Validate zero-overlap ACROSS THE FULL REVOLUTION against the actual
+  // rendered visual envelopes; if the heuristic radius wasn't quite enough,
+  // grow the whole ellipse uniformly and re-check (never nudge a single slot
+  // independently — the perimeter must stay one coherent ellipse, safe at
+  // every phase, not just phase 0).
   let validationIterations = 0;
-  while (hasOverlap() && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
+  while (hasOverlapAcrossRevolution(radiusX, radiusY) && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
     radiusX += ORBIT_RADIUS_GROWTH_STEP;
     radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
-    ({ slots, positions, visualBoxes } = computeSlots(radiusX, radiusY));
     validationIterations++;
   }
 
-  if (hasOverlap()) {
-    throw new Error('Deterministic layout failed: unable to place static project orbit without collision.');
+  if (hasOverlapAcrossRevolution(radiusX, radiusY)) {
+    throw new Error('Deterministic layout failed: unable to place a motion-safe static project orbit without collision.');
   }
 
+  const { slots, positions, visualBoxes } = computeSlots(radiusX, radiusY);
   Object.assign(projectPositions, positions);
 
   const ellipseBounds: TopologyVisualBounds = {
@@ -511,6 +551,40 @@ function buildStaticProjectOrbit(
     minY: centerIso.y - radiusY, maxY: centerIso.y + radiusY,
   };
   const unioned = unionVisualBounds([coreIsoBounds, ellipseBounds, ...visualBoxes]);
+  const visualBounds: TopologyVisualBounds = {
+    minX: unioned.minX - FIT_VIEWPORT_PADDING,
+    maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
+    minY: unioned.minY - FIT_VIEWPORT_PADDING,
+    maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
+  };
+
+  // Motion-safe bounds: each project's visual envelope offset relative to its
+  // OWN orbiting center (slot.isoX/isoY) is invariant under translation along
+  // the ellipse (orientation never rotates), so the worst-case offset in each
+  // direction — computed once from the phase-0 envelopes already on hand —
+  // bounds every possible phase without re-deriving anything per frame.
+  let maxOffsetLeft = 0, maxOffsetRight = 0, maxOffsetTop = 0, maxOffsetBottom = 0;
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    const box = visualBoxes[i];
+    maxOffsetLeft = Math.max(maxOffsetLeft, slot.isoX - box.minX);
+    maxOffsetRight = Math.max(maxOffsetRight, box.maxX - slot.isoX);
+    maxOffsetTop = Math.max(maxOffsetTop, slot.isoY - box.minY);
+    maxOffsetBottom = Math.max(maxOffsetBottom, box.maxY - slot.isoY);
+  }
+  const motionEllipseBounds: TopologyVisualBounds = {
+    minX: centerIso.x - radiusX - maxOffsetLeft,
+    maxX: centerIso.x + radiusX + maxOffsetRight,
+    minY: centerIso.y - radiusY - maxOffsetTop,
+    maxY: centerIso.y + radiusY + maxOffsetBottom,
+  };
+  const motionUnioned = unionVisualBounds([coreIsoBounds, motionEllipseBounds]);
+  const motionVisualBounds: TopologyVisualBounds = {
+    minX: motionUnioned.minX - FIT_VIEWPORT_PADDING,
+    maxX: motionUnioned.maxX + FIT_VIEWPORT_PADDING,
+    minY: motionUnioned.minY - FIT_VIEWPORT_PADDING,
+    maxY: motionUnioned.maxY + FIT_VIEWPORT_PADDING,
+  };
 
   return {
     projectPositions,
@@ -519,12 +593,8 @@ function buildStaticProjectOrbit(
       radiusX,
       radiusY,
       slots,
-      visualBounds: {
-        minX: unioned.minX - FIT_VIEWPORT_PADDING,
-        maxX: unioned.maxX + FIT_VIEWPORT_PADDING,
-        minY: unioned.minY - FIT_VIEWPORT_PADDING,
-        maxY: unioned.maxY + FIT_VIEWPORT_PADDING,
-      },
+      visualBounds,
+      motionVisualBounds,
     },
   };
 }
