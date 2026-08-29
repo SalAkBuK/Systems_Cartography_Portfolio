@@ -1816,7 +1816,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           </text>
           <text
             x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 12}
+            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 34}
             fontSize="18"
             fontWeight="bold"
             fill="#5C5946"
@@ -1825,6 +1825,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             textAnchor="middle"
           >
             RING 02 // DEPLOYED SYSTEMS
+          </text>
+          <text
+            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
+            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 12}
+            fontSize="16"
+            fontWeight="bold"
+            fill="#5C5946"
+            fontFamily="monospace"
+            letterSpacing="1"
+            textAnchor="middle"
+          >
+            ORBITAL LOAD // {dockedOrbitOrder.length} SYSTEMS
           </text>
         </g>
 

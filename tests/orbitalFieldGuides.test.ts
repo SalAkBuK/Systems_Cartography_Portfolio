@@ -45,4 +45,7 @@ test('orbital field guides and annotations render noninteractive background geom
   assert.ok(annotGroupBlock.includes('RING 01 // CAPABILITY NUCLEUS'), 'Must render Ring 01 capability nucleus annotation');
   assert.ok(annotGroupBlock.includes('RING 02 // DEPLOYED SYSTEMS'), 'Must render Ring 02 deployed systems annotation');
   assert.ok(annotGroupBlock.includes('staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY'), 'Ring 02 must anchor to motionVisualBounds.minY');
+
+  // Live telemetry derived from runtime docked orbit state
+  assert.ok(annotGroupBlock.includes('ORBITAL LOAD //') && annotGroupBlock.includes('dockedOrbitOrder.length'), 'Must render live ORBITAL LOAD telemetry derived from dockedOrbitOrder.length');
 });
