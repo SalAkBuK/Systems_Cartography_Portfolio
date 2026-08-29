@@ -75,6 +75,14 @@ import {
   PROJECT_CALLOUT_SINGLE_Y,
   PROJECT_CALLOUT_DOUBLE_Y
 } from '../utils/projectTopologyGeometry';
+import {
+  getOrbitalProjectPositionAtPhase,
+  isOrbitPauseConditionActive,
+  stepOrbitClock,
+  ORBIT_RESUME_DELAY_MS,
+  type OrbitClockState,
+  type OrbitPauseState
+} from '../utils/orbitMotion';
 
 // Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
 // tests) import the isometric projection helpers from this component file. The
@@ -136,19 +144,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [customProjectPositions, setCustomProjectPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [customSkillPositions, setCustomSkillPositions] = useState<Record<string, { x: number; y: number }>>({});
 
-  // Effective position maps: static orbital lattice as the base layer, with any
-  // manually dragged/assembled positions layered on top. Passed to collision &
-  // snap-resolution so they always agree with what is actually rendered, instead
-  // of resolving un-dragged neighbors against stale authored gridPosition data.
-  const effectiveProjectPositions = useMemo(
-    () => ({ ...staticOrbitalLattice.projectPositions, ...customProjectPositions }),
-    [staticOrbitalLattice, customProjectPositions]
-  );
-  const effectiveSkillPositions = useMemo(
-    () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
-    [staticOrbitalLattice, customSkillPositions]
-  );
-
   // Grid snap state (enabled by default)
   const [gridSnapEnabled, setGridSnapEnabled] = useState(true);
   const [snapNotice, setSnapNotice] = useState<{ message: string; type: 'snap' | 'collision' } | null>(null);
@@ -163,6 +158,132 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     currentPos: { x: number; y: number };
     hasMoved: boolean;
   } | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // PR22: Orbital motion. ONE shared phase drives every canonical (non-custom)
+  // project's position around the PR21 static ellipse. No per-project timers,
+  // no animation library — a single requestAnimationFrame loop advances one
+  // phase value; positions are a pure derivation of it (orbitMotion.ts).
+  // ---------------------------------------------------------------------------
+
+  const isCompactViewport = containerDimensions.width < 1024;
+
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const [isDocumentHidden, setIsDocumentHidden] = useState<boolean>(
+    () => typeof document !== 'undefined' && document.hidden
+  );
+  useEffect(() => {
+    const handleVisibilityChange = () => setIsDocumentHidden(document.hidden);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // One ring, one phase, one pause state — never per-project.
+  const orbitPauseState: OrbitPauseState = useMemo(() => ({
+    isProjectHovered: Boolean(hoveredProjectId),
+    isSkillHovered: Boolean(hoveredSkillId),
+    isProjectSelected: Boolean(selectedProjectId),
+    isSkillSelected: Boolean(selectedSkillId),
+    isNodeDragging: Boolean(draggingNode),
+    isCanvasPanning: isDragging,
+    isDocumentHidden,
+    prefersReducedMotion,
+    isCompact: isCompactViewport,
+    isExperienceSelected: Boolean(selectedExperienceId),
+  }), [
+    hoveredProjectId, hoveredSkillId, selectedProjectId, selectedSkillId,
+    draggingNode, isDragging, isDocumentHidden, prefersReducedMotion,
+    isCompactViewport, selectedExperienceId
+  ]);
+  const isPauseConditionActive = useMemo(
+    () => isOrbitPauseConditionActive(orbitPauseState),
+    [orbitPauseState]
+  );
+
+  // Transient interactions (hover/drag/pan) shouldn't cause immediate stop/start
+  // jitter: once every pause condition clears, wait ORBIT_RESUME_DELAY_MS before
+  // actually resuming. Persistent conditions (selection, reduced motion, compact,
+  // hidden) keep isPauseConditionActive true, so they never reach this timer.
+  const [isResumeReady, setIsResumeReady] = useState(true);
+  useEffect(() => {
+    if (isPauseConditionActive) {
+      setIsResumeReady(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsResumeReady(true), ORBIT_RESUME_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isPauseConditionActive]);
+
+  const isOrbitRunning = !isPauseConditionActive && isResumeReady;
+  const isOrbitRunningRef = useRef(isOrbitRunning);
+  useEffect(() => {
+    isOrbitRunningRef.current = isOrbitRunning;
+  }, [isOrbitRunning]);
+
+  const [orbitPhase, setOrbitPhase] = useState(0);
+  const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
+
+  // The ONE requestAnimationFrame loop for the ring's entire lifetime. Reads
+  // isOrbitRunningRef each frame rather than restarting on every pause/resume,
+  // so there is never more than one loop. stepOrbitClock resets lastTimestamp
+  // to null whenever not running, so a resume (including after a long hidden
+  // tab) re-baselines instead of applying a large catch-up jump.
+  useEffect(() => {
+    let rafId: number;
+    const tick = (timestamp: number) => {
+      const next = stepOrbitClock(orbitClockRef.current, timestamp, isOrbitRunningRef.current);
+      orbitClockRef.current = next;
+      setOrbitPhase(next.phase);
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
+
+  // Pure derivation from orbitPhase + staticOrbitalLattice + projects — no
+  // per-frame allocation beyond this one small map rebuild.
+  const animatedCanonicalProjectPositions = useMemo(() => {
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const slot of staticOrbitalLattice.orbitGeometry.slots) {
+      const project = projectsById.get(slot.projectId);
+      if (!project) continue;
+      positions[slot.projectId] = getOrbitalProjectPositionAtPhase(
+        project,
+        slot,
+        staticOrbitalLattice.orbitGeometry,
+        orbitPhase
+      );
+    }
+    return positions;
+  }, [staticOrbitalLattice, projectsById, orbitPhase]);
+
+  // Effective position maps: the animated canonical orbit as the base layer,
+  // with any manually dragged/assembled positions layered on top. Passed to
+  // collision & snap-resolution so they always agree with what is actually
+  // rendered. A project present in customProjectPositions stays fixed there —
+  // it does not resume orbiting until ASSEMBLE clears the override (a future
+  // PR will formalize this as an explicit membership state machine).
+  const effectiveProjectPositions = useMemo(
+    () => ({ ...animatedCanonicalProjectPositions, ...customProjectPositions }),
+    [animatedCanonicalProjectPositions, customProjectPositions]
+  );
+  const effectiveSkillPositions = useMemo(
+    () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
+    [staticOrbitalLattice, customSkillPositions]
+  );
 
   // Synchronized node position getters for 100% frame-accurate alignment
   const getProjectPos = useCallback((project: ProjectData) => {
@@ -227,22 +348,36 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return getCapabilitiesLinkedToExperience(selectedExp, projects, activeSkills);
   }, [selectedExp, projects, activeSkills]);
 
+  // Resets manual overrides AND the shared orbit phase back to canonical 0.
+  // No return to legacy project.gridPosition — the animated canonical lattice
+  // is the default. Motion resumes from phase 0 only if no pause condition
+  // currently prohibits it (e.g. the panel this was opened from is still
+  // hovered) — this does not force-start the ring.
+  const resetOrbitPhaseToCanonical = useCallback(() => {
+    orbitClockRef.current = { phase: 0, lastTimestamp: null };
+    setOrbitPhase(0);
+  }, []);
+
   const resetAllPositions = useCallback(() => {
     setCustomProjectPositions({});
     setCustomSkillPositions({});
+    resetOrbitPhaseToCanonical();
     setSnapNotice({ message: 'TOPOLOGY POSITIONS RESET TO DEFAULT', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, []);
+  }, [resetOrbitPhaseToCanonical]);
 
-  // Restores the canonical static orbital lattice by clearing manual overrides.
-  // The lattice is now the default fallback itself (see staticOrbitalLattice above),
-  // so ASSEMBLE no longer needs to copy coordinates into custom state.
+  // Restores the canonical static orbital lattice by clearing manual overrides
+  // and resetting the shared orbit phase to 0. The lattice is now the default
+  // fallback itself (see staticOrbitalLattice/animatedCanonicalProjectPositions
+  // above), so ASSEMBLE no longer needs to copy coordinates into custom state.
+  // No snapping/tweening animation for the restore itself — a future PR may add one.
   const handleAssemble = useCallback(() => {
     setCustomProjectPositions({});
     setCustomSkillPositions({});
+    resetOrbitPhaseToCanonical();
     setSnapNotice({ message: 'TOPOLOGY RESTORED // CANONICAL ORBITAL LATTICE', type: 'snap' });
     setTimeout(() => setSnapNotice(null), 2400);
-  }, []);
+  }, [resetOrbitPhaseToCanonical]);
 
   const hasCustomPositions = useMemo(() => {
     return Object.keys(customProjectPositions).length > 0 ||
@@ -297,19 +432,26 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Auto-fit function to center and fit the actual static orbital lattice bounds
-  // (compact <lg and desktop aware). Frames the real ellipse + capability core +
-  // every rendered project/callout envelope, so nothing clips. minZoom here is
-  // only a last-resort safety floor against pathological (near-zero) layouts —
-  // it must stay low enough to never bind for realistic project counts, since a
-  // binding floor would silently defeat the fit it's supposed to protect. This
-  // is independent of the manual wheel/keyboard zoom floor (0.45) used elsewhere.
+  // Auto-fit function to center and fit the actual orbital lattice bounds
+  // (compact <lg and desktop aware). On desktop, autonomous orbital motion is
+  // enabled, so FIT ALL frames motionVisualBounds — the conservative bounds
+  // that stay valid across the ENTIRE revolution, not just the current phase —
+  // otherwise a slow pan/zoom mismatch would appear as the ring turns. Compact
+  // viewports never run the orbit (PR21-style static lattice), so they use the
+  // tighter static visualBounds instead. minZoom here is only a last-resort
+  // safety floor against pathological (near-zero) layouts — it must stay low
+  // enough to never bind for realistic project counts, since a binding floor
+  // would silently defeat the fit it's supposed to protect. This is
+  // independent of the manual wheel/keyboard zoom floor (0.45) used elsewhere.
   const fitAll = useCallback(() => {
     if (!containerRef.current) return;
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
     const isCompact = w < 1024;
-    const { zoom, x, y } = computeFitViewport(staticOrbitalLattice.orbitGeometry.visualBounds, w, h, {
+    const bounds = isCompact
+      ? staticOrbitalLattice.orbitGeometry.visualBounds
+      : staticOrbitalLattice.orbitGeometry.motionVisualBounds;
+    const { zoom, x, y } = computeFitViewport(bounds, w, h, {
       paddingFactor: isCompact ? 0.92 : 0.95,
       minZoom: isCompact ? 0.15 : 0.20,
       maxZoom: 1.2,
@@ -682,139 +824,111 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         const { startIso, midIso, endIso, pathData, tension } = conduitGeom;
         const isDraggingState = presentationState === 'dragging';
         const isDirectHover = isProjectHovered || isSkillHovered;
-        const coreTech = getCapabilityCoreTechnology(skill);
 
         if (presentationState === 'background') {
-          // Subdued, static schematic trace line
+          // Subdued, static schematic trace line — subordinate to the orbit itself
           connections.push(
-            <g key={pairKey} className="opacity-40 transition-opacity duration-200">
+            <g key={pairKey} className="opacity-35 transition-opacity duration-200">
               <path
                 d={pathData}
                 fill="none"
                 stroke="rgba(21, 21, 15, 0.35)"
-                strokeWidth={1}
+                strokeWidth={0.7}
                 strokeDasharray="3 3"
               />
-              <circle cx={startIso.x} cy={startIso.y} r={1.8} fill="#15150F" />
-              <circle cx={midIso.x} cy={midIso.y} r={2} fill="#15150F" />
-              <circle cx={endIso.x} cy={endIso.y} r={1.8} fill="#15150F" />
+              <circle cx={startIso.x} cy={startIso.y} r={1.5} fill="#15150F" />
+              <circle cx={midIso.x} cy={midIso.y} r={1.6} fill="#15150F" />
+              <circle cx={endIso.x} cy={endIso.y} r={1.5} fill="#15150F" />
             </g>
           );
           return;
         }
 
-        // Focused or Dragging state
+        // Focused or Dragging state: connected nodes are the stars, the line is
+        // supporting evidence — a thin ink trace with a subtle lime support
+        // stroke underneath, not a thick highway competing with the orbit's
+        // own motion for attention.
+        const endpointRadius = isDirectHover ? 2.5 : 2;
+        const junctionRadius = isDirectHover ? 3 : 2.5;
+
         connections.push(
-          <g 
-            key={pairKey} 
+          <g
+            key={pairKey}
             className="transition-opacity duration-200 opacity-100"
           >
-            {/* Outer Glow Halo for Active Signal Conduits */}
+            {/* Subtle lime support stroke */}
             <path
               d={pathData}
               fill="none"
               stroke="#C3E54E"
-              strokeWidth={isDirectHover ? 5 : 3.5}
-              strokeOpacity={isDirectHover ? 0.75 : 0.45}
+              strokeWidth={isDirectHover ? 2.2 : 1.8}
+              strokeOpacity={isDirectHover ? 0.5 : 0.35}
               strokeLinecap="round"
               className="transition-all duration-150"
             />
 
-            {/* Main high-contrast trace line */}
+            {/* Ink main path — the primary line weight */}
             <path
               d={pathData}
               fill="none"
               stroke="#15150F"
-              strokeWidth={isDirectHover ? 3 : 2.2}
+              strokeWidth={isDirectHover ? 1.2 : 0.9}
               className="transition-colors duration-150"
             />
 
-            {/* Elastic spring tension halo if being actively dragged */}
+            {/* Elastic tension feedback while actively dragging this exact edge's endpoint */}
             {isDraggingState && (
               <path
                 d={pathData}
                 fill="none"
                 stroke={tension > 0.45 ? '#FF7B72' : '#C3E54E'}
-                strokeWidth={4}
-                strokeOpacity={0.7}
+                strokeWidth={2.5}
+                strokeOpacity={0.6}
                 strokeLinecap="round"
               />
             )}
 
-            {/* High-speed animated signal pulse */}
-            <path
-              d={pathData}
-              fill="none"
-              stroke={isDirectHover ? '#15150F' : '#C3E54E'}
-              strokeWidth={isDirectHover ? 2.5 : 1.8}
-              className={isDirectHover ? 'signal-conduit-fast' : 'signal-conduit'}
-            />
+            {/* Direction-of-signal cue: extremely subtle, only under direct hover — the
+                orbit itself provides motion, conduits should not compete with it. */}
+            {isDirectHover && (
+              <path
+                d={pathData}
+                fill="none"
+                stroke="#15150F"
+                strokeWidth={1}
+                strokeOpacity={0.5}
+                className="signal-conduit-fast"
+              />
+            )}
 
             {/* Anchor Port at Project Foundation */}
             <circle
               cx={startIso.x}
               cy={startIso.y}
-              r={3.5}
+              r={endpointRadius}
               fill="#C3E54E"
               stroke="#15150F"
-              strokeWidth={1.2}
+              strokeWidth={1}
             />
 
-            {/* Junction dot at midpoint with tag */}
-            <g>
-              {isDirectHover && (
-                <circle
-                  cx={midIso.x}
-                  cy={midIso.y}
-                  r="7"
-                  fill="none"
-                  stroke="#C3E54E"
-                  strokeWidth="1"
-                  className="animate-ping"
-                  opacity="0.8"
-                />
-              )}
-              <circle
-                cx={midIso.x}
-                cy={midIso.y}
-                r={4}
-                fill={tension > 0.5 ? '#FF7B72' : '#C3E54E'}
-                stroke="#15150F"
-                strokeWidth={1.2}
-              />
-              {isDirectHover && (
-                <g transform={`translate(${midIso.x + 8}, ${midIso.y - 6})`}>
-                  <rect
-                    x="-2"
-                    y="-8"
-                    width={coreTech.length * 6.5 + 14}
-                    height="13"
-                    fill="#15150F"
-                    stroke="#C3E54E"
-                    strokeWidth="0.8"
-                  />
-                  <text
-                    x="5"
-                    y="1.5"
-                    fontSize="6.5"
-                    fontWeight="bold"
-                    fill="#C3E54E"
-                    fontFamily="monospace"
-                  >
-                    {coreTech.toUpperCase()}
-                  </text>
-                </g>
-              )}
-            </g>
+            {/* Junction dot at midpoint */}
+            <circle
+              cx={midIso.x}
+              cy={midIso.y}
+              r={junctionRadius}
+              fill={tension > 0.5 ? '#FF7B72' : '#C3E54E'}
+              stroke="#15150F"
+              strokeWidth={1}
+            />
 
             {/* Anchor Port at Skill Plinth */}
             <circle
               cx={endIso.x}
               cy={endIso.y}
-              r={3.5}
+              r={endpointRadius}
               fill="#C3E54E"
               stroke="#15150F"
-              strokeWidth={1.2}
+              strokeWidth={1}
             />
           </g>
         );
