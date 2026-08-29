@@ -94,8 +94,10 @@ import {
   computeMagneticRenderPosition,
   projectPointOntoOrbitEllipse,
   resolveOrbitInsertionIndex,
+  removeProjectFromOrbitOrder,
+  insertProjectIntoOrbitOrder,
   deriveDockState,
-  resolveReleaseOutcome,
+  resolveOrbitReleaseAction,
   stepOrbitReflow,
   isDetachedPlacementMotionSafe,
   ORBIT_REFLOW_DURATION_MS,
@@ -628,7 +630,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const isCandidateValid = (pos: { x: number; y: number }) =>
         isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, dockedProjectsForSweep);
 
-      return findNearestValidGridPosition(
+      const resolved = findNearestValidGridPosition(
         'project',
         draggingNode.id,
         activeDockingPreview.rawPos,
@@ -640,6 +642,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         gridSnapEnabled,
         isCandidateValid
       );
+      return resolved.foundValidPosition ? resolved : null;
     }
 
     return findNearestValidGridPosition(
@@ -908,44 +911,50 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         isWithinCaptureRadius: attraction.isWithinCaptureRadius,
       });
 
-      // Whole-ellipse capture has no "blocked" concept — a redistribution-
-      // based insertion is always geometrically valid by construction.
-      const outcome = resolveReleaseOutcome(dockStateAtRelease, false);
+      const releaseAction = resolveOrbitReleaseAction(persisted, dockStateAtRelease);
 
-      if (outcome === 'docked') {
-        if (dockStateAtRelease === 'detaching') {
-          // Aborted pull: never actually left the docked ring — no membership
-          // change, just a single-project reflow back to its current slot.
-          commitOrbitReflow(dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
-          setSnapNotice({ message: 'MAGNETIC RELEASE // RETURNING TO SLOT', type: 'snap' });
-          setTimeout(() => setSnapNotice(null), 1800);
-        } else {
-          // Valid capture: insert the returning project at the angular
-          // location it was released over, preserving every other project's
-          // relative order exactly, then redistribute the whole new ring.
-          const theta = projection!.theta;
-          const insertionIndex = resolveOrbitInsertionIndex(theta, orbitPhase, dockedOrbitOrder.length);
-          const newOrder = [...dockedOrbitOrder];
-          newOrder.splice(insertionIndex, 0, draggingNode.id);
+      if (releaseAction === 'return-to-existing-dock') {
+        // Both a below-threshold release and a docked project's same-gesture
+        // breakaway/capture cancel return to the EXISTING membership/order.
+        // Whole-ellipse insertion is reserved for a later gesture that starts
+        // from persisted detached state, so this path can never duplicate ID.
+        commitOrbitReflow(dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
+        setSnapNotice({
+          message: dockStateAtRelease === 'detaching'
+            ? 'MAGNETIC RELEASE // RETURNING TO SLOT'
+            : 'DETACH CANCELLED // RETURNING TO ORBIT',
+          type: 'snap'
+        });
+        setTimeout(() => setSnapNotice(null), 1800);
+      } else if (releaseAction === 'insert-detached-project') {
+        // Only a project already persisted detached before this gesture may
+        // be inserted at a new angular gap.
+        const theta = projection!.theta;
+        const insertionIndex = resolveOrbitInsertionIndex(theta, orbitPhase, dockedOrbitOrder.length);
+        const newOrder = insertProjectIntoOrbitOrder(
+          dockedOrbitOrder,
+          draggingNode.id,
+          insertionIndex,
+          canonicalOrbitOrder
+        );
 
-          setInteractiveOrbitOrder(newOrder);
-          setCustomProjectPositions(prev => {
-            if (!(draggingNode.id in prev)) return prev;
-            const next = { ...prev };
-            delete next[draggingNode.id];
-            return next;
-          });
-          setProjectDockState(prev => {
-            if (!(draggingNode.id in prev)) return prev;
-            const next = { ...prev };
-            delete next[draggingNode.id];
-            return next;
-          });
-          commitOrbitReflow(newOrder, { [draggingNode.id]: draggingNode.currentPos });
+        setInteractiveOrbitOrder(newOrder);
+        setCustomProjectPositions(prev => {
+          if (!(draggingNode.id in prev)) return prev;
+          const next = { ...prev };
+          delete next[draggingNode.id];
+          return next;
+        });
+        setProjectDockState(prev => {
+          if (!(draggingNode.id in prev)) return prev;
+          const next = { ...prev };
+          delete next[draggingNode.id];
+          return next;
+        });
+        commitOrbitReflow(newOrder, { [draggingNode.id]: draggingNode.currentPos });
 
-          setSnapNotice({ message: 'DOCK TARGET ACQUIRED // ORBIT REALIGNED', type: 'snap' });
-          setTimeout(() => setSnapNotice(null), 1800);
-        }
+        setSnapNotice({ message: 'DOCK TARGET ACQUIRED // ORBIT REALIGNED', type: 'snap' });
+        setTimeout(() => setSnapNotice(null), 1800);
       } else {
         // Ordinary free placement: existing grid-snap/collision resolution,
         // persisted as a detached custom position. ADDITIONALLY validated
@@ -958,7 +967,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // gate on top of the existing expanding grid search — never a second
         // search algorithm.
         const wasDocked = persisted === 'docked';
-        const newOrder = wasDocked ? dockedOrbitOrder.filter(id => id !== draggingNode.id) : dockedOrbitOrder;
+        const newOrder = wasDocked
+          ? removeProjectFromOrbitOrder(dockedOrbitOrder, draggingNode.id, canonicalOrbitOrder)
+          : dockedOrbitOrder;
         const dockedProjectsForSweep = newOrder
           .map(id => projectsById.get(id))
           .filter((p): p is ProjectData => Boolean(p));
@@ -972,6 +983,29 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           GRID_SNAP_STEP, gridSnapEnabled,
           isCandidateValid
         );
+
+        if (!resolved.foundValidPosition) {
+          if (wasDocked) {
+            // First-time detach cannot commit without a safe stationary
+            // location. Membership stays unchanged and the dragged project
+            // returns to its authoritative docked position.
+            commitOrbitReflow(
+              dockedOrbitOrder,
+              { [draggingNode.id]: draggingNode.currentPos },
+              ABORTED_PULL_RETURN_MS
+            );
+            setSnapNotice({ message: 'NO SAFE CLEARANCE // DETACH CANCELLED', type: 'collision' });
+          } else {
+            // The persisted detached custom position is already known-safe.
+            // Make no position or membership writes; clearing draggingNode
+            // below restores that prior custom position automatically.
+            setSnapNotice({ message: 'NO SAFE CLEARANCE // PREVIOUS POSITION RETAINED', type: 'collision' });
+          }
+          setTimeout(() => setSnapNotice(null), 2500);
+          setDraggingNode(null);
+          return;
+        }
+
         const finalPos = { x: resolved.x, y: resolved.y };
         setCustomProjectPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
         setProjectDockState(prev => ({ ...prev, [draggingNode.id]: { state: 'detached' } }));
@@ -1019,7 +1053,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, [
     draggingNode, viewport.zoom, effectiveProjectPositions, effectiveSkillPositions,
     gridSnapEnabled, onSelectProject, onSelectSkill, projects, activeSkills,
-    projectsById, dockedOrbitOrder, projectDockState, commitOrbitReflow,
+    projectsById, canonicalOrbitOrder, dockedOrbitOrder, projectDockState, commitOrbitReflow,
     orbitPhase, staticOrbitalLattice
   ]);
 

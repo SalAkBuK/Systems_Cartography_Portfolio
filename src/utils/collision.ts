@@ -121,6 +121,8 @@ export const checkCollisions = (
 export interface ResolvedPosition {
   x: number;
   y: number;
+  /** True only when the returned coordinates genuinely passed every current-collision and optional-candidate check. */
+  foundValidPosition: boolean;
   wasAdjusted: boolean;
   collidingId: string | null;
   collidingWith: string | null;
@@ -177,6 +179,7 @@ export const findNearestValidGridPosition = (
     return {
       x: baseSnapX,
       y: baseSnapY,
+      foundValidPosition: true,
       wasAdjusted: false,
       collidingId: null,
       collidingWith: null
@@ -219,6 +222,7 @@ export const findNearestValidGridPosition = (
         return {
           x: cand.x,
           y: cand.y,
+          foundValidPosition: true,
           wasAdjusted: true,
           collidingId: initialCheck.collidingId,
           collidingWith: initialCheck.collidingWith,
@@ -228,10 +232,13 @@ export const findNearestValidGridPosition = (
     }
   }
 
-  // Fallback if saturated
+  // Bounded-search saturation: preserve the historical fallback coordinates,
+  // but never represent them as accepted. Validator-backed callers must use
+  // this signal to retain/restore their last known-safe state.
   return {
     x: baseSnapX,
     y: baseSnapY,
+    foundValidPosition: false,
     wasAdjusted: true,
     collidingId: initialCheck.collidingId,
     collidingWith: initialCheck.collidingWith,
