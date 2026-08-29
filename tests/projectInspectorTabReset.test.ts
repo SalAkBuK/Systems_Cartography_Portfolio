@@ -381,25 +381,123 @@ test('28. Sticky project list header uses accent lime text for OWNER PROJECTS an
 });
 
 // ---------------------------------------------------------------------------
-// 29. Compact Drawer Header - Hides INDX Badge Below lg
+// 29-34. Explicit Selection Exit Paths
 // ---------------------------------------------------------------------------
-test('29. Compact drawer header hides decorative INDX badge below lg while desktop shows it at lg+', () => {
+test('29. Selecting an unselected project selects the requested project', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const handler = appSource.substring(
+    appSource.indexOf('const handleSelectProject ='),
+    appSource.indexOf('// Handle Drilling into Project')
+  );
+
+  assert.ok(handler.includes('setSelectedProjectId(id);'), 'Project handler must select the requested project ID');
+  assert.ok(handler.includes("setActiveView('projects');"), 'A new project selection must retain the projects view behavior');
+});
+
+test('30. Clicking the selected project again clears selection before the select path', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const handler = appSource.substring(
+    appSource.indexOf('const handleSelectProject ='),
+    appSource.indexOf('// Handle Drilling into Project')
+  );
+  const togglePosition = handler.indexOf('if (selectedProjectId === id)');
+  const clearPosition = handler.indexOf('handleClearSelection();');
+  const selectPosition = handler.indexOf('setSelectedProjectId(id);');
+
+  assert.ok(togglePosition !== -1, 'Project handler must compare the selected and requested IDs');
+  assert.ok(togglePosition < clearPosition && clearPosition < selectPosition, 'Click-again clear must return before the normal select path');
+  assert.ok(handler.includes('return;'), 'Click-again clear must stop before reselecting the project');
+  assert.ok(handler.includes('[selectedProjectId, handleClearSelection]'), 'Project handler dependencies must track selectedProjectId and the clear callback');
+});
+
+test('31. Selecting a different project switches project selection and clears competing focus', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const handler = appSource.substring(
+    appSource.indexOf('const handleSelectProject ='),
+    appSource.indexOf('// Handle Drilling into Project')
+  );
+
+  assert.ok(handler.includes('setSelectedProjectId(id);'), 'Different-project path must replace the selected project ID');
+  assert.ok(handler.includes('setSelectedSkillId(null);'), 'Different-project path must clear skill focus');
+  assert.ok(handler.includes('setSelectedExperienceId(null);'), 'Different-project path must clear experience focus');
+  assert.ok(handler.includes('setSelectedSubsystem(null);'), 'Different-project path must clear subsystem focus');
+  assert.ok(!handler.includes('setViewport'), 'Project selection must not reset the viewport');
+  assert.ok(!handler.includes('setTopologyViewMode'), 'Project selection must not reset topology mode or ordering');
+});
+
+test('32. Skill and experience click-again toggle behavior remains intact', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8').replace(/\r\n/g, '\n');
+  const skillHandler = appSource.substring(
+    appSource.indexOf('const handleSelectSkill ='),
+    appSource.indexOf('// Handle Experience Selection')
+  );
+  const experienceHandler = appSource.substring(
+    appSource.indexOf('const handleSelectExperience ='),
+    appSource.indexOf('// Reset View')
+  );
+
+  assert.ok(skillHandler.includes("if (selectedSkillId === id) {\n      setSelectedSkillId(null);\n      return;"), 'Skill click-again must still toggle off');
+  assert.ok(skillHandler.includes('[selectedSkillId]'), 'Skill toggle dependency must remain selectedSkillId');
+  assert.ok(experienceHandler.includes("if (selectedExperienceId === id) {\n      setSelectedExperienceId(null);\n      return;"), 'Experience click-again must still toggle off');
+  assert.ok(experienceHandler.includes('[selectedExperienceId]'), 'Experience toggle dependency must remain selectedExperienceId');
+});
+
+test('33. Escape clears selected focus without resetting viewport or topology state', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const escapeBlock = appSource.substring(appSource.indexOf("e.key === 'Escape'"), appSource.indexOf("e.key === '0'"));
+  const drilledPosition = escapeBlock.indexOf('drilledProjectId');
+  const selectionPosition = escapeBlock.indexOf('selectedProjectId || selectedSkillId || selectedExperienceId || selectedSubsystem');
+  const clearPosition = escapeBlock.indexOf('handleClearSelection();');
+  const resetPosition = escapeBlock.indexOf('handleResetView();');
+  const clearHandler = appSource.substring(
+    appSource.indexOf('const handleClearSelection ='),
+    appSource.indexOf('// Handle Project Selection')
+  );
+
+  assert.ok(drilledPosition < selectionPosition, 'Escape must return from a drilled project before general selection clearing');
+  assert.ok(selectionPosition < clearPosition && clearPosition < resetPosition, 'Escape must clear selected focus before the reset fallback');
+  assert.ok(!clearHandler.includes('setViewport'), 'Selection clearing must preserve viewport position and zoom');
+  assert.ok(!clearHandler.includes('setTopologyViewMode'), 'Selection clearing must preserve topology mode and ordering');
+  assert.ok(!clearHandler.includes('setInteractiveOrbit'), 'Selection clearing must preserve interactive orbit state');
+  assert.ok(!clearHandler.includes('setDetached'), 'Selection clearing must preserve detached project state');
+});
+
+test('34. Desktop inspector omits duplicate clear control while mobile CLEAR remains available', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  const titleBar = inspectorSource.substring(
+    inspectorSource.indexOf('Inspector Title Bar'),
+    inspectorSource.indexOf('Sub-Tabs for Projects')
+  );
+  const mobileControls = titleBar.substring(titleBar.indexOf('Mobile Sheet Controls'));
+  const selectionCondition = '(selectedProject || selectedSkill || selectedExperience || selectedSubsystem)';
+
+  assert.ok(!titleBar.includes('hidden lg:inline-flex'), 'Inspector title bar must not contain a desktop clear control');
+  assert.ok(mobileControls.includes('lg:hidden'), 'Existing mobile controls must remain hidden on desktop');
+  assert.ok(mobileControls.includes(selectionCondition), 'Mobile CLEAR must still render while an object is selected');
+  assert.ok(mobileControls.includes('onClearSelection?.();'), 'Mobile CLEAR must retain the shared clear callback');
+  assert.ok(mobileControls.includes('✕ CLEAR'), 'Mobile CLEAR label must remain available');
+});
+
+// ---------------------------------------------------------------------------
+// 35. Compact Drawer Header - Hides INDX Badge Below lg
+// ---------------------------------------------------------------------------
+test('35. Compact drawer header hides decorative INDX badge below lg while desktop shows it at lg+', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
 });
 
 // ---------------------------------------------------------------------------
-// 30. Compact Drawer Header - Displays CLOSE Button Below lg
+// 36. Compact Drawer Header - Displays CLOSE Button Below lg
 // ---------------------------------------------------------------------------
-test('30. Compact drawer header displays internal CLOSE control below lg', () => {
+test('36. Compact drawer header displays internal CLOSE control below lg', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('className="lg:hidden flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] bg-[#15150F] text-[#D4CDA4] hover:text-[#C3E54E] text-[11px] font-bold font-mono border border-[#15150F] cursor-pointer whitespace-nowrap shrink-0"'), 'CLOSE button must be lg:hidden with whitespace-nowrap and shrink-0');
 });
 
 // ---------------------------------------------------------------------------
-// 31. Compact Drawer Header - Non-wrapping Title Presentation
+// 37. Compact Drawer Header - Non-wrapping Title Presentation
 // ---------------------------------------------------------------------------
-test('31. Compact drawer header title and button use whitespace-nowrap preventing row wrapping', () => {
+test('37. Compact drawer header title and button use whitespace-nowrap preventing row wrapping', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('Owner Technical Index'), 'Title must be Owner Technical Index');
   assert.ok(railSource.includes('text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');

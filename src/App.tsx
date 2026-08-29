@@ -93,14 +93,28 @@ export default function App() {
   const selectedSkill = selectedSkillId ? skills.find(s => s.id === selectedSkillId) || null : null;
   const selectedExperience = selectedExperienceId ? experience.find(e => e.id === selectedExperienceId) || null : null;
 
+  // Clear Selection (Deselect objects without altering viewport or active navigation view)
+  const handleClearSelection = useCallback(() => {
+    setSelectedProjectId(null);
+    setSelectedSkillId(null);
+    setSelectedExperienceId(null);
+    setSelectedSubsystem(null);
+    setDrilledProjectId(null);
+  }, []);
+
   // Handle Project Selection
   const handleSelectProject = useCallback((id: string) => {
+    if (selectedProjectId === id) {
+      handleClearSelection();
+      return;
+    }
+
     setSelectedProjectId(id);
     setSelectedSkillId(null);
     setSelectedExperienceId(null);
     setSelectedSubsystem(null);
     setActiveView('projects');
-  }, []);
+  }, [selectedProjectId, handleClearSelection]);
 
   // Handle Drilling into Project Subsystem Decomposition
   const handleDrillIntoProject = useCallback((id: string) => {
@@ -144,15 +158,6 @@ export default function App() {
     setSelectedSubsystem(null);
     setActiveView('experience');
   }, [selectedExperienceId]);
-
-  // Clear Selection (Deselect objects without altering viewport or active navigation view)
-  const handleClearSelection = useCallback(() => {
-    setSelectedProjectId(null);
-    setSelectedSkillId(null);
-    setSelectedExperienceId(null);
-    setSelectedSubsystem(null);
-    setDrilledProjectId(null);
-  }, []);
 
   // Reset View
   const handleResetView = useCallback(() => {
@@ -215,6 +220,8 @@ export default function App() {
           setIsMobileNavOpen(false);
         } else if (drilledProjectId) {
           handleReturnToLandscape();
+        } else if (selectedProjectId || selectedSkillId || selectedExperienceId || selectedSubsystem) {
+          handleClearSelection();
         } else {
           handleResetView();
         }
@@ -237,8 +244,13 @@ export default function App() {
     isCaseStudyOpen, 
     isResumeOpen, 
     isMobileNavOpen,
-    drilledProjectId, 
-    handleReturnToLandscape, 
+    drilledProjectId,
+    selectedProjectId,
+    selectedSkillId,
+    selectedExperienceId,
+    selectedSubsystem,
+    handleReturnToLandscape,
+    handleClearSelection,
     handleResetView
   ]);
 
@@ -323,6 +335,7 @@ export default function App() {
               selectedSkillId={selectedSkillId}
               onSelectSkill={handleSelectSkill}
               selectedExperienceId={selectedExperienceId}
+              onClearSelection={handleClearSelection}
               searchQuery={searchQuery}
               topologyViewMode={topologyViewMode}
               viewport={viewport}
