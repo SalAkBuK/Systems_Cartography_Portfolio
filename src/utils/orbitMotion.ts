@@ -12,6 +12,10 @@ export const ORBIT_PERIOD_MS = 120_000;
 /** How long after the last transient interaction clears before motion resumes. */
 export const ORBIT_RESUME_DELAY_MS = 800;
 
+/** One shared runtime rate for the whole ring. Zero is an explicit user pause. */
+export const ORBIT_RATE_MULTIPLIERS = [0, 0.5, 1, 2] as const;
+export type OrbitRateMultiplier = (typeof ORBIT_RATE_MULTIPLIERS)[number];
+
 const TWO_PI = Math.PI * 2;
 
 /** Wraps a phase value into [0, 2π). */
@@ -20,19 +24,24 @@ export function normalizeOrbitPhase(phase: number): number {
   return wrapped < 0 ? wrapped + TWO_PI : wrapped;
 }
 
-/** Converts elapsed real time into a phase delta for the given revolution period. */
-export function computePhaseDelta(deltaMs: number, periodMs: number = ORBIT_PERIOD_MS): number {
-  if (!(deltaMs > 0) || !(periodMs > 0)) return 0;
-  return (deltaMs / periodMs) * TWO_PI;
+/** Converts elapsed real time into a phase delta at the shared runtime rate. */
+export function computePhaseDelta(
+  deltaMs: number,
+  rateMultiplier: OrbitRateMultiplier = 1,
+  periodMs: number = ORBIT_PERIOD_MS
+): number {
+  if (!(deltaMs > 0) || !(rateMultiplier > 0) || !(periodMs > 0)) return 0;
+  return (deltaMs / periodMs) * TWO_PI * rateMultiplier;
 }
 
 /** Advances and normalizes a phase by the elapsed real time. */
 export function advanceOrbitPhase(
   currentPhase: number,
   deltaMs: number,
+  rateMultiplier: OrbitRateMultiplier = 1,
   periodMs: number = ORBIT_PERIOD_MS
 ): number {
-  return normalizeOrbitPhase(currentPhase + computePhaseDelta(deltaMs, periodMs));
+  return normalizeOrbitPhase(currentPhase + computePhaseDelta(deltaMs, rateMultiplier, periodMs));
 }
 
 export interface OrbitClockState {
@@ -41,10 +50,15 @@ export interface OrbitClockState {
   lastTimestamp: number | null;
 }
 
+/** Preserves phase while forcing the next running frame to establish a fresh time baseline. */
+export function rebaselineOrbitClock(state: OrbitClockState): OrbitClockState {
+  return { phase: state.phase, lastTimestamp: null };
+}
+
 /**
  * One deterministic step of the shared orbit clock. This is the entire
  * no-catch-up-jump contract in one pure function:
- * - Not running (paused for any reason) -> phase held, lastTimestamp cleared.
+ * - Not running or user rate 0 (paused) -> phase held, lastTimestamp cleared.
  *   Clearing it means the NEXT running step re-baselines instead of computing
  *   a delta across the entire paused/hidden duration.
  * - Running but no baseline yet (just resumed, or first frame ever) -> capture
@@ -55,17 +69,18 @@ export function stepOrbitClock(
   state: OrbitClockState,
   timestamp: number,
   isRunning: boolean,
+  rateMultiplier: OrbitRateMultiplier = 1,
   periodMs: number = ORBIT_PERIOD_MS
 ): OrbitClockState {
-  if (!isRunning) {
-    return { phase: state.phase, lastTimestamp: null };
+  if (!isRunning || rateMultiplier === 0) {
+    return rebaselineOrbitClock(state);
   }
   if (state.lastTimestamp === null) {
     return { phase: state.phase, lastTimestamp: timestamp };
   }
   const deltaMs = timestamp - state.lastTimestamp;
   return {
-    phase: advanceOrbitPhase(state.phase, deltaMs, periodMs),
+    phase: advanceOrbitPhase(state.phase, deltaMs, rateMultiplier, periodMs),
     lastTimestamp: timestamp,
   };
 }
@@ -133,8 +148,9 @@ export function getDynamicOrbitalPosition(
 }
 
 /**
- * Every condition that must hold the whole ring motionless. Deliberately a
- * single flat OR — one ring, one phase, one pause state; no per-node pausing.
+ * Every interaction/accessibility condition is modeled in one state object.
+ * Conditions that hold the ring motionless form one flat OR; canvas panning
+ * is deliberately carried for observability but omitted from that OR.
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -142,6 +158,7 @@ export interface OrbitPauseState {
   isProjectSelected: boolean;
   isSkillSelected: boolean;
   isNodeDragging: boolean;
+  /** Informational only: viewport panning is independent from autonomous orbit motion. */
   isCanvasPanning: boolean;
   isDocumentHidden: boolean;
   prefersReducedMotion: boolean;
@@ -158,7 +175,6 @@ export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
     state.isProjectSelected ||
     state.isSkillSelected ||
     state.isNodeDragging ||
-    state.isCanvasPanning ||
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
     state.isCompact ||

@@ -78,9 +78,12 @@ import {
 import {
   getDynamicOrbitalPosition,
   isOrbitPauseConditionActive,
+  rebaselineOrbitClock,
   stepOrbitClock,
+  ORBIT_RATE_MULTIPLIERS,
   ORBIT_RESUME_DELAY_MS,
   type OrbitClockState,
+  type OrbitRateMultiplier,
   type OrbitPauseState
 } from '../utils/orbitMotion';
 import {
@@ -251,6 +254,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // ---------------------------------------------------------------------------
 
   const isCompactViewport = containerDimensions.width < 1024;
+  const [orbitRateMultiplier, setOrbitRateMultiplier] = useState<OrbitRateMultiplier>(1);
 
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
@@ -296,7 +300,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     [orbitPauseState]
   );
 
-  // Transient interactions (hover/drag/pan) shouldn't cause immediate stop/start
+  // Transient interactions that actually pause motion (hover/node drag) should
+  // not cause immediate stop/start
   // jitter: once every pause condition clears, wait ORBIT_RESUME_DELAY_MS before
   // actually resuming. Persistent conditions (selection, reduced motion, compact,
   // hidden) keep isPauseConditionActive true, so they never reach this timer.
@@ -310,34 +315,39 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => clearTimeout(timer);
   }, [isPauseConditionActive]);
 
-  const isOrbitRunning = !isPauseConditionActive && isResumeReady;
+  const isOrbitRunning = orbitRateMultiplier > 0 && !isPauseConditionActive && isResumeReady;
 
   const [orbitPhase, setOrbitPhase] = useState(0);
   const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
 
   // The RAF loop is only ALIVE while isOrbitRunning is true — at most one
   // active chain, and genuinely zero scheduled repeating callbacks while
-  // paused (compact, reduced motion, hover/selection/drag/pan, hidden tab,
+  // paused (user pause, compact, reduced motion, hover/selection/node drag,
+  // hidden tab,
   // or an active Experience filter), rather than a mount-lifetime loop that
   // keeps waking the browser and merely holding position. Every pause clears
   // lastTimestamp (not the phase itself) so a later resume re-baselines
   // instead of applying a catch-up jump for however long it was paused.
   useEffect(() => {
+    // isOrbitRunning changes re-baseline genuine pause/resume boundaries;
+    // orbitRateMultiplier changes re-baseline speed boundaries. In both cases
+    // phase is preserved and no elapsed interval is charged at the new rate.
+    orbitClockRef.current = rebaselineOrbitClock(orbitClockRef.current);
+
     if (!isOrbitRunning) {
-      orbitClockRef.current = { phase: orbitClockRef.current.phase, lastTimestamp: null };
       return;
     }
 
     let rafId: number;
     const tick = (timestamp: number) => {
-      const next = stepOrbitClock(orbitClockRef.current, timestamp, true);
+      const next = stepOrbitClock(orbitClockRef.current, timestamp, true, orbitRateMultiplier);
       orbitClockRef.current = next;
       setOrbitPhase(next.phase);
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isOrbitRunning]);
+  }, [isOrbitRunning, orbitRateMultiplier]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
@@ -1374,6 +1384,45 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <Compass size={11} className="text-[#15150F]" />
         <span className="font-bold">APPLICATION SURFACE // CORE WORK</span>
       </div>
+
+      {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
+      {!prefersReducedMotion && (
+        <div
+          id="orbit-rate-controls"
+          className="hidden lg:flex absolute top-3 left-1/2 -translate-x-1/2 z-30 items-stretch border border-[#15150F] bg-[#D4CDA4] font-mono"
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+        >
+          <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[8.5px] font-bold text-[#C3E54E] whitespace-nowrap">
+            {orbitRateMultiplier === 0 ? 'ORBIT // PAUSED' : `ORBIT RATE // ${orbitRateMultiplier}×`}
+          </span>
+          <div role="group" aria-label="Autonomous orbit rate" className="flex divide-x divide-[#15150F]">
+            {ORBIT_RATE_MULTIPLIERS.map(rate => {
+              const isActive = orbitRateMultiplier === rate;
+              const label = rate === 0 ? 'PAUSE' : `${rate}×`;
+              return (
+                <button
+                  key={rate}
+                  type="button"
+                  aria-label={rate === 0 ? 'Pause autonomous orbit' : `Set autonomous orbit rate to ${rate} times`}
+                  aria-pressed={isActive}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOrbitRateMultiplier(rate);
+                  }}
+                  className={`px-2 py-1 text-[8.5px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
+                    isActive
+                      ? 'bg-[#C3E54E] text-[#15150F]'
+                      : 'bg-[#D4CDA4] text-[#15150F] hover:bg-[#E2DCB9]'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Screen-positioned focus status; intentionally outside the transformed SVG scene. */}
       {selectedFocusLabel && (
