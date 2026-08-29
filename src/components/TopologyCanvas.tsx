@@ -1804,7 +1804,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         >
           <text
             x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.centerIso.y + 120}
+            y={staticOrbitalLattice.orbitGeometry.centerIso.y + 220}
             fontSize="18"
             fontWeight="bold"
             fill="#5C5946"
