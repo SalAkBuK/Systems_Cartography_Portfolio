@@ -697,6 +697,7 @@ test('isOrbitPauseConditionActive: an active orbital reflow/settle transition pa
     isProjectHovered: false, isSkillHovered: false, isProjectSelected: false, isSkillSelected: false,
     isNodeDragging: false, isCanvasPanning: false, isDocumentHidden: false, prefersReducedMotion: false,
     isCompact: false, isExperienceSelected: false, isDockingTransitionActive: true,
+    isProjectBreakawayActive: false,
   };
   assert.equal(isOrbitPauseConditionActive(state), true);
 });

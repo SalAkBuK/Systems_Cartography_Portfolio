@@ -206,6 +206,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // the pointer-derived position BEFORE any magnetic capture blend is applied
   // (tracked separately so attraction preview never corrupts the real drag
   // position — see PR23 spec section 20).
+  //
+  // PR24 adds `isBreakawayTransaction`: a sticky per-gesture flag, distinct
+  // from `crossedDetachThreshold`, that is true ONLY when a DOCKED project
+  // crosses the detach threshold during THIS gesture. An already-detached
+  // project starts `crossedDetachThreshold` true at mousedown (see below) but
+  // always starts `isBreakawayTransaction` false/undefined, and nothing in
+  // its free-drag path ever sets it — so regrabbing or repositioning an
+  // already-detached project never freezes the ring. It feeds the orbit
+  // pause authority (isProjectBreakawayActive) directly.
   const [draggingNode, setDraggingNode] = useState<{
     type: 'project' | 'skill';
     id: string;
@@ -215,6 +224,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     currentPos: { x: number; y: number };
     hasMoved: boolean;
     crossedDetachThreshold?: boolean;
+    isBreakawayTransaction?: boolean;
     breakaway?: { clientX: number; clientY: number; worldPos: { x: number; y: number } };
     rawPos?: { x: number; y: number };
   } | null>(null);
@@ -292,6 +302,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     isCompact: isCompactViewport,
     isExperienceSelected: Boolean(selectedExperienceId),
     isDockingTransitionActive: Boolean(isOrbitReflowActive),
+    isProjectBreakawayActive: Boolean(
+      draggingNode?.type === 'project' && draggingNode.isBreakawayTransaction
+    ),
   }), [
     hoveredProjectId, hoveredSkillId, selectedProjectId, selectedSkillId,
     draggingNode, isDragging, isDocumentHidden, prefersReducedMotion,
@@ -886,6 +899,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         if (!prev || prev.type !== 'project') return prev;
 
         let crossedDetachThreshold = prev.crossedDetachThreshold ?? false;
+        let isBreakawayTransaction = prev.isBreakawayTransaction ?? false;
         let breakaway = prev.breakaway;
         let rawPos: { x: number; y: number };
 
@@ -893,7 +907,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           if (hasCrossedDetachThreshold(deltaScreenX, deltaScreenY)) {
             // Breakaway: capture the exact resisted position and pointer
             // baseline ONCE, so free drag continues from here with zero jump.
+            // This branch is only reachable when the gesture started with
+            // crossedDetachThreshold false — i.e. the project was DOCKED at
+            // mousedown, never an already-detached project (which starts
+            // crossedDetachThreshold true and never enters this branch) — so
+            // setting isBreakawayTransaction here can never fire for a
+            // reposition of an already-detached project.
             crossedDetachThreshold = true;
+            isBreakawayTransaction = true;
             const positionAtCrossing = computeResistedWorldOrigin(prev.startNodePos, deltaScreenX, deltaScreenY);
             breakaway = { clientX, clientY, worldPos: positionAtCrossing };
             rawPos = positionAtCrossing;
@@ -931,6 +952,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         return {
           ...prev,
           crossedDetachThreshold,
+          isBreakawayTransaction,
           breakaway,
           rawPos,
           currentPos: renderedPos,
