@@ -319,31 +319,59 @@ export default function App() {
         <main className="flex-1 flex flex-col relative overflow-hidden bg-[#D4CDA4]">
           {activeView === 'contact' ? (
             <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
-          ) : drilledProject ? (
-            <ProjectSubsystemCanvas
-              project={drilledProject}
-              onReturnToLandscape={handleReturnToLandscape}
-              selectedSubsystemId={selectedSubsystem?.id || null}
-              onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
-              onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
-            />
           ) : (
-            <TopologyCanvas
-              selectedProjectId={selectedProjectId}
-              onSelectProject={handleSelectProject}
-              onDrillIntoProject={handleDrillIntoProject}
-              selectedSkillId={selectedSkillId}
-              onSelectSkill={handleSelectSkill}
-              selectedExperienceId={selectedExperienceId}
-              onClearSelection={handleClearSelection}
-              searchQuery={searchQuery}
-              topologyViewMode={topologyViewMode}
-              viewport={viewport}
-              setViewport={setViewport}
-              projects={projects}
-              skills={skills}
-              experience={experience}
-            />
+            <>
+              {/* TopologyCanvas stays mounted, full-size, and layout-
+                  measurable for the entire topology/project lifetime —
+                  drilling into a project's subsystem view must never unmount
+                  it, or every piece of its runtime-only visitor layout state
+                  (detached positions, interactiveOrbitOrder, custom skill
+                  positions, orbit rate/phase, grid snap) is lost on the way
+                  back. It is hidden purely VISUALLY (invisible +
+                  pointer-events-none) while drilled in, never via
+                  display:none/`hidden` — TopologyCanvas's own ResizeObserver
+                  reads containerRef.current.clientWidth/clientHeight to
+                  derive isCompactViewport, and isCompact is itself an
+                  autonomous-orbit pause authority, so collapsing it to 0x0
+                  would silently pause the continuous machine while the
+                  schematic is open. `absolute inset-0` keeps its real box
+                  (and thus real measured dimensions) unchanged throughout;
+                  only opacity/hit-testing/focusability change. Returning
+                  simply reveals the SAME instance again. */}
+              <div
+                className={`absolute inset-0 ${drilledProject ? 'invisible pointer-events-none' : 'visible'}`}
+                inert={Boolean(drilledProject)}
+                aria-hidden={drilledProject ? true : undefined}
+              >
+                <TopologyCanvas
+                  selectedProjectId={selectedProjectId}
+                  onSelectProject={handleSelectProject}
+                  onDrillIntoProject={handleDrillIntoProject}
+                  selectedSkillId={selectedSkillId}
+                  onSelectSkill={handleSelectSkill}
+                  selectedExperienceId={selectedExperienceId}
+                  onClearSelection={handleClearSelection}
+                  searchQuery={searchQuery}
+                  topologyViewMode={topologyViewMode}
+                  viewport={viewport}
+                  setViewport={setViewport}
+                  projects={projects}
+                  skills={skills}
+                  experience={experience}
+                />
+              </div>
+              {drilledProject && (
+                <div className="absolute inset-0 z-10">
+                  <ProjectSubsystemCanvas
+                    project={drilledProject}
+                    onReturnToLandscape={handleReturnToLandscape}
+                    selectedSubsystemId={selectedSubsystem?.id || null}
+                    onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
+                    onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
+                  />
+                </div>
+              )}
+            </>
           )}
         </main>
 
