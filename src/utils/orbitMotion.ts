@@ -149,10 +149,15 @@ export function getDynamicOrbitalPosition(
 
 /**
  * Interaction, system, and accessibility state stays observable in one object,
- * but only the four machine-level authorities below may stop the orbit. Hover,
- * selection, focus, canvas pan, and node drag — including a docked project
- * crossing the magnetic detach threshold — deliberately do not participate;
- * only the shared reflow that a committed detach/reinsertion triggers does.
+ * but only the three machine-level authorities below may stop the orbit —
+ * plus explicit user PAUSE, represented separately by orbitRateMultiplier
+ * === 0. Hover, selection, focus, canvas pan, node drag — including a
+ * docked project crossing the magnetic detach threshold — and even a
+ * committed detach/reinsertion's shared reflow deliberately do not
+ * participate: the ring is a continuous machine, never interrupted by a
+ * drop or by the redistribution that follows it (see commitOrbitReflow /
+ * stepOrbitReflow's moving-frame interpolation, which is what makes running
+ * the reflow concurrently with live phase advancement safe).
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -166,15 +171,12 @@ export interface OrbitPauseState {
   prefersReducedMotion: boolean;
   isCompact: boolean;
   isExperienceSelected: boolean;
-  /** PR23: a magnetic aborted-pull-return or redock settle transition is actively animating. */
-  isDockingTransitionActive: boolean;
 }
 
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
   return (
     state.isDocumentHidden ||
     state.prefersReducedMotion ||
-    state.isCompact ||
-    state.isDockingTransitionActive
+    state.isCompact
   );
 }
