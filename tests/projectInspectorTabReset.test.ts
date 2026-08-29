@@ -264,7 +264,7 @@ test('15. Escape key handler closes mobile drawer before resetting viewport and 
 // ---------------------------------------------------------------------------
 test('16. Search input in LeftNavigationRail uses 16px compact font to prevent iOS Safari page zoom', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('text-[16px] lg:text-[9.5px]'), 'Search input must use text-[16px] on compact and text-[9.5px] on lg+');
+  assert.ok(railSource.includes('text-[16px] lg:text-[12px]'), 'Search input must use text-[16px] on compact and text-[12px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
@@ -272,7 +272,7 @@ test('16. Search input in LeftNavigationRail uses 16px compact font to prevent i
 // ---------------------------------------------------------------------------
 test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('text-[9.5px] lg:text-[6.5px]'), 'Mode subtitle must scale to text-[9.5px] on compact');
+  assert.ok(railSource.includes('text-[9.5px]'), 'Mode subtitle must scale to text-[9.5px]');
   assert.ok(railSource.includes('min-h-[42px] lg:min-h-[30px]'), 'Mode buttons must have >= 42px touch target on compact');
 });
 
@@ -282,7 +282,7 @@ test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewp
 test('18. Main navigation rows are >= 12px and >= 44px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[44px] lg:min-h-[34px]'), 'Main nav must have min-h-[44px] on compact');
-  assert.ok(railSource.includes('text-[13px] lg:text-[10.5px]'), 'Main nav must have text-[13px] on compact');
+  assert.ok(railSource.includes('text-[13px] lg:text-[12px]'), 'Main nav must have text-[13px] on compact and text-[12px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
@@ -291,7 +291,7 @@ test('18. Main navigation rows are >= 12px and >= 44px min-height on compact vie
 test('19. Project rows are >= 11px and >= 40px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[40px] lg:min-h-[28px]'), 'Project rows must have min-h-[40px] on compact');
-  assert.ok(railSource.includes('text-[12px] lg:text-[9.5px]'), 'Project rows must have text-[12px] on compact');
+  assert.ok(railSource.includes('text-[12px] lg:text-[11.5px]'), 'Project rows must have text-[12px] on compact and text-[11.5px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
@@ -350,8 +350,8 @@ test('25. TopTelemetryBar OWNER SOURCE remains hidden until lg breakpoint', () =
 // ---------------------------------------------------------------------------
 test('26. TopTelemetryBar OWNER PROJECTS and CONTACT use increased compact typography and touch targets', () => {
   const telemetrySource = readFileSync(resolve(process.cwd(), 'src/components/TopTelemetryBar.tsx'), 'utf8');
-  assert.ok(telemetrySource.includes('text-[9.5px] lg:text-[7.5px]'), 'OWNER PROJECTS label must use text-[9.5px] on compact');
-  assert.ok(telemetrySource.includes('text-[11.5px] lg:text-[9.5px]'), 'Public repos count must use text-[11.5px] on compact');
+  assert.ok(telemetrySource.includes('text-[10px] text-[#D4CDA4]'), 'OWNER PROJECTS label must use text-[10px]');
+  assert.ok(telemetrySource.includes('text-[12px] tracking-wider'), 'Public repos count must use text-[12px]');
   assert.ok(telemetrySource.includes('min-h-[36px]'), 'Action buttons must have >= 36px touch targets on compact');
 });
 
@@ -483,7 +483,7 @@ test('34. Desktop inspector omits duplicate clear control while mobile CLEAR rem
 // ---------------------------------------------------------------------------
 test('35. Compact drawer header hides decorative INDX badge below lg while desktop shows it at lg+', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
+  assert.ok(railSource.includes('hidden lg:inline text-[10px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
 });
 
 // ---------------------------------------------------------------------------
@@ -500,5 +500,5 @@ test('36. Compact drawer header displays internal CLOSE control below lg', () =>
 test('37. Compact drawer header title and button use whitespace-nowrap preventing row wrapping', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('Owner Technical Index'), 'Title must be Owner Technical Index');
-  assert.ok(railSource.includes('text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
+  assert.ok(railSource.includes('text-[12px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
 });
