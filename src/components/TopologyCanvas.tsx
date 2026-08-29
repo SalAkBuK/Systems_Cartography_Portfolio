@@ -43,6 +43,7 @@ import {
 import {
   isProjectLinkedToExperience
 } from '../utils/portfolioUtils';
+import { CapabilityIcon } from './CapabilityIcon';
 import { 
   projectUsesCapability, 
   getCapabilityCoreTechnology,
@@ -1150,18 +1151,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   strokeWidth={isSelected || isThisDragging || isSkillConnected ? '2' : '1'}
                 />
 
-                {/* Inner architectural hatch ring */}
-                <circle
-                  cx={posIso.x}
-                  cy={posIso.y}
-                  r="9"
-                  fill={isSelected ? '#C3E54E' : isSkillConnected ? '#15150F' : '#15150F'}
-                />
-                <circle
-                  cx={posIso.x}
-                  cy={posIso.y}
-                  r="4"
-                  fill={isSelected ? '#15150F' : isSkillConnected ? '#C3E54E' : '#D4CDA4'}
+                {/* Technology Vector Mark / Monogram */}
+                <CapabilityIcon
+                  label={getCapabilityCoreTechnology(skill)}
+                  x={posIso.x}
+                  y={posIso.y}
+                  size={isHighlighted ? 22 : 20}
+                  color={isSelected ? '#C3E54E' : '#15150F'}
                 />
 
                 {/* Skill Code & Usage Count Label */}
