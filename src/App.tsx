@@ -319,31 +319,48 @@ export default function App() {
         <main className="flex-1 flex flex-col relative overflow-hidden bg-[#D4CDA4]">
           {activeView === 'contact' ? (
             <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
-          ) : drilledProject ? (
-            <ProjectSubsystemCanvas
-              project={drilledProject}
-              onReturnToLandscape={handleReturnToLandscape}
-              selectedSubsystemId={selectedSubsystem?.id || null}
-              onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
-              onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
-            />
           ) : (
-            <TopologyCanvas
-              selectedProjectId={selectedProjectId}
-              onSelectProject={handleSelectProject}
-              onDrillIntoProject={handleDrillIntoProject}
-              selectedSkillId={selectedSkillId}
-              onSelectSkill={handleSelectSkill}
-              selectedExperienceId={selectedExperienceId}
-              onClearSelection={handleClearSelection}
-              searchQuery={searchQuery}
-              topologyViewMode={topologyViewMode}
-              viewport={viewport}
-              setViewport={setViewport}
-              projects={projects}
-              skills={skills}
-              experience={experience}
-            />
+            <>
+              {/* TopologyCanvas stays mounted for the entire topology/project
+                  lifetime — drilling into a project's subsystem view must
+                  never unmount it, or every piece of its runtime-only visitor
+                  layout state (detached positions, interactiveOrbitOrder,
+                  custom skill positions, orbit rate/phase, grid snap) is lost
+                  on the way back. Instead it is hidden (display:none via the
+                  `contents`/`hidden` toggle) and made inert while drilled in,
+                  and simply revealed again on return — the SAME instance. */}
+              <div
+                className={drilledProject ? 'hidden' : 'contents'}
+                inert={Boolean(drilledProject)}
+                aria-hidden={drilledProject ? true : undefined}
+              >
+                <TopologyCanvas
+                  selectedProjectId={selectedProjectId}
+                  onSelectProject={handleSelectProject}
+                  onDrillIntoProject={handleDrillIntoProject}
+                  selectedSkillId={selectedSkillId}
+                  onSelectSkill={handleSelectSkill}
+                  selectedExperienceId={selectedExperienceId}
+                  onClearSelection={handleClearSelection}
+                  searchQuery={searchQuery}
+                  topologyViewMode={topologyViewMode}
+                  viewport={viewport}
+                  setViewport={setViewport}
+                  projects={projects}
+                  skills={skills}
+                  experience={experience}
+                />
+              </div>
+              {drilledProject && (
+                <ProjectSubsystemCanvas
+                  project={drilledProject}
+                  onReturnToLandscape={handleReturnToLandscape}
+                  selectedSubsystemId={selectedSubsystem?.id || null}
+                  onSelectSubsystem={(sub) => setSelectedSubsystem(sub)}
+                  onOpenCaseStudy={() => setIsCaseStudyOpen(true)}
+                />
+              )}
+            </>
           )}
         </main>
 
