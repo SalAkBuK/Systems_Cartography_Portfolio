@@ -1078,10 +1078,10 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
         {/* CASE 4: UNSELECTED ROOT CONSOLE / VIEW-SPECIFIC OVERVIEWS */}
         {!selectedProject && !selectedSkill && !selectedExperience && (
-          <div className="min-h-full flex-1 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {activeView === 'identity' ? (
               /* --- OPERATOR PROFILE CONSOLE --- */
-              <>
+              <div className="min-h-full flex-1 flex flex-col gap-4">
                 {/* Operator Identity Block */}
                 <div className="border-b border-[#15150F] pb-3">
                   <div className="flex items-center justify-between">
@@ -1185,7 +1185,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     DISPATCH ENCRYPTED COMMS
                   </button>
                 </div>
-              </>
+              </div>
             ) : activeView === 'projects' ? (
               /* --- PROJECTS OVERVIEW PROMPT --- */
               <>
