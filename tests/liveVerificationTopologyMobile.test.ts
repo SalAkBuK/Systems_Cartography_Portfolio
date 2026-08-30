@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
-import { 
-  evidenceByRepository, 
-  REPOSITORY_CANONICAL_CLUSTERS, 
-  getCanonicalRepositoryKey, 
-  getRepositoryEvidence 
+import { OWNER_EXPERIENCE_EVIDENCE, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
+import {
+  evidenceByRepository,
+  REPOSITORY_CANONICAL_CLUSTERS,
+  REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET,
+  getCanonicalRepositoryKey,
+  getRepositoryEvidence
 } from '../src/data/repositoryEvidence';
 import { 
   resolveProjectFromEvidenceKey, 
@@ -34,7 +35,7 @@ const resolvedExperience = resolveProfessionalExperience({
 // TEST A: ownerExperienceEvidence references ONLY live TowerDesk repositories
 // ---------------------------------------------------------------------------
 test('Test A: ownerExperienceEvidence references ONLY live TowerDesk repositories without stale showcase text', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('codefier');
+  const codefierEvidence = getOwnerExperienceEvidence('codefier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET);
   assert.ok(codefierEvidence, 'CodeFier evidence must exist');
 
   // Verify architected systems
@@ -91,19 +92,62 @@ test('Test B: evidenceByRepository keyed to live names and aliases map to canoni
   assert.ok(evidenceByRepository['worthy-crm'], 'worthy-crm must be a direct key');
   assert.ok(evidenceByRepository['remapp-scraper'], 'remapp-scraper must be a direct key');
 
-  // Verify alias mapping
-  assert.equal(getCanonicalRepositoryKey('towerdesk-backend'), 'towerdesk-backend');
-  assert.equal(getCanonicalRepositoryKey('towerdesk-backend-clean'), 'towerdesk-backend');
-  assert.equal(getCanonicalRepositoryKey('tower-desk'), 'tower-desk');
-  assert.equal(getCanonicalRepositoryKey('tower-desk-clean'), 'tower-desk');
-  assert.equal(getCanonicalRepositoryKey('towerdesk-mobile-app'), 'towerdesk-mobile-app');
-  assert.equal(getCanonicalRepositoryKey('towerdesk-mobile-showcase'), 'towerdesk-mobile-app');
-  assert.equal(getCanonicalRepositoryKey('binghatti-concierge-app-rn-expo'), 'towerdesk-mobile-app');
+  // Verify alias mapping (explicit current-owner target -- both accessors
+  // require an owner argument, there is no current-owner default)
+  assert.equal(getCanonicalRepositoryKey('towerdesk-backend', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'towerdesk-backend');
+  assert.equal(getCanonicalRepositoryKey('towerdesk-backend-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'towerdesk-backend');
+  assert.equal(getCanonicalRepositoryKey('tower-desk', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'tower-desk');
+  assert.equal(getCanonicalRepositoryKey('tower-desk-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'tower-desk');
+  assert.equal(getCanonicalRepositoryKey('towerdesk-mobile-app', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'towerdesk-mobile-app');
+  assert.equal(getCanonicalRepositoryKey('towerdesk-mobile-showcase', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'towerdesk-mobile-app');
+  assert.equal(getCanonicalRepositoryKey('binghatti-concierge-app-rn-expo', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET), 'towerdesk-mobile-app');
 
   // Verify getRepositoryEvidence returns records for aliases
-  assert.ok(getRepositoryEvidence('towerdesk-backend-clean'));
-  assert.ok(getRepositoryEvidence('tower-desk-clean'));
-  assert.ok(getRepositoryEvidence('towerdesk-mobile-showcase'));
+  assert.ok(getRepositoryEvidence('towerdesk-backend-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET));
+  assert.ok(getRepositoryEvidence('tower-desk-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET));
+  assert.ok(getRepositoryEvidence('towerdesk-mobile-showcase', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET));
+});
+
+// ---------------------------------------------------------------------------
+// PR28: Repository Evidence Owner Scope (Foreign-Owner Collision Protection)
+// ---------------------------------------------------------------------------
+test('PR28: getRepositoryEvidence/getCanonicalRepositoryKey are owner-scoped -- current owner target still resolves, foreign owner target does not', () => {
+  const OWN_TARGET = 'https://github.com/SalAkBuK';
+  const FOREIGN_TARGET = 'https://github.com/example-owner';
+
+  // Explicit matching owner target required by both accessors (no default).
+  assert.ok(getRepositoryEvidence('towerdesk-backend', OWN_TARGET));
+  assert.ok(getRepositoryEvidence('worthy-crm', OWN_TARGET));
+  assert.equal(getCanonicalRepositoryKey('towerdesk-backend-clean', OWN_TARGET), 'towerdesk-backend');
+
+  // Foreign owner target: repository-name collision protection.
+  assert.equal(getRepositoryEvidence('towerdesk-backend', FOREIGN_TARGET), null, 'Foreign towerdesk-backend must not receive curated evidence');
+  assert.equal(getRepositoryEvidence('worthy-crm', FOREIGN_TARGET), null, 'Foreign worthy-crm must not receive curated evidence');
+  assert.equal(getRepositoryEvidence('remapp-scraper', FOREIGN_TARGET), null, 'Foreign remapp-scraper must not receive curated evidence');
+
+  // Foreign owner target: canonical cluster aliases must not apply.
+  assert.equal(
+    getCanonicalRepositoryKey('towerdesk-backend-clean', FOREIGN_TARGET),
+    'towerdesk-backend-clean',
+    'Foreign owner must not inherit the towerdesk-backend-clean -> towerdesk-backend alias'
+  );
+  assert.equal(
+    getCanonicalRepositoryKey('towerdesk-mobile-showcase', FOREIGN_TARGET),
+    'towerdesk-mobile-showcase',
+    'Foreign owner must not inherit the mobile-showcase cluster alias'
+  );
+});
+
+test('PR28: Repository-name collision -- a foreign example-owner/towerdesk-backend repo never resolves SalAkBuK TowerDesk evidence', () => {
+  const evidence = getRepositoryEvidence('towerdesk-backend', 'https://github.com/example-owner');
+  assert.equal(evidence, null);
+});
+
+test('PR28: Worthy CRM and remapp-scraper name collisions are also owner-scoped', () => {
+  assert.equal(getRepositoryEvidence('worthy-crm', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('remapp-scraper', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('formcrash', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('pillcheck-public', 'https://github.com/another-owner'), null);
 });
 
 // ---------------------------------------------------------------------------
@@ -504,7 +548,7 @@ test('Test O: CodeFier model invariants: exactly 2 role periods, 3 delivered sys
   const codefierRoles = resolvedExperience.filter(e => (e.organization || '').toLowerCase().includes('codefier'));
   assert.equal(codefierRoles.length, 2, 'CodeFier must have exactly 2 role periods');
 
-  const codefierEvidence = getOwnerExperienceEvidence('codefier');
+  const codefierEvidence = getOwnerExperienceEvidence('codefier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET);
   assert.ok(codefierEvidence);
   assert.equal(codefierEvidence.systemsDelivered?.length, 3, 'Must have exactly 3 delivered systems');
 

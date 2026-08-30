@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveProfessionalExperience } from '../src/services/experienceResolver';
 import { OWNER_PROFILE } from '../src/data/ownerProfile.generated';
-import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
+import { OWNER_EXPERIENCE_EVIDENCE, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET, getOwnerExperienceEvidence } from '../src/data/ownerExperienceEvidence';
 import { ADDITIONAL_OWNER_EXPERIENCE } from '../src/data/ownerAdditionalExperience';
-import { getRepositoryEvidence } from '../src/data/repositoryEvidence';
+import { getRepositoryEvidence, REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET } from '../src/data/repositoryEvidence';
 import { ExperienceNode, GeneratedOwnerProfile, OwnerExperienceEvidence } from '../src/types';
 import { parseLinkedInProfileText, buildGeneratedOwnerProfile } from '../scripts/linkedinProfileParser';
 
@@ -246,7 +246,7 @@ test('8. Freelance work cannot accidentally inherit CodeFier evidence', () => {
 });
 
 test('9. TowerDesk resolves as ONE professional platform with 3 surfaces', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const towerdesk = codefierEvidence.systemsDelivered?.find(s => s.name.includes('TowerDesk'))!;
 
   assert.ok(towerdesk, 'TowerDesk platform must exist');
@@ -263,24 +263,24 @@ test('9. TowerDesk resolves as ONE professional platform with 3 surfaces', () =>
 });
 
 test('10. Original and sanitized TowerDesk repository aliases resolve to identical evidence records', () => {
-  const originalBackend = getRepositoryEvidence('towerdesk-backend');
-  const cleanBackend = getRepositoryEvidence('towerdesk-backend-clean');
+  const originalBackend = getRepositoryEvidence('towerdesk-backend', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
+  const cleanBackend = getRepositoryEvidence('towerdesk-backend-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(originalBackend);
   assert.equal(originalBackend, cleanBackend);
 
-  const originalWeb = getRepositoryEvidence('tower-desk');
-  const cleanWeb = getRepositoryEvidence('tower-desk-clean');
+  const originalWeb = getRepositoryEvidence('tower-desk', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
+  const cleanWeb = getRepositoryEvidence('tower-desk-clean', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(originalWeb);
   assert.equal(originalWeb, cleanWeb);
 
-  const originalMobile = getRepositoryEvidence('binghatti-concierge-app-rn-expo');
-  const showcaseMobile = getRepositoryEvidence('towerdesk-mobile-showcase');
+  const originalMobile = getRepositoryEvidence('binghatti-concierge-app-rn-expo', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
+  const showcaseMobile = getRepositoryEvidence('towerdesk-mobile-showcase', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(originalMobile);
   assert.equal(originalMobile, showcaseMobile);
 });
 
 test('11. Worthy CRM technical facts are VERIFIED in repositoryEvidence while attribution is CURATED', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const crmDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Worthy Real Estate CRM'))!;
 
   assert.ok(crmDelivered);
@@ -293,7 +293,7 @@ test('11. Worthy CRM technical facts are VERIFIED in repositoryEvidence while at
   assert.ok(crmDelivered.capabilities?.some(c => c.includes('audit_logs')));
 
   // Direct repo technical evidence check (VERIFIED in repositoryEvidence)
-  const crmEvidence = getRepositoryEvidence('worthy-crm');
+  const crmEvidence = getRepositoryEvidence('worthy-crm', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(crmEvidence);
   assert.ok(crmEvidence.subsystems.some(s => s.name.includes('Audit Logger')));
   assert.ok(crmEvidence.subsystems.some(s => s.name.includes('Notifications')));
@@ -301,7 +301,7 @@ test('11. Worthy CRM technical facts are VERIFIED in repositoryEvidence while at
 });
 
 test('12. Remapp data service is modeled as API ingestion and NOT browser scraping', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const remappDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Remapp'))!;
 
   assert.ok(remappDelivered);
@@ -314,25 +314,25 @@ test('12. Remapp data service is modeled as API ingestion and NOT browser scrapi
   assert.ok(remappDelivered.capabilities?.some(c => c.includes('Exponential Retry Backoff')));
 
   // Direct repo technical evidence check (VERIFIED in repositoryEvidence)
-  const remappEvidence = getRepositoryEvidence('remapp-scraper');
+  const remappEvidence = getRepositoryEvidence('remapp-scraper', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(remappEvidence);
   assert.ok(remappEvidence.subsystems.some(s => s.name.includes('Resilient API Fetcher')));
 });
 
 test('13. Production nightly schedule remains CURATED while ingestion automation is VERIFIED', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const nightlyOp = codefierEvidence.infrastructureOperations?.find(o => o.area.includes('Scheduled Ingestion'))!;
 
   assert.ok(nightlyOp);
   assert.equal(nightlyOp.provenance, 'CURATED', 'Deployment schedule cadence must remain CURATED');
 
   // The ingestion pipeline architecture itself is VERIFIED in repositoryEvidence
-  const remappEvidence = getRepositoryEvidence('remapp-scraper');
+  const remappEvidence = getRepositoryEvidence('remapp-scraper', REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET);
   assert.ok(remappEvidence);
 });
 
 test('14. CRM external property integration is cache-backed and not claimed as relational DB sync', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const crmDelivered = codefierEvidence.systemsDelivered?.find(s => s.name.includes('Worthy Real Estate CRM'))!;
 
   assert.ok(crmDelivered);
@@ -343,7 +343,7 @@ test('14. CRM external property integration is cache-backed and not claimed as r
 });
 
 test('15. TowerDesk mobile implementation maturity honestly discloses hybrid/mock modules', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const towerdesk = codefierEvidence.systemsDelivered?.find(s => s.name.includes('TowerDesk'))!;
   const mobileSurface = towerdesk?.surfaces?.find(s => s.name.includes('Mobile'))!;
 
@@ -352,7 +352,7 @@ test('15. TowerDesk mobile implementation maturity honestly discloses hybrid/moc
 });
 
 test('16. Non-CodeFier showcase preparation is not in CodeFier contributions', () => {
-  const codefierEvidence = getOwnerExperienceEvidence('CodeFier')!;
+  const codefierEvidence = getOwnerExperienceEvidence('CodeFier', OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)!;
   const contributions = codefierEvidence.engineeringContributions || [];
 
   assert.ok(!contributions.some(c => c.title.toLowerCase().includes('sanitized showcase')), 'Sanitized showcase preparation must not be a CodeFier employment contribution');
@@ -1380,5 +1380,104 @@ test('60. Different historical year does NOT deduplicate with 2025 record', asyn
 
   const merged = mergeExperienceSources([year2024Import], ADDITIONAL_OWNER_EXPERIENCE);
   assert.equal(merged.length, 2, '2024 role and 2025 role must both survive without collision');
+});
+
+// ---------------------------------------------------------------------------
+// PR28: Owner-Scoped Professional Evidence (Foreign-Owner Collision Protection)
+// ---------------------------------------------------------------------------
+
+test('PR28 CRITICAL: Synthetic owner with employment organization also named "CodeFier" does NOT receive SalAkBuK CodeFier engineering evidence', () => {
+  const syntheticCodeFierExperience: ExperienceNode[] = [
+    {
+      id: 'exp-synthetic-codefier',
+      code: 'EXP-01',
+      yearRange: '2023 - Present',
+      role: 'Backend Engineer',
+      organization: 'CodeFier',
+      location: 'Berlin, Germany',
+      systemDomain: 'Payments Systems',
+      keyOutputs: ['Built an unrelated payments backend at a different company that also happens to be named CodeFier.'],
+      systemsArchitected: [],
+      technologies: ['Go', 'Kubernetes'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED',
+      startDate: '2023-01',
+      endDate: null
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: syntheticCodeFierExperience,
+    ownerGithubTarget: 'https://github.com/example-owner'
+  });
+
+  assert.equal(resolved.length, 1);
+  const foreignCodefier = resolved[0];
+  assert.equal(foreignCodefier.organization, 'CodeFier');
+
+  // Owner identity boundary wins even when organization names collide.
+  assert.equal(foreignCodefier.systemsDelivered?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK systemsDelivered (TowerDesk/Worthy/Remapp)');
+  assert.equal(foreignCodefier.architectedSystemsDetails?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK architectedSystems (TowerDesk)');
+  assert.equal(foreignCodefier.engineeringContributions?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK engineeringContributions');
+  assert.equal(foreignCodefier.infrastructureOperations?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK infrastructureOperations');
+  assert.equal(foreignCodefier.evidenceLinks?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK evidenceLinks');
+  assert.ok(
+    (foreignCodefier.systemsArchitected || []).every(name => !name.includes('TowerDesk')),
+    'Foreign CodeFier must not list TowerDesk as a systemsArchitected name'
+  );
+});
+
+test('PR28: getOwnerExperienceEvidenceCollection returns [] for a foreign githubTarget and the full bundle for the matching owner (no current-owner default)', async () => {
+  const { getOwnerExperienceEvidenceCollection, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET } = await import('../src/data/ownerExperienceEvidence');
+
+  const foreignCollection = getOwnerExperienceEvidenceCollection('https://github.com/example-owner');
+  assert.deepEqual(foreignCollection, [], 'Foreign owner target must receive an empty evidence collection');
+
+  const ownCollection = getOwnerExperienceEvidenceCollection(OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET);
+  assert.ok(ownCollection.length > 0, 'Matching owner target must receive the full curated evidence bundle');
+
+  // Unknown/empty owner must also fail closed -- there is no current-owner
+  // default to silently fall back to.
+  const unknownOwnerCollection = getOwnerExperienceEvidenceCollection('');
+  assert.deepEqual(unknownOwnerCollection, [], 'Empty/unknown githubTarget must fail closed, never substitute this owner\'s own target');
+});
+
+test('PR28: getOwnerExperienceEvidence("CodeFier", foreignTarget) returns null while the matching owner target still resolves it', async () => {
+  const { getOwnerExperienceEvidence: scopedGetOwnerExperienceEvidence } = await import('../src/data/ownerExperienceEvidence');
+
+  const foreignLookup = scopedGetOwnerExperienceEvidence('CodeFier', 'https://github.com/example-owner');
+  assert.equal(foreignLookup, null, 'Foreign owner target must not resolve CodeFier evidence by organization name');
+
+  const ownLookup = scopedGetOwnerExperienceEvidence('CodeFier', 'https://github.com/SalAkBuK');
+  assert.ok(ownLookup, 'Matching owner target must still resolve CodeFier evidence');
+});
+
+test('PR28: Foreign owner still produces a valid resolved experience model (imported history survives without any curated overlay)', () => {
+  const foreignHistory: ExperienceNode[] = [
+    {
+      id: 'exp-foreign-01',
+      code: 'EXP-01',
+      yearRange: '2022 - 2024',
+      role: 'Platform Engineer',
+      organization: 'Example Foreign Co',
+      location: 'Sydney, Australia',
+      systemDomain: 'Cloud Platform',
+      keyOutputs: ['Operated Kubernetes clusters and CI/CD pipelines.'],
+      systemsArchitected: [],
+      technologies: ['Kubernetes', 'Terraform'],
+      gridPosition: { x: 0, y: 0 },
+      startDate: '2022-01',
+      endDate: '2024-01'
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: foreignHistory,
+    ownerGithubTarget: 'https://github.com/example-owner'
+  });
+
+  assert.equal(resolved.length, 1, 'Foreign owner imported history must survive resolution');
+  assert.equal(resolved[0].organization, 'Example Foreign Co');
+  assert.equal(resolved[0].systemsDelivered?.length || 0, 0);
 });
 

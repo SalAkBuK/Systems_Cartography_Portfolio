@@ -1,4 +1,31 @@
 import { ProjectData, SubsystemNode } from '../types';
+import { isSameGithubOwner } from '../utils/ownerScope';
+
+/**
+ * PERSISTENT OWNER-CURATED REPOSITORY ARCHITECTURE EVIDENCE.
+ *
+ * `evidenceByRepository` and `REPOSITORY_CANONICAL_CLUSTERS` below are
+ * reviewed architecture evidence for THIS repository owner's own
+ * repositories. They are legitimate portfolio data, but generic engine
+ * consumers (the repository analyzer, GitHub sync canonicalization, capability
+ * association) must only apply them when the repository actually being
+ * processed is owned by this declared source owner -- otherwise a fork
+ * configured for a different owner could inherit curated evidence merely
+ * because one of their repositories happens to share a name with one of
+ * these (e.g. "towerdesk-backend", "worthy-crm").
+ *
+ * `getRepositoryEvidence` / `getCanonicalRepositoryKey` therefore REQUIRE an
+ * explicit `ownerGithubTarget` identifying the ACTUAL owner of the repository
+ * being looked up (e.g. the live `repo.owner.login` from the GitHub API, or
+ * the owner derived from a project's own `links.github`). There is
+ * intentionally NO default that silently substitutes this evidence source's
+ * own owner -- a caller that forgets to pass an owner gets a TypeScript
+ * compile error, not an accidental match. Current-owner callers (tests,
+ * fixtures) must explicitly pass `REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET`
+ * (or `PORTFOLIO_CONFIG.githubTarget`) themselves. An unknown/unparseable
+ * owner always fails closed (see `isSameGithubOwner`).
+ */
+export const REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET = 'https://github.com/SalAkBuK';
 
 type Evidence = Pick<ProjectData, 'problem' | 'solution' | 'architectureNotes' | 'subsystems' | 'keyDecisions' | 'resilienceTesting'>;
 
@@ -152,13 +179,43 @@ export const REPOSITORY_CANONICAL_CLUSTERS: Record<string, string> = {
   'remapp-scraper': 'remapp-scraper'
 };
 
-export function getCanonicalRepositoryKey(repositoryName: string): string {
+/**
+ * Resolves a repository name to its canonical cluster key, e.g. mapping
+ * `towerdesk-backend-clean` to `towerdesk-backend`. Canonical clustering is
+ * itself owner-curated data: it is only applied when `ownerGithubTarget`
+ * (the ACTUAL owner of the repository being resolved) matches
+ * REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET. A foreign owner's repository
+ * never inherits this owner's clustering, even on an exact name match.
+ */
+export function getCanonicalRepositoryKey(
+  repositoryName: string,
+  ownerGithubTarget: string
+): string {
   const normalized = (repositoryName || '').toLowerCase().trim();
+  if (!isSameGithubOwner(ownerGithubTarget, REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET)) {
+    return normalized;
+  }
   return REPOSITORY_CANONICAL_CLUSTERS[normalized] || normalized;
 }
 
-export function getRepositoryEvidence(repositoryName: string): Evidence | null {
-  const canonicalKey = getCanonicalRepositoryKey(repositoryName);
+/**
+ * Resolves reviewed architecture evidence for a repository, strictly scoped
+ * to the declared source owner. `ownerGithubTarget` must be the ACTUAL owner
+ * of the repository being looked up (e.g. the live `repo.owner.login` from
+ * the GitHub API) -- never the visitor's configured portfolio target alone,
+ * and never assumed. A repository owned by any other GitHub account NEVER
+ * receives this evidence, even when its name is identical to one of the
+ * keys below (evidence identity is OWNER + REPOSITORY, not repository name
+ * alone).
+ */
+export function getRepositoryEvidence(
+  repositoryName: string,
+  ownerGithubTarget: string
+): Evidence | null {
+  if (!isSameGithubOwner(ownerGithubTarget, REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET)) {
+    return null;
+  }
+  const canonicalKey = getCanonicalRepositoryKey(repositoryName, ownerGithubTarget);
   return evidenceByRepository[canonicalKey] || null;
 }
 

@@ -91,8 +91,12 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     { label: 'License Spec', value: repo.license?.spdx_id || 'Not reported', note: 'GitHub repository metadata', provenance: 'VERIFIED' as EvidenceProvenance }
   ];
 
-  // Check optional curated override
-  const curated = getRepositoryEvidence(repo.name);
+  // Check optional curated override -- strictly owner-scoped to the ACTUAL
+  // owner of the repository being analyzed (from live GitHub metadata), so a
+  // foreign repository sharing a name with a curated repository (e.g.
+  // another owner's "towerdesk-backend") never inherits this owner's
+  // architecture evidence.
+  const curated = getRepositoryEvidence(repo.name, repo.owner.login);
   if (curated?.subsystems) {
     curated.subsystems.forEach(sub => {
       sub.tech.forEach(t => {

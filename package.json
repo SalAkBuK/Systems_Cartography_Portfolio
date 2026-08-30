@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "systems-cartography-portfolio",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,10 +9,12 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "setup": "tsx scripts/import-linkedin-profile.ts",
     "setup:linkedin": "tsx scripts/import-linkedin-profile.ts",
+    "setup:check": "tsx scripts/check-owner-setup.ts",
     "sync:github": "tsx scripts/sync-github-snapshot.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify": "npm run setup:check && npm test && npm run lint && npm run build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
