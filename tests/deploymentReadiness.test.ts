@@ -63,6 +63,58 @@ const freshAliceProfile: any = {
   education: []
 };
 
+/**
+ * A profile that IS configured (a real operator name, imported this session)
+ * but has no GitHub association yet -- exactly the state a fresh PDF import
+ * leaves behind under the PR #32 detected-vs-confirmed rule.
+ */
+const freshUnboundProfile: any = { ...freshAliceProfile, githubTarget: '' };
+
+function makeGithubSyncMockFetch(login: string): typeof fetch {
+  return (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.includes(`/users/${login}/repos`)) {
+      return new Response(JSON.stringify([
+        {
+          id: 1,
+          name: 'test-repo',
+          full_name: `${login}/test-repo`,
+          description: 'A test repo',
+          html_url: `https://github.com/${login}/test-repo`,
+          stargazers_count: 1,
+          forks_count: 0,
+          open_issues_count: 0,
+          language: 'TypeScript',
+          topics: ['test'],
+          size: 10,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2025-01-01T00:00:00Z',
+          archived: false,
+          fork: false,
+          default_branch: 'main',
+          owner: { login, avatar_url: '', html_url: '' }
+        }
+      ]), { status: 200 });
+    }
+    if (url.includes('/readme')) {
+      return new Response('# README', { status: 200 });
+    }
+    if (url.includes('/git/trees')) {
+      return new Response(JSON.stringify({ tree: [], truncated: false }), { status: 200 });
+    }
+    if (url.includes('/rate_limit')) {
+      return new Response(JSON.stringify({
+        resources: { core: { limit: 5000, remaining: 5000, reset: 1770000000 } }
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ login, name: login, public_repos: 1 }), { status: 200 });
+  }) as any;
+}
+
+function makeFailingGithubMockFetch(): typeof fetch {
+  return (async () => new Response('not found', { status: 404 })) as any;
+}
+
 async function listen(server: ReturnType<typeof createSetupPortfolioServer>): Promise<number> {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return (server.address() as { port: number }).port;
@@ -782,4 +834,262 @@ test('deployment guard source has no credential or authenticated-account depende
   ].join('\n');
   assert.doesNotMatch(source, /GITHUB_TOKEN|GH_TOKEN|API_KEY|CLIENT_SECRET|gh auth/i);
   assert.doesNotMatch(source, /PORTFOLIO_REPOSITORY_IDENTITY/);
+});
+
+/**
+ * Regressions for binding a successfully, explicitly synced GitHub target
+ * onto the current owner profile when that profile has no GitHub
+ * association yet -- fixing the gap where the fresh-fork isolation from
+ * PR #32 correctly kept the profile's githubTarget empty through PDF import,
+ * but never bound it after a deliberate, successful GitHub sync, leaving
+ * VERIFY permanently blocked on "Generated owner profile is missing a
+ * GitHub target."
+ */
+
+test('1. a fresh owner profile begins with an empty githubTarget', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: { detectedGitHub: 'https://github.com/hafsah1976' },
+    repositoryIdentityResolver: () => ({
+      identity: { owner: 'hafsah1976', name: 'Systems_Cartography_Portfolio' },
+      source: 'git-origin'
+    })
+  });
+  const port = await listen(server);
+  try {
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.ownerProfile.githubTarget, '');
+  } finally {
+    await close(server);
+  }
+});
+
+test('2. a merely detected GitHub target does not alter profile.githubTarget absent any sync', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: {
+      ownerProfile: freshUnboundProfile,
+      detectedGitHub: 'https://github.com/hafsah1976'
+    },
+    repositoryIdentityResolver: () => ({
+      identity: { owner: 'hafsah1976', name: 'Systems_Cartography_Portfolio' },
+      source: 'git-origin'
+    })
+  });
+  const port = await listen(server);
+  try {
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.ownerProfile.githubTarget, '', 'detection alone must never bind the profile');
+    assert.equal(stateData.confirmedGitHub, '');
+  } finally {
+    await close(server);
+  }
+});
+
+test('3. a failed GitHub sync does not bind profile.githubTarget', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: { ownerProfile: freshUnboundProfile },
+    repositoryIdentityResolver: () => ({
+      identity: { owner: 'hafsah1976', name: 'Systems_Cartography_Portfolio' },
+      source: 'git-origin'
+    }),
+    fetchImpl: makeFailingGithubMockFetch()
+  });
+  const port = await listen(server);
+  try {
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/hafsah1976' })
+    });
+    assert.equal(sync.status >= 400, true, 'the sync itself must fail');
+
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.ownerProfile.githubTarget, '', 'a failed sync must never bind the profile');
+    assert.equal(stateData.confirmedGitHub, '', 'a failed sync must never establish a confirmed target either');
+  } finally {
+    await close(server);
+  }
+});
+
+test('4+5+6. a successful explicit sync binds the empty profile target, and both /api/state and /api/session reflect it', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: {
+      ownerProfile: freshUnboundProfile,
+      detectedGitHub: 'https://github.com/hafsah1976'
+    },
+    repositoryIdentityResolver: () => ({
+      identity: { owner: 'hafsah1976', name: 'Systems_Cartography_Portfolio' },
+      source: 'git-origin'
+    }),
+    fetchImpl: makeGithubSyncMockFetch('hafsah1976')
+  });
+  const port = await listen(server);
+  try {
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/hafsah1976' })
+    });
+    assert.equal(sync.status, 200);
+
+    // 5. /api/state reflects the bound profile target and the correct snapshot owner.
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.confirmedGitHub, 'https://github.com/hafsah1976');
+    assert.equal(stateData.ownerProfile.githubTarget, 'https://github.com/hafsah1976');
+    assert.equal(stateData.snapshot.user.login, 'hafsah1976');
+    assert.equal(stateData.identityMatch.status, 'MATCH');
+
+    // 6. /api/session reports the same confirmed/profile target consistently.
+    const session = await fetch(`http://127.0.0.1:${port}/api/session`);
+    const sessionData = await session.json();
+    assert.equal(sessionData.confirmedGitHub, 'https://github.com/hafsah1976');
+    assert.equal(sessionData.githubTarget, 'https://github.com/hafsah1976');
+    assert.equal(sessionData.identityMatch.status, 'MATCH');
+  } finally {
+    await close(server);
+  }
+});
+
+test('7. VERIFY no longer reports a missing GitHub target after a fresh profile is bound by successful sync', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: {
+      ownerProfile: freshUnboundProfile,
+      preferences: { flagshipProjectIds: [] },
+      profileSavedThisSession: true,
+      flagshipsSavedThisSession: true
+    },
+    repositoryIdentityResolver: () => ({
+      identity: { owner: 'hafsah1976', name: 'Systems_Cartography_Portfolio' },
+      source: 'git-origin'
+    }),
+    fetchImpl: makeGithubSyncMockFetch('hafsah1976')
+  });
+  const port = await listen(server);
+  try {
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/hafsah1976' })
+    });
+    assert.equal(sync.status, 200);
+
+    const verify = await fetch(`http://127.0.0.1:${port}/api/verify`);
+    const verifyData = await verify.json();
+    assert.ok(
+      !verifyData.summary.results.some((r: any) => /missing a required GitHub target|missing.*GitHub target/i.test(r.message) && r.level === 'FAIL'),
+      'VERIFY must no longer report a missing GitHub target once the fresh sync has bound the profile'
+    );
+    assert.ok(
+      verifyData.summary.results.some((r: any) => r.level === 'PASS' && /identities match/i.test(r.message)),
+      'identity match should now PASS instead of reporting UNKNOWN'
+    );
+  } finally {
+    await close(server);
+  }
+});
+
+test('8. an existing profile target A is never overwritten by a sync to target B (intentional cross-owner setup)', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: {
+      ownerProfile: { ...freshAliceProfile, githubTarget: 'https://github.com/owner-a' }
+    },
+    fetchImpl: makeGithubSyncMockFetch('owner-b')
+  });
+  const port = await listen(server);
+  try {
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/owner-b' })
+    });
+    assert.equal(sync.status, 200);
+
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.ownerProfile.githubTarget, 'https://github.com/owner-a', 'profile must remain A');
+    assert.equal(stateData.confirmedGitHub, 'https://github.com/owner-b', 'confirmed portfolio target becomes B');
+    assert.equal(stateData.identityMatch.status, 'MISMATCH');
+
+    const verify = await fetch(`http://127.0.0.1:${port}/api/verify`);
+    const verifyData = await verify.json();
+    assert.equal(verifyData.success, false, 'an unconfirmed genuine mismatch must still block verification');
+
+    const confirm = await fetch(`http://127.0.0.1:${port}/api/confirm-cross-owner`, {
+      method: 'POST',
+      headers: { 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN }
+    });
+    assert.equal(confirm.status, 200, 'explicit cross-owner confirmation remains available and required');
+  } finally {
+    await close(server);
+  }
+});
+
+test('9. an existing profile target A synced again to the same target A remains MATCH', async () => {
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    initialStateOverrides: {
+      ownerProfile: { ...freshAliceProfile, githubTarget: 'https://github.com/owner-a' }
+    },
+    fetchImpl: makeGithubSyncMockFetch('owner-a')
+  });
+  const port = await listen(server);
+  try {
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/owner-a' })
+    });
+    assert.equal(sync.status, 200);
+
+    const state = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const stateData = await state.json();
+    assert.equal(stateData.ownerProfile.githubTarget, 'https://github.com/owner-a');
+    assert.equal(stateData.confirmedGitHub, 'https://github.com/owner-a');
+    assert.equal(stateData.identityMatch.status, 'MATCH');
+  } finally {
+    await close(server);
+  }
+});
+
+test('10. same-repository SalAkBuK existing-owner sync does not rebind the already-associated real profile', async () => {
+  const protectedOwnerDataBefore = protectedOwnerDataPaths.map(file => fs.readFileSync(file, 'utf8'));
+  // No repositoryIdentityResolver override -> resolves this actual checkout's
+  // git origin, matching OWNER_SETUP_MANIFEST (same-repository, real owner).
+  const server = createSetupPortfolioServer({
+    persistToDisk: false,
+    fetchImpl: makeGithubSyncMockFetch('SalAkBuK')
+  });
+  const port = await listen(server);
+  try {
+    const before = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const beforeData = await before.json();
+    assert.match(beforeData.ownerProfile.githubTarget, /SalAkBuK/i);
+
+    const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ githubTarget: 'https://github.com/SalAkBuK' })
+    });
+    assert.equal(sync.status, 200);
+
+    const after = await fetch(`http://127.0.0.1:${port}/api/state`);
+    const afterData = await after.json();
+    assert.equal(afterData.ownerProfile.githubTarget, beforeData.ownerProfile.githubTarget, 'the real owner profile target is unchanged');
+  } finally {
+    await close(server);
+  }
+  assert.deepEqual(
+    protectedOwnerDataPaths.map(file => fs.readFileSync(file, 'utf8')),
+    protectedOwnerDataBefore,
+    'persistToDisk:false must not touch generated owner data or preferences'
+  );
 });

@@ -518,6 +518,22 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         runtimeState.verificationPassed = false;
         runtimeState.githubSyncedThisSession = true;
 
+        // A successful, explicit GitHub sync IS a deliberate user action (per
+        // the detected-vs-confirmed rule from PR #32) and may bind the
+        // synced target onto the current owner profile -- but ONLY when that
+        // profile is genuinely configured and does not already carry its own
+        // GitHub association. This must never overwrite a pre-associated
+        // profile target (an intentional cross-owner setup), and a merely
+        // detected suggestion or a failed sync must never reach this code at
+        // all.
+        if (runtimeState.ownerProfile.operator?.name && !runtimeState.ownerProfile.githubTarget) {
+          const boundProfile: GeneratedOwnerProfile = { ...runtimeState.ownerProfile, githubTarget: target };
+          if (shouldPersistToDisk) {
+            await writeGeneratedOwnerProfile(boundProfile);
+          }
+          runtimeState.ownerProfile = boundProfile;
+        }
+
         const githubAuth = await getGitHubAuthStatus({ fetchImpl: options?.fetchImpl });
 
         sendJson(200, {
