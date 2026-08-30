@@ -125,8 +125,14 @@ test('FormCrash repository regression oracle preserves curated fidelity and prov
     id: 102,
     name: 'formcrash',
     full_name: 'SalAkBuK/formcrash',
+    html_url: 'https://github.com/SalAkBuK/formcrash',
     description: 'Autonomous E2E test generation engine',
-    language: 'TypeScript'
+    language: 'TypeScript',
+    owner: {
+      login: 'SalAkBuK',
+      avatar_url: 'https://example.com/avatar.png',
+      html_url: 'https://github.com/SalAkBuK'
+    }
   };
 
   const emptyInspection: RawRepositoryInspection = {
@@ -145,6 +151,67 @@ test('FormCrash repository regression oracle preserves curated fidelity and prov
   assert.ok(formcrash.subsystems.length >= 4);
   assert.ok(formcrash.keyDecisions.length >= 2);
   assert.match(formcrash.problem, /transactional browser journeys/i);
+});
+
+// ---------------------------------------------------------------------------
+// PR28: Owner-Scoped Repository Evidence (Foreign-Owner Collision Protection)
+// ---------------------------------------------------------------------------
+test('PR28: A foreign owner\'s repository named "towerdesk-backend" does NOT receive SalAkBuK curated evidence (repository-name collision)', () => {
+  const foreignTowerdesk: GitHubRepoRaw = {
+    ...baseRepo,
+    id: 201,
+    name: 'towerdesk-backend',
+    full_name: 'example-owner/towerdesk-backend',
+    html_url: 'https://github.com/example-owner/towerdesk-backend',
+    description: 'Unrelated property backend built by a different developer',
+    language: 'Python',
+    owner: {
+      login: 'example-owner',
+      avatar_url: 'https://example.com/avatar.png',
+      html_url: 'https://github.com/example-owner'
+    }
+  };
+
+  const emptyInspection: RawRepositoryInspection = {
+    readmeContent: null,
+    packageJsonContent: null,
+    treeFiles: []
+  };
+
+  const project = analyzeRepository(foreignTowerdesk, 0, 1, emptyInspection);
+
+  // Must NOT inherit SalAkBuK's curated TowerDesk architecture evidence merely
+  // because the repository name matches -- evidence identity is OWNER + REPO.
+  assert.notEqual(project.provenance?.problem, 'CURATED', 'Foreign repo must not receive CURATED problem statement');
+  assert.notEqual(project.provenance?.subsystems, 'CURATED', 'Foreign repo must not receive CURATED subsystems');
+  assert.ok(!project.problem.includes('property operations'), 'Foreign repo must not receive TowerDesk problem text');
+  assert.ok(!project.subsystems.some(s => s.id.startsWith('tdb-')), 'Foreign repo must not receive TowerDesk subsystem IDs');
+});
+
+test('PR28: SalAkBuK\'s own "towerdesk-backend" repository still receives curated evidence (current-owner regression)', () => {
+  const ownTowerdesk: GitHubRepoRaw = {
+    ...baseRepo,
+    id: 202,
+    name: 'towerdesk-backend',
+    full_name: 'SalAkBuK/towerdesk-backend',
+    html_url: 'https://github.com/SalAkBuK/towerdesk-backend',
+    owner: {
+      login: 'SalAkBuK',
+      avatar_url: 'https://example.com/avatar.png',
+      html_url: 'https://github.com/SalAkBuK'
+    }
+  };
+
+  const emptyInspection: RawRepositoryInspection = {
+    readmeContent: null,
+    packageJsonContent: null,
+    treeFiles: []
+  };
+
+  const project = analyzeRepository(ownTowerdesk, 0, 1, emptyInspection);
+  assert.equal(project.provenance?.problem, 'CURATED');
+  assert.equal(project.provenance?.subsystems, 'CURATED');
+  assert.match(project.problem, /property operations/i);
 });
 
 test('Sparse repository without README or package.json reports honest UNAVAILABLE status', () => {

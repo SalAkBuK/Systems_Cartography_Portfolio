@@ -1382,3 +1382,100 @@ test('60. Different historical year does NOT deduplicate with 2025 record', asyn
   assert.equal(merged.length, 2, '2024 role and 2025 role must both survive without collision');
 });
 
+// ---------------------------------------------------------------------------
+// PR28: Owner-Scoped Professional Evidence (Foreign-Owner Collision Protection)
+// ---------------------------------------------------------------------------
+
+test('PR28 CRITICAL: Synthetic owner with employment organization also named "CodeFier" does NOT receive SalAkBuK CodeFier engineering evidence', () => {
+  const syntheticCodeFierExperience: ExperienceNode[] = [
+    {
+      id: 'exp-synthetic-codefier',
+      code: 'EXP-01',
+      yearRange: '2023 - Present',
+      role: 'Backend Engineer',
+      organization: 'CodeFier',
+      location: 'Berlin, Germany',
+      systemDomain: 'Payments Systems',
+      keyOutputs: ['Built an unrelated payments backend at a different company that also happens to be named CodeFier.'],
+      systemsArchitected: [],
+      technologies: ['Go', 'Kubernetes'],
+      gridPosition: { x: 0, y: 0 },
+      provenance: 'CURATED',
+      startDate: '2023-01',
+      endDate: null
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: syntheticCodeFierExperience,
+    ownerGithubTarget: 'https://github.com/example-owner'
+  });
+
+  assert.equal(resolved.length, 1);
+  const foreignCodefier = resolved[0];
+  assert.equal(foreignCodefier.organization, 'CodeFier');
+
+  // Owner identity boundary wins even when organization names collide.
+  assert.equal(foreignCodefier.systemsDelivered?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK systemsDelivered (TowerDesk/Worthy/Remapp)');
+  assert.equal(foreignCodefier.architectedSystemsDetails?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK architectedSystems (TowerDesk)');
+  assert.equal(foreignCodefier.engineeringContributions?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK engineeringContributions');
+  assert.equal(foreignCodefier.infrastructureOperations?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK infrastructureOperations');
+  assert.equal(foreignCodefier.evidenceLinks?.length || 0, 0, 'Foreign CodeFier must NOT receive SalAkBuK evidenceLinks');
+  assert.ok(
+    (foreignCodefier.systemsArchitected || []).every(name => !name.includes('TowerDesk')),
+    'Foreign CodeFier must not list TowerDesk as a systemsArchitected name'
+  );
+});
+
+test('PR28: getOwnerExperienceEvidenceCollection returns [] for a foreign githubTarget and the full bundle for the matching owner', async () => {
+  const { getOwnerExperienceEvidenceCollection, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET } = await import('../src/data/ownerExperienceEvidence');
+
+  const foreignCollection = getOwnerExperienceEvidenceCollection('https://github.com/example-owner');
+  assert.deepEqual(foreignCollection, [], 'Foreign owner target must receive an empty evidence collection');
+
+  const ownCollection = getOwnerExperienceEvidenceCollection(OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET);
+  assert.ok(ownCollection.length > 0, 'Matching owner target must receive the full curated evidence bundle');
+
+  const defaultCollection = getOwnerExperienceEvidenceCollection();
+  assert.deepEqual(defaultCollection, ownCollection, 'Omitted githubTarget defaults to this evidence source\'s own declared owner');
+});
+
+test('PR28: getOwnerExperienceEvidence("CodeFier", foreignTarget) returns null while the matching owner target still resolves it', async () => {
+  const { getOwnerExperienceEvidence: scopedGetOwnerExperienceEvidence } = await import('../src/data/ownerExperienceEvidence');
+
+  const foreignLookup = scopedGetOwnerExperienceEvidence('CodeFier', 'https://github.com/example-owner');
+  assert.equal(foreignLookup, null, 'Foreign owner target must not resolve CodeFier evidence by organization name');
+
+  const ownLookup = scopedGetOwnerExperienceEvidence('CodeFier', 'https://github.com/SalAkBuK');
+  assert.ok(ownLookup, 'Matching owner target must still resolve CodeFier evidence');
+});
+
+test('PR28: Foreign owner still produces a valid resolved experience model (imported history survives without any curated overlay)', () => {
+  const foreignHistory: ExperienceNode[] = [
+    {
+      id: 'exp-foreign-01',
+      code: 'EXP-01',
+      yearRange: '2022 - 2024',
+      role: 'Platform Engineer',
+      organization: 'Example Foreign Co',
+      location: 'Sydney, Australia',
+      systemDomain: 'Cloud Platform',
+      keyOutputs: ['Operated Kubernetes clusters and CI/CD pipelines.'],
+      systemsArchitected: [],
+      technologies: ['Kubernetes', 'Terraform'],
+      gridPosition: { x: 0, y: 0 },
+      startDate: '2022-01',
+      endDate: '2024-01'
+    }
+  ];
+
+  const resolved = resolveProfessionalExperience({
+    importedExperience: foreignHistory,
+    ownerGithubTarget: 'https://github.com/example-owner'
+  });
+
+  assert.equal(resolved.length, 1, 'Foreign owner imported history must survive resolution');
+  assert.equal(resolved[0].organization, 'Example Foreign Co');
+  assert.equal(resolved[0].systemsDelivered?.length || 0, 0);
+});
+

@@ -1,4 +1,5 @@
 import { OwnerExperienceEvidence } from '../types';
+import { isSameGithubOwner } from '../utils/ownerScope';
 
 /**
  * PERSISTENT OWNER-CURATED PROFESSIONAL EVIDENCE OVERLAY.
@@ -15,7 +16,16 @@ import { OwnerExperienceEvidence } from '../types';
  * Note on Provenance Boundary:
  * Technical facts and subsystem architectures are VERIFIED in repositoryEvidence.ts.
  * Professional attribution claims ("Salih delivered/built X at CodeFier") are recorded as CURATED.
+ *
+ * Owner Boundary:
+ * This evidence bundle belongs to OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET below.
+ * Generic runtime consumers (the experience resolver) must NOT read
+ * OWNER_EXPERIENCE_EVIDENCE directly -- use getOwnerExperienceEvidenceCollection()
+ * / getOwnerExperienceEvidence() with the configured owner's GitHub target so
+ * a fork owner whose employer happens to share a name (e.g. another
+ * "CodeFier") never inherits this owner's engineering evidence.
  */
+export const OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET = 'https://github.com/SalAkBuK';
 export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
   {
     organizationId: 'codefier',
@@ -325,10 +335,39 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
   }
 ];
 
-export function getOwnerExperienceEvidence(identifier: string): OwnerExperienceEvidence | null {
+/**
+ * Owner-scoped accessor for the full curated evidence bundle. Returns an
+ * empty array unless `githubTarget` matches OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET.
+ * Defaults to this evidence source's own declared owner when omitted, so
+ * calling this module directly (e.g. from a test exercising this owner's own
+ * data) behaves as before; every real resolver call site always passes the
+ * actual configured/observed owner explicitly.
+ */
+export function getOwnerExperienceEvidenceCollection(
+  githubTarget: string = OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET
+): OwnerExperienceEvidence[] {
+  if (!isSameGithubOwner(githubTarget, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)) {
+    return [];
+  }
+  return OWNER_EXPERIENCE_EVIDENCE;
+}
+
+/**
+ * Owner-scoped lookup of a single curated evidence record by organization
+ * id/name. Matching an organization NAME (e.g. "CodeFier") is only possible
+ * when `githubTarget` matches this evidence source's declared owner --
+ * closing the organization-name-collision leak where a fork owner who also
+ * worked at a company with the same name would otherwise inherit this
+ * owner's engineering evidence.
+ */
+export function getOwnerExperienceEvidence(
+  identifier: string,
+  githubTarget: string = OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET
+): OwnerExperienceEvidence | null {
   const target = (identifier || '').toLowerCase().trim();
+  const collection = getOwnerExperienceEvidenceCollection(githubTarget);
   return (
-    OWNER_EXPERIENCE_EVIDENCE.find(
+    collection.find(
       e =>
         e.organizationId.toLowerCase() === target ||
         (e.organizationName && e.organizationName.toLowerCase() === target)
