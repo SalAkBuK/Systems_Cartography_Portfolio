@@ -380,29 +380,37 @@ test('ORBIT_PERIOD_MS is within the specified 90-150s neighborhood (target 120s)
 // mount-lifetime loop that keeps waking the browser merely to hold position.
 // A pure DOM-free test can't spin up React here, so this is one focused
 // structural invariant on the actual effect, not a giant string-assertion
-// suite: the effect depends on isOrbitRunning, the paused branch returns
+// suite: the effect depends on the dual running/rate state, the paused branch returns
 // before ever calling requestAnimationFrame, and cleanup cancels it.
 // ---------------------------------------------------------------------------
 
 function extractOrbitClockEffect(content: string): string {
-  const startIdx = content.indexOf('const orbitClockRef = useRef<OrbitClockState>');
-  const dependencyList = '}, [isOrbitRunning, orbitRateMultiplier]);';
-  const endIdx = content.indexOf(dependencyList, startIdx);
+  const startIdx = content.indexOf('const dualOrbitClockRef = useRef<DualOrbitClockState>');
+  const endIdx = content.indexOf('const projectsById', startIdx);
   assert.ok(startIdx !== -1 && endIdx !== -1, 'orbit clock effect block must be present');
-  return content.slice(startIdx, endIdx + dependencyList.length);
+  return content.slice(startIdx, endIdx);
 }
 
-test('TopologyCanvas.tsx: the orbit RAF effect is keyed on running state and shared rate, not a mount-once ([]) effect', () => {
+test('TopologyCanvas.tsx: the dual orbit RAF effect is keyed on both running states and rates, not a mount-once ([]) effect', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
-  assert.ok(block.endsWith('}, [isOrbitRunning, orbitRateMultiplier]);'), 'Effect must restart on pause/resume or shared-rate boundaries, not run once for the component lifetime');
+  for (const dependency of [
+    'isDualOrbitMachineRunning',
+    'isProjectOrbitRunning',
+    'projectOrbitRateMultiplier',
+    'isReactorOrbitRunning',
+    'reactorOrbitRateMultiplier',
+  ]) {
+    assert.ok(block.includes(dependency), `dual clock effect must depend on ${dependency}`);
+  }
+  assert.ok(!block.includes('}, []);'), 'Dual clock effect must not run once for the component lifetime');
 });
 
 test('TopologyCanvas.tsx: the paused branch returns before scheduling any requestAnimationFrame — zero repeating callbacks while paused', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
 
-  const pausedBranchIdx = block.indexOf('if (!isOrbitRunning) {');
+  const pausedBranchIdx = block.indexOf('if (!isDualOrbitMachineRunning) {');
   const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
   const firstRafIdx = block.indexOf('requestAnimationFrame(');
   assert.ok(pausedBranchIdx !== -1 && pausedReturnIdx !== -1 && firstRafIdx !== -1);
@@ -415,12 +423,13 @@ test('TopologyCanvas.tsx: the paused branch returns before scheduling any reques
 test('TopologyCanvas.tsx: pausing clears the timestamp baseline but preserves the phase (no reset, no catch-up)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
-  const pausedBranchIdx = block.indexOf('if (!isOrbitRunning) {');
+  const pausedBranchIdx = block.indexOf('if (!isDualOrbitMachineRunning) {');
   const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
   const baselineBlock = block.slice(block.indexOf('useEffect(() => {'), pausedReturnIdx);
 
-  assert.ok(baselineBlock.includes('rebaselineOrbitClock(orbitClockRef.current)'), 'Pause/rate boundaries must preserve phase while clearing the timestamp baseline');
-  assert.ok(!baselineBlock.includes('setOrbitPhase(0)'), 'Pause/rate boundaries must never reset phase to zero');
+  assert.ok(baselineBlock.includes('rebaselineDualOrbitClock(dualOrbitClockRef.current)'), 'Pause/rate boundaries must preserve both phases while clearing the shared timestamp baseline');
+  assert.ok(!baselineBlock.includes('setProjectOrbitPhase(0)'), 'Pause/rate boundaries must never reset project phase to zero');
+  assert.ok(!baselineBlock.includes('setReactorOrbitPhase(0)'), 'Pause/rate boundaries must never reset reactor phase to zero');
 });
 
 test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimationFrame chain and cancels it on cleanup', () => {
@@ -430,7 +439,7 @@ test('TopologyCanvas.tsx: the running branch schedules exactly one requestAnimat
 
   const rafCallCount = (runningBlock.match(/requestAnimationFrame\(/g) || []).length;
   assert.equal(rafCallCount, 2, 'Exactly one chain: one initial schedule plus one re-schedule inside tick (the same recursive chain, not multiple independent loops)');
-  assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame when isOrbitRunning flips or the component unmounts');
+  assert.ok(runningBlock.includes('return () => cancelAnimationFrame(rafId)'), 'Cleanup must cancel the active frame when the dual machine stops or the component unmounts');
 });
 
 test('TopologyCanvas.tsx: no setInterval is ever used, and exactly two gated requestAnimationFrame chains exist (orbit clock + PR23 dock settle transition)', () => {
