@@ -36,7 +36,13 @@ Then start the portfolio:
 
 ```bash
 npm run dev
+npm run build
 ```
+
+Production builds are intentionally blocked until this fork has completed the
+wizard's `VERIFY` and `COMPLETE` steps. The completed setup is bound to the
+fork's repository identity, so copied upstream owner data cannot authorize a
+deployment by itself.
 
 ---
 
@@ -68,6 +74,9 @@ Advanced users or CI environments can also run each setup step individually:
    ```bash
    npm run setup:check
    ```
+   If these manual steps are being used in a new fork, finish in
+   `npm run setup:portfolio` and complete `VERIFY` then `COMPLETE`. Only the
+   verified wizard completion updates the repository-bound setup manifest.
 9. **Run it locally.**
    ```bash
    npm run dev
@@ -166,6 +175,12 @@ Always run `npm run setup:check` after re-running either tool to confirm the own
 
 The production build (`npm run build`) is a static site in `dist/` — deploy it to any static host.
 
+Before Vite emits production assets, the build compares
+`src/config/ownerSetup.generated.ts` with the current repository identity. It
+uses supported deployment-provider metadata first, then CI metadata, then the
+local `origin` Git remote. A fork that still carries the upstream repository's
+manifest fails closed and is instructed to run `npm run setup:portfolio`.
+
 **Vercel**
 - Framework preset: Vite. Build command: `npm run build`. Output directory: `dist`.
 - Set `VITE_CONTACT_FORM_ENDPOINT` (if used) as an environment variable in the Vercel project settings, not committed to source.
@@ -175,6 +190,11 @@ The production build (`npm run build`) is a static site in `dist/` — deploy it
 - Same environment-variable guidance applies.
 
 **Other static Vite hosts** (Cloudflare Pages, GitHub Pages, static S3/CDN, etc.) work the same way: run `npm run build`, deploy the contents of `dist/`.
+
+If a production build environment has neither trusted provider/CI repository
+metadata nor a checkout retaining a valid GitHub `origin`, the build fails
+closed. There is intentionally no manual repository-identity override or guard
+bypass.
 
 Because the GitHub snapshot is committed and there is no visitor-time API dependency, no server-side runtime or database is required anywhere in this deployment model.
 

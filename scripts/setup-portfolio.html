@@ -334,7 +334,7 @@
           <button class="btn btn-outline" onclick="jumpToStep(4)">← BACK</button>
           <div class="actions-group">
             <button class="btn btn-outline" onclick="runDiagnostics()">RE-RUN CHECKS</button>
-            <button id="completeSetupBtn" class="btn btn-accent" onclick="jumpToStep(6)" disabled>COMPLETE SETUP →</button>
+            <button id="completeSetupBtn" class="btn btn-accent" onclick="completeSetup()" disabled>COMPLETE SETUP →</button>
           </div>
         </div>
       </div>
@@ -1029,6 +1029,31 @@
       } catch (err) {
         verificationPassed = false;
         list.innerHTML = '<div class="diag-item fail">Failed to run checks: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    async function completeSetup() {
+      if (!verificationPassed) {
+        showStatus('Cannot complete setup: run verification and resolve all blocking issues first.', 'error');
+        return;
+      }
+
+      const completeBtn = document.getElementById('completeSetupBtn');
+      completeBtn.disabled = true;
+      try {
+        const res = await fetch('/api/complete', {
+          method: 'POST',
+          headers: { 'X-Setup-CSRF-Token': csrfToken }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Setup completion failed');
+        }
+        showStatus('✓ SETUP BOUND TO ' + data.repository.owner + '/' + data.repository.name, 'success');
+        jumpToStep(6);
+      } catch (err) {
+        completeBtn.disabled = false;
+        showStatus('✗ ' + err.message, 'error');
       }
     }
 

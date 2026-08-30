@@ -23,7 +23,13 @@ import { generateGitHubSnapshot, syncGitHubSnapshotToFile } from './sync-github-
 import { getGitHubAuthStatus } from './githubAuthResolver';
 import { runOwnerSetupChecks } from './check-owner-setup';
 import { evaluateOwnerIdentityMatch } from '../src/utils/ownerIdentityMatch';
+import { getGithubOwnerIdentity } from '../src/utils/ownerScope';
 import { writeOwnerPreferences } from '../src/utils/ownerPreferencesStorage';
+import { createOwnerSetupManifest, type OwnerSetupManifest } from '../src/config/ownerSetupManifest';
+import { OWNER_SETUP_MANIFEST } from '../src/config/ownerSetup.generated';
+import { resolveCurrentRepository } from './deployment-readiness';
+import { writeOwnerSetupManifest } from './owner-setup-manifest-writer';
+import { evaluateDeploymentReadiness, type RepositoryIdentityResolution } from '../src/utils/deploymentReadiness';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from '../src/data/githubSnapshot.generated';
 import { OWNER_PROFILE } from '../src/data/ownerProfile.generated';
 import { OWNER_PORTFOLIO_PREFERENCES } from '../src/config/ownerPreferences';
@@ -48,12 +54,18 @@ export interface WizardRuntimeState {
   confirmedGitHub: string;
   verificationPassed: boolean;
   crossOwnerConfirmed: boolean;
+  profileSavedThisSession: boolean;
+  githubSyncedThisSession: boolean;
+  flagshipsSavedThisSession: boolean;
 }
 
 export interface SetupPortfolioServerOptions {
   initialStateOverrides?: Partial<WizardRuntimeState>;
   persistToDisk?: boolean;
+  persistSetupManifest?: boolean;
   fetchImpl?: typeof fetch;
+  repositoryIdentityResolver?: () => RepositoryIdentityResolution;
+  setupManifestWriter?: (manifest: OwnerSetupManifest) => void;
 }
 
 export function validateLocalhostHost(hostHeader?: string): boolean {
@@ -123,6 +135,9 @@ function renderWizardHtml(): string {
 export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions): http.Server {
   const initialStateOverrides = options?.initialStateOverrides;
   const shouldPersistToDisk = options?.persistToDisk !== false;
+  const shouldPersistSetupManifest = options?.persistSetupManifest ?? shouldPersistToDisk;
+  const repositoryIdentityResolver = options?.repositoryIdentityResolver || resolveCurrentRepository;
+  const setupManifestWriter = options?.setupManifestWriter || writeOwnerSetupManifest;
 
   const confirmedTarget = initialStateOverrides?.confirmedGitHub || initialStateOverrides?.ownerProfile?.githubTarget || OWNER_PROFILE.githubTarget || '';
 
@@ -139,7 +154,10 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
     detectedGitHub: initialStateOverrides?.detectedGitHub || '',
     confirmedGitHub: confirmedTarget,
     verificationPassed: Boolean(initialStateOverrides?.verificationPassed),
-    crossOwnerConfirmed: Boolean(initialStateOverrides?.crossOwnerConfirmed)
+    crossOwnerConfirmed: Boolean(initialStateOverrides?.crossOwnerConfirmed),
+    profileSavedThisSession: Boolean(initialStateOverrides?.profileSavedThisSession),
+    githubSyncedThisSession: Boolean(initialStateOverrides?.githubSyncedThisSession),
+    flagshipsSavedThisSession: Boolean(initialStateOverrides?.flagshipsSavedThisSession)
   };
 
   const server = http.createServer(async (req, res) => {
@@ -183,7 +201,15 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
       if (!runtimeState.detectedGitHub) {
         runtimeState.detectedGitHub = await inferGitHubTarget();
       }
-      const existingSetup = Boolean(runtimeState.ownerProfile.operator?.name && runtimeState.ownerProfile.githubTarget);
+      const repositorySetup = evaluateDeploymentReadiness(
+        OWNER_SETUP_MANIFEST,
+        repositoryIdentityResolver()
+      );
+      const existingSetup = Boolean(
+        runtimeState.ownerProfile.operator?.name
+        && runtimeState.ownerProfile.githubTarget
+        && repositorySetup.ready
+      );
       const githubAuth = await getGitHubAuthStatus({ fetchImpl: options?.fetchImpl });
       const target = runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget || runtimeState.detectedGitHub;
       const identityMatch = evaluateOwnerIdentityMatch({
@@ -203,6 +229,7 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         flagshipsCount: runtimeState.preferences.flagshipProjectIds?.length || 0,
         githubAuth,
         crossOwnerConfirmed: runtimeState.crossOwnerConfirmed,
+        repositorySetupRequired: !repositorySetup.ready,
         identityMatch
       });
       return;
@@ -333,6 +360,8 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
         runtimeState.ownerProfile = parsed.profile;
         runtimeState.crossOwnerConfirmed = false;
+        runtimeState.verificationPassed = false;
+        runtimeState.profileSavedThisSession = true;
         if (parsed.profile.githubTarget) {
           runtimeState.confirmedGitHub = parsed.profile.githubTarget;
         }
@@ -376,6 +405,8 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         runtimeState.snapshotMetadata = metadata;
         runtimeState.confirmedGitHub = target;
         runtimeState.crossOwnerConfirmed = false;
+        runtimeState.verificationPassed = false;
+        runtimeState.githubSyncedThisSession = true;
 
         const githubAuth = await getGitHubAuthStatus({ fetchImpl: options?.fetchImpl });
 
@@ -399,6 +430,7 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         return;
       }
       runtimeState.crossOwnerConfirmed = true;
+      runtimeState.verificationPassed = false;
       sendJson(200, { success: true, crossOwnerConfirmed: true });
       return;
     }
@@ -430,12 +462,16 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
           if (result.success) {
             runtimeState.preferences.flagshipProjectIds = result.savedIds;
+            runtimeState.verificationPassed = false;
+            runtimeState.flagshipsSavedThisSession = true;
             sendJson(200, { success: true, savedIds: result.savedIds });
           } else {
             sendJson(400, { success: false, error: result.error });
           }
         } else {
           runtimeState.preferences.flagshipProjectIds = parsed.flagshipProjectIds;
+          runtimeState.verificationPassed = false;
+          runtimeState.flagshipsSavedThisSession = true;
           sendJson(200, { success: true, savedIds: parsed.flagshipProjectIds });
         }
       } catch (err) {
@@ -462,6 +498,89 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
       } catch (err) {
         sendJson(500, { success: false, error: err instanceof Error ? err.message : String(err) });
       }
+      return;
+    }
+
+    // POST /api/complete -> Re-verify, then bind setup to this repository.
+    if (req.method === 'POST' && url.pathname === '/api/complete') {
+      if (!verifyCsrf()) {
+        sendJson(403, { success: false, error: 'Invalid or missing CSRF token' });
+        return;
+      }
+
+      if (!runtimeState.verificationPassed) {
+        sendJson(409, { success: false, error: 'Run verification successfully before completing setup.' });
+        return;
+      }
+
+      const summary = runOwnerSetupChecks({
+        ownerProfile: runtimeState.ownerProfile,
+        snapshot: runtimeState.snapshot,
+        snapshotMetadata: runtimeState.snapshotMetadata,
+        preferences: runtimeState.preferences,
+        githubTarget: runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget,
+        crossOwnerConfirmed: runtimeState.crossOwnerConfirmed
+      });
+
+      if (summary.status === 'FAIL' || summary.failCount > 0) {
+        runtimeState.verificationPassed = false;
+        sendJson(409, { success: false, error: 'Owner setup verification no longer passes.', summary });
+        return;
+      }
+
+      const repositoryResolution = repositoryIdentityResolver();
+      if (!repositoryResolution.identity) {
+        sendJson(409, {
+          success: false,
+          error: 'Repository identity is unavailable. Use a supported Git-connected provider or a checkout retaining a valid GitHub origin remote.'
+        });
+        return;
+      }
+
+      const existingRepositorySetup = evaluateDeploymentReadiness(
+        OWNER_SETUP_MANIFEST,
+        repositoryResolution
+      );
+      if (!existingRepositorySetup.ready) {
+        const requiredSteps = [
+          runtimeState.profileSavedThisSession ? null : 'PROFILE',
+          runtimeState.githubSyncedThisSession ? null : 'GITHUB',
+          runtimeState.flagshipsSavedThisSession ? null : 'FLAGSHIPS'
+        ].filter(Boolean);
+        if (requiredSteps.length > 0) {
+          sendJson(409, {
+            success: false,
+            error: `This fork must complete fresh setup steps before initialization: ${requiredSteps.join(', ')}.`
+          });
+          return;
+        }
+      }
+
+      const githubTarget = runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget;
+      const portfolioGithubOwner = getGithubOwnerIdentity(githubTarget);
+      if (!portfolioGithubOwner) {
+        runtimeState.verificationPassed = false;
+        sendJson(409, { success: false, error: 'Configured portfolio GitHub owner is invalid.' });
+        return;
+      }
+
+      const manifest = createOwnerSetupManifest(repositoryResolution.identity, portfolioGithubOwner);
+      try {
+        if (shouldPersistSetupManifest) setupManifestWriter(manifest);
+      } catch (err) {
+        sendJson(500, {
+          success: false,
+          error: `Could not write repository setup manifest: ${err instanceof Error ? err.message : String(err)}`
+        });
+        return;
+      }
+
+      sendJson(200, {
+        success: true,
+        repository: repositoryResolution.identity,
+        repositoryIdentitySource: repositoryResolution.source,
+        portfolioGithubOwner
+      });
       return;
     }
 
