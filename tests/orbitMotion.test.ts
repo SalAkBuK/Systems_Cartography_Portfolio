@@ -312,7 +312,6 @@ test('isOrbitPauseConditionActive: desktop idle allows motion', () => {
 const pauseTriggeringFields: Array<keyof OrbitPauseState> = [
   'isDocumentHidden',
   'prefersReducedMotion',
-  'isCompact',
 ];
 
 for (const field of pauseTriggeringFields) {
@@ -330,6 +329,7 @@ const nonPausingInteractionFields: Array<keyof OrbitPauseState> = [
   'isExperienceSelected',
   'isCanvasPanning',
   'isNodeDragging',
+  'isCompact',
 ];
 
 for (const field of nonPausingInteractionFields) {
@@ -337,6 +337,16 @@ for (const field of nonPausingInteractionFields) {
     assert.equal(isOrbitPauseConditionActive({ ...idleState, [field]: true }), false);
   });
 }
+
+test('isOrbitPauseConditionActive: a narrow center topology panel (isCompact) never pauses the orbit machine on its own', () => {
+  // A normal desktop monitor routinely leaves the center topology panel
+  // under 1024px once the left navigation rail and right inspector panel
+  // are accounted for. That is a layout fact, not a "viewport too small for
+  // motion" signal -- isCompact must never be a blanket machine-wide pause
+  // authority.
+  const desktopWithNarrowCenterPanel: OrbitPauseState = { ...idleState, isCompact: true };
+  assert.equal(isOrbitPauseConditionActive(desktopWithNarrowCenterPanel), false);
+});
 
 const nonPausingInteractionCombinations: Array<{
   name: string;
@@ -453,4 +463,59 @@ test('TopologyCanvas.tsx: no setInterval is ever used, and exactly two gated req
   // via cancelAnimationFrame when that boolean goes false.
   const rafOccurrences = (content.match(/requestAnimationFrame\(/g) || []).length;
   assert.equal(rafOccurrences, 4, 'Exactly two gated requestAnimationFrame chains may exist in the whole component');
+});
+
+// ---------------------------------------------------------------------------
+// Desktop orbit pause-threshold regression: a narrow center topology panel
+// (routine on an ordinary desktop once the nav rail and inspector panel are
+// laid out) must never freeze the orbit machine. Verified mathematically via
+// the exact phase-delta formula, per rate, rather than by relying on visibly
+// fast/obvious motion -- the project orbit period is intentionally slow
+// (ORBIT_PERIOD_MS = 120_000) and must stay that way.
+// ---------------------------------------------------------------------------
+
+function runningStateFor(pauseState: OrbitPauseState): boolean {
+  return !isOrbitPauseConditionActive(pauseState);
+}
+
+test('6. project and reactor phases still advance mathematically when isCompact is true but no legitimate pause authority is active', () => {
+  const compactButOtherwiseIdle: OrbitPauseState = { ...idleState, isCompact: true };
+  const isRunning = runningStateFor(compactButOtherwiseIdle);
+  assert.equal(isRunning, true, 'a narrow center panel alone must not stop the machine');
+
+  // Project orbit at its default 1x rate.
+  let projectClock: OrbitClockState = { phase: 0, lastTimestamp: 0 };
+  projectClock = stepOrbitClock(projectClock, 30_000, isRunning, 1);
+  const expectedProjectPhase = normalizeOrbitPhase(computePhaseDelta(30_000, 1));
+  assert.ok(Math.abs(projectClock.phase - expectedProjectPhase) < 1e-9, 'project phase must advance by the exact 1x formula');
+  assert.ok(projectClock.phase > 0, 'project phase must be strictly greater than its starting value');
+
+  // Reactor orbit at its default 0.5x rate, counter-moving but same shared clock mechanism.
+  let reactorClock: OrbitClockState = { phase: 0, lastTimestamp: 0 };
+  reactorClock = stepOrbitClock(reactorClock, 30_000, isRunning, 0.5);
+  const expectedReactorPhase = normalizeOrbitPhase(computePhaseDelta(30_000, 0.5));
+  assert.ok(Math.abs(reactorClock.phase - expectedReactorPhase) < 1e-9, 'reactor phase must advance by the exact 0.5x formula');
+  assert.ok(reactorClock.phase > 0, 'reactor phase must be strictly greater than its starting value');
+});
+
+test('7. reduced motion still prevents phase advancement even when the center panel is compact', () => {
+  const reducedMotionAndCompact: OrbitPauseState = { ...idleState, isCompact: true, prefersReducedMotion: true };
+  const isRunning = runningStateFor(reducedMotionAndCompact);
+  assert.equal(isRunning, false);
+
+  let clock: OrbitClockState = { phase: 1.23, lastTimestamp: 0 };
+  clock = stepOrbitClock(clock, 30_000, isRunning, 1);
+  assert.equal(clock.phase, 1.23, 'phase must not advance while prefers-reduced-motion is active');
+  assert.equal(clock.lastTimestamp, null, 'the clock baseline must clear while paused');
+});
+
+test('8. document-hidden still prevents phase advancement even when the center panel is compact', () => {
+  const documentHiddenAndCompact: OrbitPauseState = { ...idleState, isCompact: true, isDocumentHidden: true };
+  const isRunning = runningStateFor(documentHiddenAndCompact);
+  assert.equal(isRunning, false);
+
+  let clock: OrbitClockState = { phase: 2.5, lastTimestamp: 0 };
+  clock = stepOrbitClock(clock, 30_000, isRunning, 1);
+  assert.equal(clock.phase, 2.5, 'phase must not advance while the document is hidden');
+  assert.equal(clock.lastTimestamp, null, 'the clock baseline must clear while paused');
 });

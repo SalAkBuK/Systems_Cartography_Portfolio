@@ -22,10 +22,13 @@ import {
 // autonomous orbit must NEVER stop for a detach/reinsertion — not on grab,
 // not on crossing the detach threshold, not on the release that commits the
 // detach, and not for the 18<->17 reflow that follows. Only isDocumentHidden,
-// prefersReducedMotion, isCompact, and explicit user PAUSE (rate 0) may ever
-// stop it. This requires the reflow's own targets to be evaluated against
-// the CURRENT live phase every frame (see projectDocking.ts's moving-frame
-// plan/endpoint machinery) rather than a frozen snapshot — otherwise a
+// prefersReducedMotion, and explicit user PAUSE (rate 0) may ever stop it.
+// isCompact reflects the center topology panel's own width (routinely under
+// 1024px on an ordinary desktop once the nav rail and inspector panel are
+// accounted for) and is NOT a machine-wide pause authority. This requires
+// the reflow's own targets to be evaluated against the CURRENT live phase
+// every frame (see projectDocking.ts's moving-frame plan/endpoint
+// machinery) rather than a frozen snapshot — otherwise a
 // continuously-advancing phase would produce a visible jump at handoff.
 
 const idlePauseState: OrbitPauseState = {
@@ -46,7 +49,7 @@ const canvasSource = fs.readFileSync(path.resolve('src/components/TopologyCanvas
 test('OrbitPauseState no longer has any reflow/docking-transition field — a committed detach/reinsertion cannot pause the orbit even in principle', () => {
   assert.ok(!('isDockingTransitionActive' in idlePauseState));
   assert.equal(isOrbitPauseConditionActive(idlePauseState), false);
-  const onlyAuthorities: Array<keyof OrbitPauseState> = ['isDocumentHidden', 'prefersReducedMotion', 'isCompact'];
+  const onlyAuthorities: Array<keyof OrbitPauseState> = ['isDocumentHidden', 'prefersReducedMotion'];
   for (const field of onlyAuthorities) {
     assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, [field]: true }), true, `${field} must still pause`);
   }
@@ -149,10 +152,14 @@ test('7. PAUSE (rate 0) still freezes everything, and nothing in the reflow path
   assert.ok(!commit.includes('setIsResumeReady'), 'reflow commit must never touch the resume-delay state');
 });
 
-test('sanity: reduced motion / compact / hidden document remain authoritative pause conditions, unaffected by this change', () => {
+test('sanity: reduced motion and hidden document remain authoritative pause conditions, unaffected by this change; isCompact does not pause', () => {
   assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, prefersReducedMotion: true }), true);
-  assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, isCompact: true }), true);
   assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, isDocumentHidden: true }), true);
+  assert.equal(
+    isOrbitPauseConditionActive({ ...idlePauseState, isCompact: true }),
+    false,
+    'a narrow center panel on an ordinary desktop must not stop the orbit machine'
+  );
 });
 
 test('sanity: ORBIT_RATE_MULTIPLIERS exposes 512x as the hard ceiling', () => {

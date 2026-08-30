@@ -94,9 +94,8 @@ test('background pan and orbit rate operate independently at every rate from PAU
   }
 });
 
-test('only compact, reduced motion, and hidden document remain pause authorities (reflow no longer pauses the orbit)', () => {
+test('only reduced motion and hidden document remain pause authorities (reflow, and a narrow center panel, no longer pause the orbit)', () => {
   const requiredPauseFields: Array<keyof OrbitPauseState> = [
-    'isCompact',
     'prefersReducedMotion',
     'isDocumentHidden',
   ];
@@ -104,6 +103,12 @@ test('only compact, reduced motion, and hidden document remain pause authorities
   for (const field of requiredPauseFields) {
     assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, [field]: true }), true, `${field} must still pause`);
   }
+
+  assert.equal(
+    isOrbitPauseConditionActive({ ...idlePauseState, isCompact: true }),
+    false,
+    'isCompact reflects the center panel width, not the overall viewport, and must not pause the orbit machine'
+  );
 });
 
 function advanceDuringInteraction(

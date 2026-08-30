@@ -233,7 +233,7 @@ export function getDynamicOrbitalPosition(
 
 /**
  * Interaction, system, and accessibility state stays observable in one object,
- * but only the three machine-level authorities below may stop the orbit —
+ * but only the two machine-level authorities below may stop the orbit —
  * plus explicit user PAUSE, represented separately by orbitRateMultiplier
  * === 0. Hover, selection, focus, canvas pan, node drag — including a
  * docked project crossing the magnetic detach threshold — and even a
@@ -242,6 +242,16 @@ export function getDynamicOrbitalPosition(
  * drop or by the redistribution that follows it (see commitOrbitReflow /
  * stepOrbitReflow's moving-frame interpolation, which is what makes running
  * the reflow concurrently with live phase advancement safe).
+ *
+ * `isCompact` is deliberately NOT a pause authority here. It reflects the
+ * center topology panel's own width, which routinely drops below 1024px on
+ * an ordinary desktop monitor once the left navigation rail and right
+ * inspector panel are accounted for -- that is a layout fact, not a signal
+ * that the viewport itself is too small for motion. It stays on this type
+ * because responsive rendering/layout decisions (e.g. hiding the desktop
+ * orbit-rate console) legitimately need it; a real tiny/mobile case where
+ * motion should be unsafe or hidden belongs at that rendering layer, not as
+ * a blanket machine-wide pause here.
  */
 export interface OrbitPauseState {
   isProjectHovered: boolean;
@@ -260,7 +270,6 @@ export interface OrbitPauseState {
 export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
   return (
     state.isDocumentHidden ||
-    state.prefersReducedMotion ||
-    state.isCompact
+    state.prefersReducedMotion
   );
 }
