@@ -21,6 +21,7 @@ import {
   MAX_FLAGSHIP_COUNT
 } from '../src/utils/flagshipSelectionModel';
 import { runOwnerSetupChecks } from '../scripts/check-owner-setup';
+import { NO_EXPERIENCE_WARNING } from '../scripts/linkedinProfileParser';
 
 function makeHttpRequest(
   port: number,
@@ -379,7 +380,7 @@ test('9. setup:portfolio: verification endpoint evaluates live runtimeState dire
       summary: 'Summary',
       contact: { github: 'https://github.com/valid-owner' }
     },
-    experience: [{ company: 'Core Tech', role: 'Engineer', period: '2022 - Present', summary: '', highlights: [] }],
+    experience: [],
     skills: [],
     certifications: [],
     education: []
@@ -414,6 +415,9 @@ test('9. setup:portfolio: verification endpoint evaluates live runtimeState dire
   assert.equal(verifyData.success, true);
   assert.equal(verifyData.summary.failCount, 0);
   assert.ok(verifyData.summary.results.some((r: any) => r.message.includes('Valid Developer')));
+  assert.ok(verifyData.summary.results.some(
+    (r: any) => r.level === 'PASS' && r.message === '0 professional roles imported'
+  ));
 
   server.close();
 });
@@ -503,7 +507,7 @@ test('11. setup:portfolio: wizard enforces first-time owner profile progression 
       summary: 'Summary',
       contact: { github: 'https://github.com/configured-owner' }
     },
-    experience: [{ company: 'Co', role: 'Dev', period: '2024 - Present', summary: '', highlights: [] }],
+    experience: [],
     skills: [],
     certifications: [],
     education: []
@@ -521,24 +525,30 @@ test('11. setup:portfolio: wizard enforces first-time owner profile progression 
 
   const sessionRes2 = await fetch(`http://127.0.0.1:${initAddr.port}/api/session`);
   const sessionData2 = await sessionRes2.json();
-  assert.equal(sessionData2.existingSetup, true, 'Configured profile must report existingSetup: true');
+  assert.equal(sessionData2.existingSetup, true, 'Configured zero-experience profile must report existingSetup: true');
 
   initializedServer.close();
 
   // 3. HTML template source verification for progression rules
   const htmlContent = fs.readFileSync(path.resolve('scripts/setup-portfolio.html'), 'utf8');
+  const topologyContent = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   assert.ok(htmlContent.includes('KEEP EXISTING PROFILE & CONTINUE'), 'Template must support KEEP EXISTING PROFILE & CONTINUE for configured owners');
   assert.ok(htmlContent.includes('SAVE PROFILE & CONTINUE'), 'Template must support SAVE PROFILE & CONTINUE after successful new parse');
   assert.ok(htmlContent.includes('updateProfileProgressionUI'), 'Template must implement reactive progression UI updates');
+  assert.ok(
+    topologyContent.includes('experience ?? EXPERIENCE_HISTORY'),
+    'An explicit empty experience array must not activate bundled fallback employment'
+  );
 });
 
-test('12. setup wizard PDF browser flow retains successful state, saves it, and clears stale state on parse failure', async () => {
+test('12. setup wizard renders and continues after a successful zero-experience LinkedIn import', async () => {
   const harness = createWizardBrowserHarness();
   await new Promise(resolve => setImmediate(resolve));
   const profile = {
     githubTarget: 'https://github.com/inferred-owner',
     operator: { name: 'PDF Owner', role: 'Engineer', location: 'Remote' },
-    experience: [{ role: 'Engineer' }]
+    experience: [],
+    source: { warnings: [NO_EXPERIENCE_WARNING] }
   };
   harness.api.handleFileSelected({ target: { files: [{ name: 'profile.pdf', size: 4096 }] } });
   harness.setUploadResponse({ ok: true, body: { success: true, profile } });
@@ -547,6 +557,8 @@ test('12. setup wizard PDF browser flow retains successful state, saves it, and 
 
   assert.deepEqual(harness.api.getParsedProfile(), profile);
   assert.equal(harness.element('parsedProfileReview').style.display, 'block');
+  assert.equal(harness.element('reviewExpCount').innerText, '0 roles');
+  assert.equal(harness.element('reviewWarnings').innerText, NO_EXPERIENCE_WARNING);
   assert.equal(harness.element('githubTargetInput').value, profile.githubTarget);
   assert.equal(harness.element('continueToGithubBtn').disabled, false);
   assert.equal(harness.element('statusBanner').className, 'status-banner success');

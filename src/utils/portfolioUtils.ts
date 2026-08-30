@@ -38,8 +38,9 @@ export function resolveGitHubSnapshotForTarget(
 
 /**
  * Resolves professional experience with clean source precedence and provenance tracking.
- * Precedence: Configured professional employment history (CURATED) always wins when present.
- * GitHub-derived snapshot experience (DERIVED) is only used as a fallback when configured is absent.
+ * Precedence: Configured professional employment history (CURATED) always wins when provided,
+ * including an explicit empty array for an owner with no professional roles.
+ * GitHub-derived snapshot experience (DERIVED) is only used when configured is undefined.
  */
 export function resolveExperience(
   configured?: ExperienceNode[],
@@ -50,7 +51,7 @@ export function resolveExperience(
     provenance: exp.provenance || ('CURATED' as EvidenceProvenance)
   }));
 
-  if (configuredList.length > 0) {
+  if (configured !== undefined) {
     return configuredList;
   }
 

@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildGeneratedOwnerProfile,
+  NO_EXPERIENCE_WARNING,
   parseLinkedInProfileText,
   toExperienceNodes,
   parseDateRange,
   partitionSections
 } from '../scripts/linkedinProfileParser';
+import {
+  zeroExperienceLinkedInMainLines,
+  zeroExperienceLinkedInSidebarLines
+} from './fixtures/linkedinProfileZeroExperience';
 
 const standardMainLines = [
   'Example Engineer',
@@ -199,7 +204,7 @@ test('9. throws honest diagnostic error when identity is missing', () => {
   );
 });
 
-test('10. throws honest diagnostic error when Experience section is absent', () => {
+test('10. rejects a document without Experience when it lacks recognizable LinkedIn export structure', () => {
   const linesWithoutExperience = [
     'Evan Wright',
     'Technical Writer',
@@ -212,7 +217,7 @@ test('10. throws honest diagnostic error when Experience section is absent', () 
   assert.throws(
     () => parseLinkedInProfileText(linesWithoutExperience, []),
     (err: Error) => {
-      assert.ok(err.message.includes('LinkedIn Experience section was not detected'));
+      assert.ok(err.message.includes('does not contain enough recognizable LinkedIn profile structure'));
       return true;
     }
   );
@@ -236,33 +241,73 @@ test('11. throws honest diagnostic error when Experience heading exists but 0 ro
   );
 });
 
-test('12. handles structural shape of education-only profile without crashing and reports honest missing experience error', () => {
-  const eduOnlyMain = [
-    'Test Candidate',
-    'Full-stack Web Development Student',
-    'Lorton, Virginia, United States',
-    'Education',
+test('12. parses a recognizable LinkedIn profile with no Experience section', () => {
+  const parsed = parseLinkedInProfileText(
+    zeroExperienceLinkedInMainLines,
+    zeroExperienceLinkedInSidebarLines
+  );
+
+  assert.equal(parsed.name, 'Jordan Candidate');
+  assert.equal(parsed.headline, 'Full-stack Web Development Student');
+  assert.equal(parsed.location, 'Lorton, Virginia, United States');
+  assert.equal(parsed.linkedin, 'https://www.linkedin.com/in/jordan-candidate');
+  assert.deepEqual(parsed.experience, []);
+  assert.deepEqual(parsed.education, [
     'The George Washington University',
     'Full-stack Web Development',
     'University of Portsmouth',
     'Bachelor of Science in Computing'
+  ]);
+  assert.deepEqual(parsed.topSkills, ['Software Projects', 'IT Projects']);
+  assert.deepEqual(parsed.certifications, ['Certificate in Programming']);
+  assert.ok(parsed.warnings.includes(NO_EXPERIENCE_WARNING));
+});
+
+test('13. builds a generated owner profile without inventing employment for zero-experience imports', () => {
+  const parsed = parseLinkedInProfileText(
+    zeroExperienceLinkedInMainLines,
+    zeroExperienceLinkedInSidebarLines
+  );
+  const generated = buildGeneratedOwnerProfile(parsed, 'https://github.com/jordan-candidate', '2026-08-30T00:00:00.000Z');
+
+  assert.deepEqual(generated.experience, []);
+  assert.deepEqual(generated.education, [
+    { raw: 'The George Washington University' },
+    { raw: 'Full-stack Web Development' },
+    { raw: 'University of Portsmouth' },
+    { raw: 'Bachelor of Science in Computing' }
+  ]);
+  assert.ok(generated.source.warnings.includes(NO_EXPERIENCE_WARNING));
+});
+
+test('14. unrelated document text still fails LinkedIn profile recognition', () => {
+  const unrelatedMain = [
+    'Quarterly Operations Report',
+    'Prepared for Example Holdings',
+    'New York, New York',
+    'Summary',
+    'Revenue and operating metrics for the second quarter.'
   ];
-  const eduOnlySidebar = [
+  const unrelatedSidebar = [
     'Contact',
-    'candidate@example.com',
-    'www.linkedin.com/in/candidate',
-    'Top Skills',
-    'Software Projects',
-    'IT Projects',
-    'Certifications',
-    'Certificate in Programming'
+    'analyst@example.com',
+    'www.linkedin.com/in/example-analyst'
   ];
 
   assert.throws(
-    () => parseLinkedInProfileText(eduOnlyMain, eduOnlySidebar),
+    () => parseLinkedInProfileText(unrelatedMain, unrelatedSidebar),
     (err: Error) => {
-      assert.ok(err.message.includes('LinkedIn Experience section was not detected'));
+      assert.ok(err.message.includes('does not contain enough recognizable LinkedIn profile structure'));
       return true;
     }
   );
+});
+
+test('15. profiles with Experience retain the existing parse behavior and no zero-experience warning', () => {
+  const parsed = parseLinkedInProfileText(standardMainLines, standardSidebarLines);
+
+  assert.equal(parsed.experience.length, 3);
+  assert.equal(parsed.experience[0].organization, 'ExampleCo');
+  assert.equal(parsed.experience[0].role, 'Full Stack Engineer');
+  assert.ok(!parsed.warnings.includes(NO_EXPERIENCE_WARNING));
 });
