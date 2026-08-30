@@ -1,7 +1,7 @@
 import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 import type { GitHubSyncResult } from '../services/githubService';
-import { parseGitHubTarget, normalizeGitHubTarget } from './ownerScope';
+import { parseGitHubTarget, normalizeGitHubTarget, getGithubOwnerIdentity } from './ownerScope';
 
 /**
  * GitHub target parsing/normalization now lives in the centralized
@@ -125,23 +125,54 @@ export function getLinkedProjectIdsForExperience(exp: ExperienceNode): Set<strin
 }
 
 /**
+ * Minimal project identity shape accepted by `isProjectLinkedToExperience`.
+ * `links.github` is optional and, when present, is used to derive the
+ * project's ACTUAL GitHub owner for owner-scoped canonical alias resolution.
+ */
+export interface ProjectLinkIdentity {
+  id: string;
+  title: string;
+  links?: { github?: string };
+}
+
+/**
  * Determine if a ProjectData node is linked to an ExperienceNode using generic evidence links and alias resolution.
+ *
+ * Owner scope: canonical repository-alias matching (e.g. "towerdesk-backend-clean"
+ * resolving to "towerdesk-backend") is owner-curated data. It is only applied
+ * when the PROJECT's own actual GitHub owner (derived from `project.links.github`
+ * via `getGithubOwnerIdentity`) matches the declared source owner of that
+ * alias table. Exact id/title matches always work regardless of owner. When
+ * the project's owner cannot be determined (no `links.github`), canonical
+ * aliasing is disabled and only exact matching applies -- this fails closed
+ * rather than assuming the current curated source owner.
  */
 export function isProjectLinkedToExperience(
-  project: { id: string; title: string },
+  project: ProjectLinkIdentity,
   exp: ExperienceNode
 ): boolean {
   const linkedIds = getLinkedProjectIdsForExperience(exp);
   const projId = project.id.toLowerCase().trim();
   const projTitle = project.title.toLowerCase().trim();
-  const canonicalTitle = getCanonicalRepositoryKey(projTitle);
 
-  if (linkedIds.has(projId) || linkedIds.has(projTitle) || linkedIds.has(canonicalTitle)) {
+  if (linkedIds.has(projId) || linkedIds.has(projTitle)) {
+    return true;
+  }
+
+  const projectOwner = getGithubOwnerIdentity(project.links?.github);
+  if (!projectOwner) {
+    // Unknown project owner: fail closed. Exact matching above already ran;
+    // canonical/alias matching never activates without a known owner.
+    return false;
+  }
+
+  const canonicalTitle = getCanonicalRepositoryKey(projTitle, projectOwner);
+  if (linkedIds.has(canonicalTitle)) {
     return true;
   }
 
   for (const linkedId of linkedIds) {
-    if (getCanonicalRepositoryKey(linkedId) === canonicalTitle) {
+    if (getCanonicalRepositoryKey(linkedId, projectOwner) === canonicalTitle) {
       return true;
     }
   }
@@ -155,7 +186,15 @@ export function isProjectLinkedToExperience(
  * 1. Exact match on ProjectData.id (case-insensitive)
  * 2. Exact match on ProjectData.title / repository name (case-insensitive)
  * 3. Canonical cluster mapping via getCanonicalRepositoryKey (case-insensitive)
- * 
+ *
+ * Owner scope: canonical alias matching (step 3) is evaluated PER CANDIDATE
+ * project, using that candidate's own actual GitHub owner (derived from
+ * `project.links.github`). There is no global/current-owner assumption --
+ * a foreign project never gets canonical-aliased just because another
+ * project in the same array happens to belong to the curated source owner.
+ * A candidate whose owner cannot be determined is skipped for alias
+ * matching (fails closed); exact id/title matching is unaffected.
+ *
  * Returns ProjectData or null (no fuzzy guessing).
  */
 export function resolveProjectFromEvidenceKey(
@@ -177,11 +216,14 @@ export function resolveProjectFromEvidenceKey(
   const exactTitleMatch = projects.find(p => p.title.toLowerCase().trim() === target);
   if (exactTitleMatch) return exactTitleMatch;
 
-  // 3. Canonical repository alias resolution
-  const canonicalTarget = getCanonicalRepositoryKey(target);
+  // 3. Canonical repository alias resolution, per candidate's own owner.
   const canonicalMatch = projects.find(p => {
-    const pTitleCanonical = getCanonicalRepositoryKey(p.title.toLowerCase().trim());
-    const pIdCanonical = getCanonicalRepositoryKey(p.id.toLowerCase().trim());
+    const projectOwner = getGithubOwnerIdentity(p.links?.github);
+    if (!projectOwner) return false;
+
+    const canonicalTarget = getCanonicalRepositoryKey(target, projectOwner);
+    const pTitleCanonical = getCanonicalRepositoryKey(p.title.toLowerCase().trim(), projectOwner);
+    const pIdCanonical = getCanonicalRepositoryKey(p.id.toLowerCase().trim(), projectOwner);
     return pTitleCanonical === canonicalTarget || pIdCanonical === canonicalTarget;
   });
   if (canonicalMatch) return canonicalMatch;

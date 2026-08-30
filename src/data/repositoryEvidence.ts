@@ -14,13 +14,16 @@ import { isSameGithubOwner } from '../utils/ownerScope';
  * because one of their repositories happens to share a name with one of
  * these (e.g. "towerdesk-backend", "worthy-crm").
  *
- * `getRepositoryEvidence` / `getCanonicalRepositoryKey` therefore require an
- * `ownerGithubTarget` identifying the ACTUAL owner of the repository being
- * looked up (e.g. the live `repo.owner.login` from the GitHub API). When
- * omitted, callers are assumed to be asking about this evidence source's own
- * declared owner -- this default only ever matches the current repository
- * owner, and every real analyzer/sync call site always passes the actual
- * observed repository owner explicitly.
+ * `getRepositoryEvidence` / `getCanonicalRepositoryKey` therefore REQUIRE an
+ * explicit `ownerGithubTarget` identifying the ACTUAL owner of the repository
+ * being looked up (e.g. the live `repo.owner.login` from the GitHub API, or
+ * the owner derived from a project's own `links.github`). There is
+ * intentionally NO default that silently substitutes this evidence source's
+ * own owner -- a caller that forgets to pass an owner gets a TypeScript
+ * compile error, not an accidental match. Current-owner callers (tests,
+ * fixtures) must explicitly pass `REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET`
+ * (or `PORTFOLIO_CONFIG.githubTarget`) themselves. An unknown/unparseable
+ * owner always fails closed (see `isSameGithubOwner`).
  */
 export const REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET = 'https://github.com/SalAkBuK';
 
@@ -186,7 +189,7 @@ export const REPOSITORY_CANONICAL_CLUSTERS: Record<string, string> = {
  */
 export function getCanonicalRepositoryKey(
   repositoryName: string,
-  ownerGithubTarget: string = REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET
+  ownerGithubTarget: string
 ): string {
   const normalized = (repositoryName || '').toLowerCase().trim();
   if (!isSameGithubOwner(ownerGithubTarget, REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET)) {
@@ -207,7 +210,7 @@ export function getCanonicalRepositoryKey(
  */
 export function getRepositoryEvidence(
   repositoryName: string,
-  ownerGithubTarget: string = REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET
+  ownerGithubTarget: string
 ): Evidence | null {
   if (!isSameGithubOwner(ownerGithubTarget, REPOSITORY_EVIDENCE_OWNER_GITHUB_TARGET)) {
     return null;

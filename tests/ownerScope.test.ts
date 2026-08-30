@@ -10,11 +10,12 @@ import { getRepositoryEvidence, getCanonicalRepositoryKey, REPOSITORY_EVIDENCE_O
 import { getOwnerExperienceEvidenceCollection, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET } from '../src/data/ownerExperienceEvidence';
 import { getDefaultAdditionalOwnerExperience, ADDITIONAL_OWNER_EXPERIENCE_OWNER_GITHUB_TARGET } from '../src/data/ownerAdditionalExperience';
 import { resolveProfessionalExperience } from '../src/services/experienceResolver';
-import { resolveGitHubSnapshotForTarget } from '../src/utils/portfolioUtils';
+import { resolveGitHubSnapshotForTarget, isProjectLinkedToExperience, resolveProjectFromEvidenceKey } from '../src/utils/portfolioUtils';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from '../src/data/githubSnapshot.generated';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig';
 import { analyzeRepository } from '../src/services/repositoryAnalyzer/index';
 import { canonicalizeRepositories, generateGitHubProfileDetails, GitHubRepoRaw } from '../src/services/githubService';
+import { ExperienceNode, ProjectData } from '../src/types';
 
 // ---------------------------------------------------------------------------
 // PART 1: Centralized owner-scope utility (src/utils/ownerScope.ts)
@@ -232,4 +233,127 @@ test('PR28 REGRESSION: Current owner (SalAkBuK) still resolves all owner-scoped 
   const configuredSnapshot = resolveGitHubSnapshotForTarget(PORTFOLIO_CONFIG.githubTarget, GITHUB_SNAPSHOT_METADATA, GITHUB_SNAPSHOT);
   assert.ok(configuredSnapshot, 'Current owner GitHub snapshot must still resolve');
   assert.equal(PORTFOLIO_CONFIG.operator.name, 'Salih Bukhari');
+});
+
+// ---------------------------------------------------------------------------
+// PART 4: PR28 CORRECTION -- portfolioUtils canonical-alias owner scope
+//
+// The primary GitHub-analyzer/evidence pipeline was owner-scoped in the
+// original PR28 pass, but two generic runtime helpers in
+// src/utils/portfolioUtils.ts (isProjectLinkedToExperience,
+// resolveProjectFromEvidenceKey) still resolved canonical repository
+// aliases without deriving the actual owner of the project involved. This
+// section proves that gap is closed: alias resolution is now evaluated
+// against each PROJECT's own GitHub owner (from `project.links.github`),
+// never a global/current-owner assumption.
+// ---------------------------------------------------------------------------
+
+function minimalProject(overrides: Partial<ProjectData> & { id: string; title: string }): ProjectData {
+  return {
+    code: 'GH-99',
+    tagline: 'Synthetic fixture project',
+    category: 'backend',
+    status: 'ACTIVE',
+    year: '2026',
+    dimensions: { width: 100, height: 70, levels: 2 },
+    gridPosition: { x: 0, y: 0 },
+    accentColor: '#000000',
+    summary: 'Synthetic fixture project',
+    problem: '',
+    solution: '',
+    architectureNotes: '',
+    techStack: [],
+    infrastructureDeps: [],
+    subsystems: [],
+    metrics: [],
+    keyDecisions: [],
+    resilienceTesting: '',
+    links: {},
+    ...overrides
+  };
+}
+
+const towerdeskBackendLinkedExperience: ExperienceNode = {
+  id: 'exp-collision-check',
+  code: 'EXP-01',
+  yearRange: '2024 - Present',
+  role: 'Engineer',
+  organization: 'Some Employer',
+  location: 'Remote',
+  systemDomain: 'Systems',
+  keyOutputs: [],
+  systemsArchitected: [],
+  technologies: [],
+  gridPosition: { x: 0, y: 0 },
+  evidenceLinks: [
+    { label: 'Backend Architecture', type: 'repository', projectId: 'towerdesk-backend' }
+  ]
+};
+
+test('PR28 CORRECTION: isProjectLinkedToExperience does NOT apply SalAkBuK cluster aliasing to a foreign owner\'s towerdesk-backend-clean', () => {
+  const foreignProject = minimalProject({
+    id: 'foreign-1',
+    title: 'towerdesk-backend-clean',
+    links: { github: 'https://github.com/example-owner/towerdesk-backend-clean' }
+  });
+
+  assert.equal(
+    isProjectLinkedToExperience(foreignProject, towerdeskBackendLinkedExperience),
+    false,
+    'Foreign owner\'s towerdesk-backend-clean must NOT alias-match towerdesk-backend'
+  );
+});
+
+test('PR28 CORRECTION: resolveProjectFromEvidenceKey returns null for a foreign owner\'s towerdesk-backend-clean against the "towerdesk-backend" evidence key', () => {
+  const foreignProject = minimalProject({
+    id: 'foreign-1',
+    title: 'towerdesk-backend-clean',
+    links: { github: 'https://github.com/example-owner/towerdesk-backend-clean' }
+  });
+
+  const resolved = resolveProjectFromEvidenceKey([foreignProject], 'towerdesk-backend');
+  assert.equal(resolved, null, 'Foreign project must not resolve via SalAkBuK canonical clustering');
+});
+
+test('PR28 CORRECTION REGRESSION: current-owner towerdesk-backend-clean still alias-matches towerdesk-backend', () => {
+  const ownProject = minimalProject({
+    id: 'own-1',
+    title: 'towerdesk-backend-clean',
+    links: { github: 'https://github.com/SalAkBuK/towerdesk-backend-clean' }
+  });
+
+  assert.equal(
+    isProjectLinkedToExperience(ownProject, towerdeskBackendLinkedExperience),
+    true,
+    'Current-owner canonical clustering must remain intact'
+  );
+
+  const resolved = resolveProjectFromEvidenceKey([ownProject], 'towerdesk-backend');
+  assert.ok(resolved, 'Current-owner project must resolve via canonical clustering');
+  assert.equal(resolved!.id, 'own-1');
+});
+
+test('PR28 CORRECTION: unknown/missing project GitHub owner disables aliasing but exact id/title matching still works', () => {
+  const unknownOwnerProject = minimalProject({ id: 'unknown-1', title: 'towerdesk-backend-clean' });
+
+  // No links.github at all -- alias resolution must not fire.
+  assert.equal(
+    isProjectLinkedToExperience(unknownOwnerProject, towerdeskBackendLinkedExperience),
+    false,
+    'Unknown-owner project must not alias-match towerdesk-backend'
+  );
+  assert.equal(
+    resolveProjectFromEvidenceKey([unknownOwnerProject], 'towerdesk-backend'),
+    null,
+    'Unknown-owner project must not resolve via aliasing'
+  );
+
+  // Exact id/title matching must still work regardless of owner.
+  const exactExperience: ExperienceNode = {
+    ...towerdeskBackendLinkedExperience,
+    id: 'exp-exact-check',
+    evidenceLinks: [{ label: 'Exact', type: 'repository', projectId: 'towerdesk-backend-clean' }]
+  };
+  assert.equal(isProjectLinkedToExperience(unknownOwnerProject, exactExperience), true, 'Exact title match must not require a known owner');
+  assert.equal(resolveProjectFromEvidenceKey([unknownOwnerProject], 'towerdesk-backend-clean')?.id, 'unknown-1', 'Exact title match must resolve without a known owner');
 });
