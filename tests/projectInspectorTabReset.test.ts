@@ -502,3 +502,31 @@ test('37. Compact drawer header title and button use whitespace-nowrap preventin
   assert.ok(railSource.includes('Owner Technical Index'), 'Title must be Owner Technical Index');
   assert.ok(railSource.includes('text-[12px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
 });
+
+// ---------------------------------------------------------------------------
+// 38. Inspector Content Area Scroll Reset Contract
+// ---------------------------------------------------------------------------
+test('38. RightInspectorPanel binds content scroll ref and resets scrollTop to 0 on context transition', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('const contentScrollRef = React.useRef<HTMLDivElement>(null);'), 'contentScrollRef must be defined');
+  assert.ok(inspectorSource.includes('ref={contentScrollRef}'), 'contentScrollRef must be attached to the content scroller element');
+
+  const effectComment = '// Deterministic immediate scroll reset to top whenever inspector content context changes';
+  const effectCommentIndex = inspectorSource.indexOf(effectComment);
+  assert.ok(effectCommentIndex !== -1, 'Scroll reset effect comment must exist');
+
+  const effectBlock = inspectorSource.substring(
+    effectCommentIndex,
+    inspectorSource.indexOf('// Shared generic progression grouping', effectCommentIndex)
+  );
+
+  assert.ok(effectBlock.includes('React.useLayoutEffect('), 'Reset effect must use useLayoutEffect');
+  assert.ok(effectBlock.includes('contentScrollRef.current.scrollTop = 0;'), 'Effect must reset scrollTop to 0');
+  assert.ok(effectBlock.includes('contentScrollRef.current.scrollLeft = 0;'), 'Effect must reset scrollLeft to 0');
+  assert.ok(effectBlock.includes('activeView'), 'Effect dependencies must include activeView');
+  assert.ok(effectBlock.includes('selectedProject?.id'), 'Effect dependencies must include selectedProject?.id');
+  assert.ok(effectBlock.includes('selectedSkill?.id'), 'Effect dependencies must include selectedSkill?.id');
+  assert.ok(effectBlock.includes('selectedExperience?.id'), 'Effect dependencies must include selectedExperience?.id');
+  assert.ok(effectBlock.includes('selectedSubsystem?.id'), 'Effect dependencies must include selectedSubsystem?.id');
+  assert.ok(effectBlock.includes('activeTab'), 'Effect dependencies must include activeTab');
+});

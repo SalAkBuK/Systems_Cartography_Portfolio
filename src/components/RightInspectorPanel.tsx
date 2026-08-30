@@ -116,6 +116,8 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
     new Set(experience.map(e => (e.organization || '').trim().toLowerCase()))
   ).filter(Boolean).length;
 
+  const contentScrollRef = React.useRef<HTMLDivElement>(null);
+
   // Auto-expand mobile sheet on active selection
   React.useEffect(() => {
     if (selectedProject || selectedSkill || selectedExperience || selectedSubsystem) {
@@ -127,6 +129,21 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
   React.useEffect(() => {
     setActiveTab('overview');
   }, [selectedProject?.id]);
+
+  // Deterministic immediate scroll reset to top whenever inspector content context changes
+  React.useLayoutEffect(() => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTop = 0;
+      contentScrollRef.current.scrollLeft = 0;
+    }
+  }, [
+    activeView,
+    selectedProject?.id,
+    selectedSkill?.id,
+    selectedExperience?.id,
+    selectedSubsystem?.id,
+    activeTab
+  ]);
 
   // Shared generic progression grouping used by Professional Experience index/detail views
   const groupedExperience = React.useMemo(() => groupExperienceByProgression(experience), [experience]);
@@ -232,7 +249,10 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
       )}
 
       {/* Inspector Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 font-mono text-[13px] leading-relaxed">
+      <div
+        ref={contentScrollRef}
+        className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 font-mono text-[13px] leading-relaxed"
+      >
         {/* CASE 1: SELECTED PROJECT */}
         {selectedProject && (
           <div className="flex flex-col gap-4">
