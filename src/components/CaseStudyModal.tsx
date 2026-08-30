@@ -46,7 +46,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             <span className="font-bold text-[12px] tracking-wider uppercase">
               ARCHITECTURE SPEC // {project.code} : {project.title}
             </span>
-            <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+            <span className="text-[10px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
               {project.status}
             </span>
           </div>
@@ -69,10 +69,10 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
               </div>
               <ProvenanceBadge provenance={project.provenance?.problem || 'VERIFIED'} />
             </div>
-            <p className="text-[11px] text-[#22211A]">
+            <p className="text-[13px] text-[#22211A]">
               {project.summary}
             </p>
-            <div className="flex flex-wrap items-center gap-3 text-[9px] text-[#5C5946] border-t border-precision pt-2 mt-1">
+            <div className="flex flex-wrap items-center gap-3 text-[10px] text-[#5C5946] border-t border-precision pt-2 mt-1">
               <span>ACTIVE YEAR: {project.year}</span>
               <span>·</span>
               <span>CLASSIFICATION: {project.category.toUpperCase()}</span>
@@ -85,26 +85,26 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-3.5 border border-precision bg-[#DCD6B2]/40 flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-bold text-[#7A3E2E] tracking-wider uppercase flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-[#7A3E2E] tracking-wider uppercase flex items-center gap-1.5">
                   <ShieldAlert size={12} />
                   <span>01 // THE SYSTEM PROBLEM</span>
                 </span>
                 <ProvenanceBadge provenance={project.provenance?.problem} />
               </div>
-              <p className="text-[10.5px] text-[#15150F]">
+              <p className="text-[12.5px] text-[#15150F]">
                 {project.problem}
               </p>
             </div>
 
             <div className="p-3.5 border border-precision bg-[#DCD6B2]/40 flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-bold text-[#2E6B3A] tracking-wider uppercase flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-[#2E6B3A] tracking-wider uppercase flex items-center gap-1.5">
                   <CheckCircle2 size={12} />
                   <span>02 // ARCHITECTURAL SOLUTION</span>
                 </span>
                 <ProvenanceBadge provenance={project.provenance?.solution} />
               </div>
-              <p className="text-[10.5px] text-[#15150F]">
+              <p className="text-[12.5px] text-[#15150F]">
                 {project.solution}
               </p>
             </div>
@@ -113,7 +113,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           {/* Subsystems Decomposition Matrix */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+              <div className="text-[11px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
                 <Layers size={13} />
                 <span>03 // SUB-SERVICE ARCHITECTURE &amp; DATA PIPELINES</span>
               </div>
@@ -123,30 +123,30 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
               {project.subsystems.map((sub, idx) => (
                 <div key={sub.id} className="p-3 bg-[#E2DCB9] border border-precision flex flex-col gap-1.5">
                   <div className="flex items-center justify-between border-b border-precision pb-1">
-                    <span className="font-bold text-[10.5px] text-[#15150F]">
+                    <span className="font-bold text-[13px] text-[#15150F]">
                       MOD {idx + 1} // {sub.name}
                     </span>
                     <div className="flex items-center gap-1">
-                      <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">
+                      <span className="text-[10px] bg-[#15150F] text-[#D4CDA4] px-1">
                         {sub.category}
                       </span>
                       {sub.provenance && <ProvenanceBadge provenance={sub.provenance} />}
                     </div>
                   </div>
-                  <div className="text-[9.5px] font-medium text-[#4A4736]">
+                  <div className="text-[11px] font-medium text-[#4A4736]">
                     ROLE: {sub.role}
                   </div>
-                  <p className="text-[9px] text-[#5C5946] leading-snug">
+                  <p className="text-[12.5px] text-[#5C5946] leading-snug">
                     {sub.description}
                   </p>
                   {sub.protocol && (
-                    <div className="text-[8px] font-bold text-[#15150F]">
+                    <div className="text-[10px] font-bold text-[#15150F]">
                       PROTOCOL: {sub.protocol}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-1 pt-1 mt-auto">
                     {sub.tech.map(t => (
-                      <span key={t} className="text-[8px] px-1 bg-[#D4CDA4] border border-precision/40">
+                      <span key={t} className="text-[10px] px-1 bg-[#D4CDA4] border border-precision/40">
                         {t}
                       </span>
                     ))}
@@ -154,7 +154,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
                 </div>
               ))}
               {project.subsystems.length === 0 && (
-                <div className="sm:col-span-2 p-3 bg-[#E2DCB9] border border-precision text-[9.5px] text-[#5C5946]">
+                <div className="sm:col-span-2 p-3 bg-[#E2DCB9] border border-precision text-[12.5px] text-[#5C5946]">
                   No subsystem boundary is documented by the linked repository evidence.
                 </div>
               )}
@@ -164,7 +164,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           {/* Key Architectural Trade-Offs & Decisions */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+              <div className="text-[11px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
                 <FileCode size={13} />
                 <span>04 // ARCHITECTURAL DECISIONS &amp; TRADEOFF MATRIX</span>
               </div>
@@ -174,23 +174,23 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
               {project.keyDecisions.map((dec, i) => (
                 <div key={i} className="p-3 border border-precision bg-[#DCD6B2]/70 flex flex-col gap-1">
                   <div className="flex items-center justify-between">
-                    <div className="font-bold text-[10.5px] text-[#15150F]">
+                    <div className="font-bold text-[13px] text-[#15150F]">
                       DECISION {i + 1}: {dec.decision}
                     </div>
                     {dec.provenance && <ProvenanceBadge provenance={dec.provenance} />}
                   </div>
-                  <div className="text-[9.5px] text-[#3D3A2C]">
+                  <div className="text-[12.5px] text-[#3D3A2C]">
                     <span className="font-bold text-[#5C5946]">RATIONALE: </span>
                     {dec.rationale}
                   </div>
-                  <div className="text-[9px] text-[#7A3E2E] bg-[#EFEAD0] p-1.5 border border-precision/30 mt-0.5">
+                  <div className="text-[12.5px] text-[#7A3E2E] bg-[#EFEAD0] p-1.5 border border-precision/30 mt-0.5">
                     <span className="font-bold">CONSCIOUS TRADEOFF: </span>
                     {dec.tradeoff}
                   </div>
                 </div>
               ))}
               {project.keyDecisions.length === 0 && (
-                <div className="p-3 border border-precision bg-[#DCD6B2]/70 text-[9.5px] text-[#5C5946]">
+                <div className="p-3 border border-precision bg-[#DCD6B2]/70 text-[12.5px] text-[#5C5946]">
                   No owner-confirmed architectural decision is available for this project yet.
                 </div>
               )}
@@ -201,7 +201,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
                   <Activity size={13} />
                   <span>05 // EVIDENCE &amp; REPOSITORY METRICS</span>
                 </div>
@@ -210,9 +210,9 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
               <div className="grid grid-cols-2 gap-1.5">
                 {project.metrics.map((m, i) => (
                   <div key={i} className="p-2.5 border border-precision bg-[#E2DCB9] flex flex-col">
-                    <span className="text-[8px] uppercase font-bold text-[#5C5946]">{m.label}</span>
+                    <span className="text-[10px] uppercase font-bold text-[#5C5946]">{m.label}</span>
                     <span className="text-[16px] font-bold text-[#15150F]">{m.value}</span>
-                    {m.note && <span className="text-[8px] text-[#6B664F]">{m.note}</span>}
+                    {m.note && <span className="text-[10px] text-[#6B664F]">{m.note}</span>}
                   </div>
                 ))}
               </div>
@@ -220,33 +220,33 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-bold text-[#5C5946] uppercase tracking-wider flex items-center gap-1.5">
                   <ShieldAlert size={13} />
                   <span>06 // VALIDATION &amp; TEST EVIDENCE</span>
                 </div>
                 <ProvenanceBadge provenance={project.provenance?.resilienceTesting} />
               </div>
-              <div className="p-3 border border-precision bg-[#DCD6B2]/50 text-[10px] leading-relaxed text-[#22211A] flex flex-col gap-2">
+              <div className="p-3 border border-precision bg-[#DCD6B2]/50 text-[12.5px] leading-relaxed text-[#22211A] flex flex-col gap-2">
                 <div>{project.resilienceTesting}</div>
                 {project.validationEvidence && (
                   <div className="flex flex-wrap gap-1 pt-1 border-t border-[#15150F]/20">
                     {project.validationEvidence.testFrameworks.map(tf => (
-                      <span key={tf} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+                      <span key={tf} className="text-[10px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
                         TEST: {tf}
                       </span>
                     ))}
                     {project.validationEvidence.e2eHarnesses.map(e2e => (
-                      <span key={e2e} className="text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#8EA9DA] font-bold">
+                      <span key={e2e} className="text-[10px] px-1.5 py-0.5 bg-[#15150F] text-[#8EA9DA] font-bold">
                         E2E: {e2e}
                       </span>
                     ))}
                     {project.validationEvidence.ciWorkflows.map(ci => (
-                      <span key={ci} className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                      <span key={ci} className="text-[10px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
                         CI: {ci}
                       </span>
                     ))}
                     {project.validationEvidence.hasDocker && (
-                      <span key="docker" className="text-[7.5px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
+                      <span key="docker" className="text-[10px] px-1.5 py-0.5 bg-[#DCD6B2] text-[#15150F] border border-[#15150F] font-bold">
                         CONTAINER: Docker
                       </span>
                     )}
@@ -259,7 +259,7 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
 
         {/* Modal Footer Actions */}
         <div className="p-3 bg-[#CBC59B] border-t border-precision flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="text-[9px] text-[#5C5946]">
+          <div className="text-[10px] text-[#5C5946]">
             SPEC DOCUMENT // {operator.name.toUpperCase()} ARCHITECTURAL ARCHIVE
           </div>
           <div className="flex items-center gap-2">
