@@ -1710,9 +1710,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           {[-600, -400, -200, 200, 400, 600].map(val => (
             <React.Fragment key={val}>
               <line x1={val} y1="-5" x2={val} y2="5" stroke="#15150F" strokeWidth="1" />
-              <text x={val + 4} y="-8" fontSize="7" fill="#5C5946" fontFamily="monospace">X:{val}</text>
+              <text x={val + 4} y="-8" fontSize="8" fill="#5C5946" fontFamily="monospace">X:{val}</text>
               <line x1="-5" y1={val} x2="5" y2={val} stroke="#15150F" strokeWidth="1" />
-              <text x="8" y={val + 3} fontSize="7" fill="#5C5946" fontFamily="monospace">Y:{val}</text>
+              <text x="8" y={val + 3} fontSize="8" fill="#5C5946" fontFamily="monospace">Y:{val}</text>
             </React.Fragment>
           ))}
         </g>
@@ -1740,7 +1740,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 <text
                   x={topLeftIso.x + 8}
                   y={topLeftIso.y - 10}
-                  fontSize="8"
+                  fontSize="9"
                   fontWeight="bold"
                   fill="#5C5946"
                   fontFamily="monospace"
@@ -1967,7 +1967,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   x={posIso.x}
                   y={posIso.y + 24}
                   textAnchor="middle"
-                  fontSize="8.5"
+                  fontSize="10"
                   fontWeight="bold"
                   fill={isSelected ? '#15150F' : isSkillConnected ? '#15150F' : '#3D3A2C'}
                   fontFamily="monospace"
@@ -1978,7 +1978,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   x={posIso.x}
                   y={posIso.y + 33}
                   textAnchor="middle"
-                  fontSize="7"
+                  fontSize="8.5"
                   fontWeight={isSkillConnected ? 'bold' : 'normal'}
                   fill={isSkillConnected ? '#15150F' : '#6B664F'}
                   fontFamily="monospace"
@@ -2058,7 +2058,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         x="0"
                         y="3"
                         textAnchor="middle"
-                        fontSize="7.5"
+                        fontSize="8.5"
                         fontWeight="bold"
                         fill={isAdjusted ? '#FF7B72' : '#C3E54E'}
                         fontFamily="monospace"
@@ -2114,7 +2114,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         x="0"
                         y="3.5"
                         textAnchor="middle"
-                        fontSize="7"
+                        fontSize="8"
                         fontWeight="bold"
                         fill={isAdjusted ? '#FF7B72' : '#C3E54E'}
                         fontFamily="monospace"
@@ -2221,7 +2221,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   <text
                     x={pCorner.x + 3}
                     y={pCorner.y + 3}
-                    fontSize="6"
+                    fontSize="7"
                     fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
                     fontFamily="monospace"
                   >
@@ -2347,7 +2347,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     x="0"
                     y="3.5"
                     textAnchor="middle"
-                    fontSize="7"
+                    fontSize="8"
                     fontWeight="bold"
                     fill={isSelected || isHovered || isThisDragging ? '#15150F' : '#D4CDA4'}
                     fontFamily="monospace"
@@ -2402,7 +2402,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? -6 : -2}
-                        fontSize="7"
+                        fontSize="8.5"
                         fontWeight="bold"
                         fill="#8C8870"
                         fontFamily="monospace"
@@ -2414,7 +2414,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? 3 : 7}
-                        fontSize="8"
+                        fontSize="9"
                         fontWeight="bold"
                         fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
                         fontFamily="monospace"
@@ -2427,7 +2427,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         <text
                           x="5"
                           y="12"
-                          fontSize="8"
+                          fontSize="9"
                           fontWeight="bold"
                           fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
                           fontFamily="monospace"
@@ -2440,7 +2440,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? 19 : 14}
-                        fontSize="6.5"
+                        fontSize="8"
                         fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
                         fontFamily="monospace"
                       >
