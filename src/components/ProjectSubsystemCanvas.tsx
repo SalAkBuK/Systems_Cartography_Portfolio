@@ -53,17 +53,17 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onReturnToLandscape}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] text-[10px] font-bold tracking-wider hover:bg-[#2B2A20] transition-colors border border-precision"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] text-[11px] font-bold tracking-wider hover:bg-[#2B2A20] transition-colors border border-precision"
             title="Return to Global Systems Landscape (Esc)"
           >
             <ArrowLeft size={12} className="text-[#C3E54E]" />
             <span>← RETURN TO LANDSCAPE</span>
           </button>
 
-          <div className="flex items-center gap-1.5 text-[10px] font-mono">
+          <div className="flex items-center gap-1.5 text-[11px] font-mono">
             <span className="text-[#5C5946]">TOPOLOGY &gt;</span>
             <span className="font-bold text-[#15150F]">{project.code} // {project.title}</span>
-            <span className="text-[8.5px] px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4]">
+            <span className="text-[10px] px-1.5 py-0.5 bg-[#15150F] text-[#D4CDA4]">
               DECOMPOSED SCHEMATIC
             </span>
           </div>
@@ -75,7 +75,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
               href={project.links.demo}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 px-2.5 py-1 text-[9.5px] font-bold uppercase bg-[#C3E54E] text-[#15150F] border border-precision hover:bg-[#B2D63B] transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold uppercase bg-[#C3E54E] text-[#15150F] border border-precision hover:bg-[#B2D63B] transition-colors"
             >
               <ExternalLink size={11} />
               <span>LIVE SYSTEM</span>
@@ -83,7 +83,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
           )}
           <button
             onClick={onOpenCaseStudy}
-            className="flex items-center gap-1 px-2.5 py-1 text-[9.5px] font-bold uppercase bg-[#E2DCB9] border border-precision hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold uppercase bg-[#E2DCB9] border border-precision hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
           >
             <FileText size={11} />
             <span>FULL CASE STUDY SPEC</span>
@@ -99,11 +99,11 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#15150F] pb-2.5 mb-5">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-[#C3E54E] border border-[#15150F] inline-block"></span>
-              <span className="text-[10px] font-bold text-[#15150F] tracking-widest uppercase">
+              <span className="text-[11px] font-bold text-[#15150F] tracking-widest uppercase">
                 SUBSYSTEM TOPOLOGY // {project.code} · {project.subsystems.length} DOCUMENTED BOUNDARIES
               </span>
             </div>
-            <div className="text-[9px] font-mono text-[#5C5946] flex items-center gap-3">
+            <div className="text-[10px] font-mono text-[#5C5946] flex items-center gap-3">
               <span>EVIDENCE VIEW</span>
               <span className="text-[#15150F] font-bold bg-[#D4CDA4] px-1.5 py-0.5 border border-[#15150F]">
                 SOURCE: PUBLIC REPOSITORY
@@ -145,25 +145,25 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
                     <div className="flex items-center justify-between border-b border-[#3E3C2F] pb-2 mb-2">
                       <div className="flex items-center gap-2">
                         <Icon size={14} className={isSelected ? 'text-[#C3E54E]' : 'text-[#C3E54E]'} />
-                        <span className="text-[11px] font-bold tracking-tight text-white">{sub.name}</span>
+                        <span className="text-[13px] font-bold tracking-tight text-white">{sub.name}</span>
                       </div>
-                      <span className="text-[8px] font-bold px-1 py-0.5 border border-[#C3E54E]/40 text-[#C3E54E] bg-[#15150F]">
+                      <span className="text-[10px] font-bold px-1 py-0.5 border border-[#C3E54E]/40 text-[#C3E54E] bg-[#15150F]">
                         MOD 0{idx + 1}
                       </span>
                     </div>
 
                     {/* Role & Protocol */}
-                    <div className="flex items-center justify-between text-[9px] font-bold text-[#C3E54E] mb-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#C3E54E] mb-2">
                       <span>{sub.role}</span>
                       {sub.protocol && (
-                        <span className="text-[7.5px] text-[#9E997F] px-1 bg-[#26251E]">
+                        <span className="text-[10px] text-[#9E997F] px-1 bg-[#26251E]">
                           {sub.protocol}
                         </span>
                       )}
                     </div>
 
                     {/* Description */}
-                    <p className="text-[9px] leading-relaxed text-[#C8C2A0] mb-3">
+                    <p className="text-[12.5px] leading-relaxed text-[#C8C2A0] mb-3">
                       {sub.description}
                     </p>
                   </div>
@@ -175,7 +175,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
                       {sub.tech.map(t => (
                         <span
                           key={t}
-                          className="text-[7.5px] px-1.5 py-0.5 border border-[#484535] bg-[#22211A] text-[#D4CDA4]"
+                          className="text-[10px] px-1.5 py-0.5 border border-[#484535] bg-[#22211A] text-[#D4CDA4]"
                         >
                           {t}
                         </span>
@@ -184,7 +184,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
 
                     {/* Live Metric Readout */}
                     {sub.metrics && sub.metrics.length > 0 && (
-                      <div className="flex justify-between items-center text-[8px] font-bold text-[#C3E54E] bg-[#0E0E0B] px-2 py-1 border border-[#2B2A20]">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-[#C3E54E] bg-[#0E0E0B] px-2 py-1 border border-[#2B2A20]">
                         <span className="text-[#9E997F]">{sub.metrics[0].label}:</span>
                         <span>{sub.metrics[0].value}</span>
                       </div>
@@ -201,7 +201,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
           </div>
 
           {/* Inter-subsystem Bus Conduit Animation Bar */}
-          <div className="mt-4 pt-3 border-t border-[#15150F] flex items-center justify-between text-[8px] font-mono text-[#5C5946]">
+          <div className="mt-4 pt-3 border-t border-[#15150F] flex items-center justify-between text-[10px] font-mono text-[#5C5946]">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-[#C3E54E] rounded-full animate-pulse"></span>
               <span className="font-bold text-[#15150F]">DOCUMENTED CONNECTIONS:</span>
@@ -215,7 +215,7 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
       </div>
 
       {/* Bottom Technical Bar */}
-      <div className="p-2 border-t border-precision bg-[#CBC59B] text-[9px] font-mono text-[#4A4736] flex justify-between items-center z-10">
+      <div className="p-2 border-t border-precision bg-[#CBC59B] text-[11px] font-mono text-[#4A4736] flex justify-between items-center z-10">
         <div>
           <span className="font-bold text-[#15150F]">ARCHITECTURAL FOCUS: </span>
           <span>{project.architectureNotes}</span>

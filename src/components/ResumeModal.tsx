@@ -120,21 +120,21 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[9.5px] font-bold"
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[11px] font-bold"
             >
               {copied ? <Check size={11} /> : <Copy size={11} />}
               <span>{copied ? 'COPIED MD' : 'COPY .MD'}</span>
             </button>
             <button
               onClick={handleDownload}
-              className="flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[9.5px] font-bold"
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[11px] font-bold"
             >
               <Download size={11} />
               <span>DOWNLOAD</span>
             </button>
             <button
               onClick={handlePrint}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[9.5px] font-bold"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] transition-colors border border-precision text-[11px] font-bold"
             >
               <Printer size={11} />
               <span>PRINT</span>
@@ -157,14 +157,14 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
               <span className="text-[18px] font-bold tracking-tight text-[#15150F]">
                 {activeOperator.name}
               </span>
-              <span className="text-[9.5px] px-2 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
+              <span className="text-[10px] px-2 py-0.5 bg-[#15150F] text-[#C3E54E] font-bold">
                 {activeOperator.role.toUpperCase()}
               </span>
             </div>
             <div className="text-[11px] font-medium text-[#3D3A2C]">
               {activeOperator.focus}
             </div>
-            <div className="flex flex-wrap gap-4 text-[9.5px] text-[#5C5946] mt-1 font-mono">
+            <div className="flex flex-wrap gap-4 text-[10px] text-[#5C5946] mt-1 font-mono">
               <span>LOC: {activeOperator.location}</span>
               <span>·</span>
               <span>EMAIL: {activeOperator.contact.email}</span>
@@ -175,27 +175,27 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
 
           {/* Executive Architectural Summary */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[9.5px] font-bold text-[#5C5946] uppercase tracking-widest">
+            <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
               01 // EXECUTIVE ARCHITECTURAL SUMMARY
             </span>
-            <p className="text-[10.5px] text-[#22211A] bg-[#E2DCB9] p-3 border border-precision leading-relaxed">
+            <p className="text-[13px] text-[#22211A] bg-[#E2DCB9] p-3 border border-precision leading-relaxed">
               {activeOperator.systemManifesto}
             </p>
           </div>
 
           {/* Technical Infrastructure Skills Matrix */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[9.5px] font-bold text-[#5C5946] uppercase tracking-widest">
+            <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
               02 // CORE INFRASTRUCTURE CAPABILITIES
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {activeSkills.map(skill => (
                 <div key={skill.id} className="p-2.5 border border-precision bg-[#E2DCB9]/60 flex flex-col gap-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-[10.5px]">{skill.name}</span>
-                    <span className="text-[8px] bg-[#15150F] text-[#D4CDA4] px-1">{skill.systemCount} SYSTEMS</span>
+                    <span className="font-bold text-[13px]">{skill.name}</span>
+                    <span className="text-[10px] bg-[#15150F] text-[#D4CDA4] px-1">{skill.systemCount} SYSTEMS</span>
                   </div>
-                  <div className="text-[9px] text-[#5C5946] leading-snug">
+                  <div className="text-[12.5px] text-[#5C5946] leading-snug">
                     {skill.primaryUseCases.slice(0, 2).join(' · ')}
                   </div>
                 </div>
@@ -205,7 +205,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
 
           {/* Professional Experience History */}
           <div className="flex flex-col gap-3">
-            <span className="text-[9.5px] font-bold text-[#5C5946] uppercase tracking-widest">
+            <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
               03 // SYSTEM BUILD HISTORY
             </span>
             <div className="flex flex-col gap-3.5">
@@ -217,24 +217,24 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
                       <span className="text-[#5C5946]"> @ </span>
                       <span className="font-bold text-[12px]">{exp.organization}</span>
                     </div>
-                    <span className="text-[9px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
+                    <span className="text-[10px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
                       {exp.yearRange}
                     </span>
                   </div>
-                  <div className="text-[9.5px] font-semibold text-[#4A4736]">
+                  <div className="text-[11px] font-semibold text-[#4A4736]">
                     DOMAIN: {exp.systemDomain}
                   </div>
 
                   {/* Multi-role progression */}
                   {exp.progressionRoles && exp.progressionRoles.length > 1 && (
-                    <div className="p-2 bg-[#DCD6B2]/70 border border-precision/40 flex flex-col gap-1 text-[9px]">
-                      <span className="text-[8px] font-bold opacity-60 uppercase">CAREER PROGRESSION:</span>
+                    <div className="p-2 bg-[#DCD6B2]/70 border border-precision/40 flex flex-col gap-1 text-[11px]">
+                      <span className="text-[11px] font-bold opacity-60 uppercase">CAREER PROGRESSION:</span>
                       {exp.progressionRoles.map((r, ri) => (
                         <div key={ri} className="flex items-center justify-between">
                           <span className="font-bold text-[#15150F]">{r.role}</span>
                           <div className="flex items-center gap-1">
                             {r.promotionNote && (
-                              <span className="text-[7.5px] px-1 bg-[#2E6B3A] text-[#D4CDA4] font-bold">
+                              <span className="text-[10px] px-1 bg-[#2E6B3A] text-[#D4CDA4] font-bold">
                                 ↑ PROMOTED
                               </span>
                             )}
@@ -247,21 +247,21 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
 
                   {/* Delivered Systems */}
                   {exp.systemsDelivered && exp.systemsDelivered.length > 0 && (
-                    <div className="flex flex-col gap-1 text-[9.5px]">
-                      <span className="text-[8px] font-bold opacity-60 uppercase">DELIVERED SYSTEMS:</span>
+                    <div className="flex flex-col gap-1 text-[11px]">
+                      <span className="text-[11px] font-bold opacity-60 uppercase">DELIVERED SYSTEMS:</span>
                       {exp.systemsDelivered.map((d, di) => (
                         <div key={di} className="flex flex-col gap-0.5 bg-[#D4CDA4]/50 p-1.5 border border-precision/20">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-[#15150F]">{d.name}</span>
-                            {d.status && <span className="text-[7.5px] font-bold opacity-75">{d.status}</span>}
+                            {d.status && <span className="text-[10px] font-bold opacity-75">{d.status}</span>}
                           </div>
-                          <span className="text-[8.5px] text-[#5C5946]">{d.tagline}</span>
+                          <span className="text-[12.5px] text-[#5C5946]">{d.tagline}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <ul className="flex flex-col gap-1 text-[10px] text-[#22211A]">
+                  <ul className="flex flex-col gap-1 text-[12.5px] text-[#22211A]">
                     {exp.keyOutputs.map((out, i) => (
                       <li key={i} className="flex items-start gap-1.5">
                         <span className="text-[#5C5946] font-bold">▪</span>
@@ -271,7 +271,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
                   </ul>
                   <div className="flex flex-wrap gap-1 pt-1 mt-1 border-t border-precision/40">
                     {exp.technologies.map(t => (
-                      <span key={t} className="text-[8px] px-1 bg-[#D4CDA4] border border-precision/40">
+                      <span key={t} className="text-[10px] px-1 bg-[#D4CDA4] border border-precision/40">
                         {t}
                       </span>
                     ))}
@@ -283,7 +283,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
 
           {/* Selected Flagship Systems */}
           <div className="flex flex-col gap-3">
-            <span className="text-[9.5px] font-bold text-[#5C5946] uppercase tracking-widest">
+            <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
               04 // SELECTED FLAGSHIP SYSTEMS ARCHITECTED
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -291,14 +291,14 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
                 <div key={p.id} className="p-3 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between border-b border-precision pb-1">
                     <span className="font-bold text-[11px]">{p.code} // {p.title}</span>
-                    <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1 font-bold">{p.status}</span>
+                    <span className="text-[10px] bg-[#15150F] text-[#C3E54E] px-1 font-bold">{p.status}</span>
                   </div>
-                  <p className="text-[9.5px] text-[#3D3A2C] leading-snug">
+                  <p className="text-[12.5px] text-[#3D3A2C] leading-snug">
                     {p.summary}
                   </p>
                   <div className="flex flex-wrap gap-1 pt-1 mt-auto">
                     {p.techStack.map(t => (
-                      <span key={t} className="text-[7.5px] px-1 bg-[#D4CDA4] border border-precision/40">
+                      <span key={t} className="text-[10px] px-1 bg-[#D4CDA4] border border-precision/40">
                         {t}
                       </span>
                     ))}
@@ -310,7 +310,7 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
         </div>
 
         {/* Modal Footer */}
-        <div className="p-3 bg-[#CBC59B] border-t border-precision flex items-center justify-between shrink-0 text-[9px] text-[#5C5946]">
+        <div className="p-3 bg-[#CBC59B] border-t border-precision flex items-center justify-between shrink-0 text-[10px] text-[#5C5946]">
           <span>VERIFIED SPEC // COMPILED 2026</span>
           <button
             onClick={onClose}

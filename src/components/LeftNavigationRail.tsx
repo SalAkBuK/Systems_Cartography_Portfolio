@@ -90,10 +90,10 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
       {/* Technical Index Header */}
       <div className="p-3 border-b border-[#15150F] bg-[#CBC59B]/50 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <h2 className="text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap">
+          <h2 className="text-[12px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap">
             Owner Technical Index
           </h2>
-          <span className="hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap">
+          <span className="hidden lg:inline text-[10px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap">
             INDX // 00-05
           </span>
         </div>
@@ -121,7 +121,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
                 setIsMobileOpen(false);
               }}
               className={`
-                min-h-[44px] lg:min-h-[34px] flex items-center justify-between px-3.5 py-2.5 lg:py-2 text-left text-[13px] lg:text-[10.5px] font-mono tracking-wider transition-colors border-b border-[#15150F]/20 last:border-b-0
+                min-h-[44px] lg:min-h-[34px] flex items-center justify-between px-3.5 py-2.5 lg:py-2 text-left text-[13px] lg:text-[12px] font-mono tracking-wider transition-colors border-b border-[#15150F]/20 last:border-b-0
                 ${isActive 
                   ? 'bg-[#15150F] text-[#D4CDA4] font-bold' 
                   : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
@@ -129,14 +129,14 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
               `}
             >
               <div className="flex items-center gap-2.5">
-                <span className={`text-[11px] lg:text-[8.5px] font-bold ${isActive ? 'text-[#C3E54E]' : 'opacity-60'}`}>
+                <span className={`text-[11px] lg:text-[10px] font-bold ${isActive ? 'text-[#C3E54E]' : 'opacity-60'}`}>
                   {item.num}
                 </span>
                 <Icon size={14} className={isActive ? 'text-[#C3E54E]' : 'opacity-70'} />
                 <span className="tracking-tight">{item.label}</span>
               </div>
               {item.count !== undefined && item.count !== null && (
-                <span className={`text-[10.5px] lg:text-[8.5px] px-1.5 py-0.5 lg:py-0 border ${
+                <span className={`text-[10.5px] lg:text-[10px] px-1.5 py-0.5 lg:py-0 border ${
                   isActive 
                     ? 'border-[#3E3C2F] bg-[#22211A] text-[#C3E54E]' 
                     : 'border-[#15150F]/30 text-current opacity-80'
@@ -149,14 +149,14 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </nav>
 
-      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] lg:text-[9px] font-bold tracking-wider" title="Fork this portfolio repository">
+      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] font-bold tracking-wider" title="Fork this portfolio repository">
         <span className="flex items-center gap-1.5"><Github size={13} /> USE TEMPLATE</span>
         <span>FORK →</span>
       </a>
 
       {/* Topology View Mode & Search Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">
-        <div className="flex items-center justify-between text-[10px] lg:text-[8.5px] font-bold tracking-widest opacity-60">
+        <div className="flex items-center justify-between text-[10.5px] font-bold tracking-widest opacity-60">
           <span>TOPOLOGY // VIEW</span>
           <Layers size={12} />
         </div>
@@ -178,8 +178,8 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
                 `}
                 title={`${mode.label} // ${mode.sub}`}
               >
-                <span className="text-[11px] lg:text-[8px] font-bold uppercase tracking-tight">{mode.label}</span>
-                <span className={`text-[9.5px] lg:text-[6.5px] tracking-tighter uppercase font-medium ${isSelected ? 'text-[#C3E54E]' : 'opacity-60'}`}>
+                <span className="text-[11px] font-bold uppercase tracking-tight">{mode.label}</span>
+                <span className={`text-[10px] tracking-tighter uppercase font-medium ${isSelected ? 'text-[#C3E54E]' : 'opacity-60'}`}>
                   {mode.sub}
                 </span>
               </button>
@@ -195,14 +195,14 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="SEARCH NODE / STACK..."
-            className="w-full bg-[#E2DCB9] border border-[#15150F] pl-7 pr-2 py-2 lg:py-1 text-[16px] lg:text-[9.5px] placeholder:text-[13px] lg:placeholder:text-[9.5px] placeholder:opacity-40 text-[#15150F] focus:outline-none focus:bg-[#EFEAD0]"
+            className="w-full bg-[#E2DCB9] border border-[#15150F] pl-7 pr-2 py-2 lg:py-1 text-[16px] lg:text-[12px] placeholder:text-[13px] lg:placeholder:text-[12px] placeholder:opacity-40 text-[#15150F] focus:outline-none focus:bg-[#EFEAD0]"
           />
         </div>
       </div>
 
       {/* Fast Project Jump List */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#15150F]/30 flex flex-col min-h-32">
-        <div className="px-3 py-1.5 lg:py-1 bg-[#15150F] text-[#D4CDA4] text-[10px] lg:text-[8px] font-bold tracking-widest uppercase flex justify-between items-center sticky top-0 z-20 border-b border-[#15150F]">
+        <div className="px-3 py-1.5 lg:py-1 bg-[#15150F] text-[#D4CDA4] text-[10.5px] font-bold tracking-widest uppercase flex justify-between items-center sticky top-0 z-20 border-b border-[#15150F]">
           <span className="text-[#C3E54E]">OWNER PROJECTS ({filteredProjects.length})</span>
           <span className="opacity-80">TIER</span>
         </div>
@@ -217,7 +217,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
                 setIsMobileOpen(false);
               }}
               className={`
-                min-h-[40px] lg:min-h-[28px] px-3.5 py-2 lg:py-1.5 text-left text-[12px] lg:text-[9.5px] font-mono transition-colors flex items-center justify-between
+                min-h-[40px] lg:min-h-[28px] px-3.5 py-2 lg:py-1.5 text-left text-[12px] lg:text-[11.5px] font-mono transition-colors flex items-center justify-between
                 ${isSelected 
                   ? 'bg-[#15150F] text-[#D4CDA4]' 
                   : 'hover:bg-[#15150F] hover:text-[#D4CDA4] text-[#15150F]'
@@ -233,7 +233,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
                 <span className="truncate">{p.title}</span>
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-1">
-                <span className={`text-[10px] lg:text-[7.5px] px-1.5 py-0.5 lg:py-0.2 border ${
+                <span className={`text-[10px] px-1.5 py-0.5 lg:py-0.2 border ${
                   isSelected ? 'border-[#3E3C2F] text-[#C3E54E]' : 'border-[#15150F]/30 opacity-75'
                 }`}>
                   L{p.dimensions.levels}
@@ -245,7 +245,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
       </div>
 
       {/* Evidence state */}
-      <div className="p-3 lg:p-2.5 border-t border-[#15150F] text-[10.5px] lg:text-[8.5px] uppercase leading-relaxed font-mono bg-[#CBC59B]/40 shrink-0">
+      <div className="p-3 lg:p-2.5 border-t border-[#15150F] text-[10.5px] uppercase leading-relaxed font-mono bg-[#CBC59B]/40 shrink-0">
         <p className="font-bold opacity-60 mb-0.5">Owner evidence state:</p>
         <div className="flex flex-col gap-0.5 opacity-85">
           {systemLogs.map((log, idx) => (
