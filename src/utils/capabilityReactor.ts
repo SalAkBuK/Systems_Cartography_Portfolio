@@ -212,3 +212,154 @@ export function getCapabilityReactorDashOffset(phase: number): number {
   if (!Number.isFinite(phase)) return 0;
   return (phase / TWO_PI) * 100;
 }
+
+// ---------------------------------------------------------------------------
+// Capability Reactor Magnetic Capture & Re-docking Mechanics
+// ---------------------------------------------------------------------------
+
+/** Iso-space distance from the nearest point on the Capability Reactor ellipse within which magnetic capture engages. */
+export const CAPABILITY_REACTOR_CAPTURE_BAND_ISO = 48;
+
+/** Maximum blend fraction toward the projected reactor ellipse point at zero distance. */
+export const CAPABILITY_REACTOR_MAX_CAPTURE_PULL = 0.40;
+
+/** Smooth settling transition duration when a detached capability re-docks to its moving reactor slot. */
+export const CAPABILITY_REACTOR_SETTLE_DURATION_MS = 220;
+
+export interface CapabilityReactorProjection {
+  /** Angle (radians) of the nearest point on the ellipse in the iso frame. */
+  theta: number;
+  /** The nearest point on the reactor ellipse itself, in iso/visual space. */
+  projectedPointIso: { x: number; y: number };
+  /** The nearest point on the reactor ellipse transformed to 3D world space. */
+  projectedPointWorld: { x: number; y: number };
+  /** Iso-space distance from the query point to that projected point. */
+  distanceIso: number;
+}
+
+export interface CapabilityCaptureAttraction {
+  distanceIso: number;
+  /** 0 at capture-band boundary, 1 at zero distance. */
+  proximity: number;
+  /** proximity^2 * MAX_CAPTURE_PULL — the blend fraction toward the projected point. */
+  strength: number;
+  isWithinCaptureRadius: boolean;
+}
+
+export interface CapabilitySettlingTransition {
+  capabilityId: string;
+  fromWorldPos: { x: number; y: number };
+  slotIndex: number;
+  slotCount: number;
+  startTimestamp: number | null;
+  durationMs: number;
+}
+
+/**
+ * Projects an arbitrary point in iso-space onto the nearest point of the
+ * Capability Reactor ellipse. Works uniformly at any angle around the ring.
+ */
+export function projectPointOntoCapabilityReactor(
+  pointIso: { x: number; y: number },
+  geometry: CapabilityReactorGeometry
+): CapabilityReactorProjection {
+  const dx = pointIso.x - geometry.centerIso.x;
+  const dy = pointIso.y - geometry.centerIso.y;
+  const theta = Math.atan2(dy / geometry.radiusY, dx / geometry.radiusX);
+  const projectedPointIso = {
+    x: geometry.centerIso.x + geometry.radiusX * Math.cos(theta),
+    y: geometry.centerIso.y + geometry.radiusY * Math.sin(theta),
+  };
+  const distanceIso = Math.hypot(pointIso.x - projectedPointIso.x, pointIso.y - projectedPointIso.y);
+  const projectedPointWorld = projectIsoTo3D(projectedPointIso.x, projectedPointIso.y);
+  return { theta, projectedPointIso, projectedPointWorld, distanceIso };
+}
+
+/**
+ * Progressive magnetic attraction as a dragged capability nears the Capability
+ * Reactor ellipse. Continuous: at distance === band radius, strength is exactly 0.
+ */
+export function computeCapabilityCaptureAttraction(
+  distanceIso: number,
+  captureBand: number = CAPABILITY_REACTOR_CAPTURE_BAND_ISO,
+  maxPull: number = CAPABILITY_REACTOR_MAX_CAPTURE_PULL
+): CapabilityCaptureAttraction {
+  const isWithinCaptureRadius = distanceIso <= captureBand;
+  const proximity = Math.min(Math.max(1 - distanceIso / captureBand, 0), 1);
+  const strength = proximity * proximity * maxPull;
+  return { distanceIso, proximity, strength, isWithinCaptureRadius };
+}
+
+/**
+ * Blends the raw pointer-derived world position toward the projected reactor
+ * point by the attraction strength.
+ */
+export function computeCapabilityMagneticRenderPosition(
+  rawWorldPos: { x: number; y: number },
+  projectedWorldPos: { x: number; y: number },
+  strength: number
+): { x: number; y: number } {
+  if (strength <= 0) return rawWorldPos;
+  return {
+    x: rawWorldPos.x + (projectedWorldPos.x - rawWorldPos.x) * strength,
+    y: rawWorldPos.y + (projectedWorldPos.y - rawWorldPos.y) * strength,
+  };
+}
+
+/**
+ * Creates a descriptor for a capability settling transition from release position
+ * to its moving canonical slot on the reactor ellipse.
+ */
+export function createCapabilitySettlingTransition(
+  capabilityId: string,
+  fromWorldPos: { x: number; y: number },
+  slotIndex: number,
+  slotCount: number,
+  durationMs: number = CAPABILITY_REACTOR_SETTLE_DURATION_MS
+): CapabilitySettlingTransition {
+  return {
+    capabilityId,
+    fromWorldPos,
+    slotIndex,
+    slotCount,
+    startTimestamp: null,
+    durationMs,
+  };
+}
+
+/**
+ * Advances a capability settling transition by evaluating its moving target
+ * slot against the LIVE reactorOrbitPhase at the current animation frame timestamp.
+ */
+export function stepCapabilitySettling(
+  transition: CapabilitySettlingTransition,
+  timestamp: number,
+  geometry: CapabilityReactorGeometry,
+  reactorPhase: number
+): {
+  position: { x: number; y: number };
+  isComplete: boolean;
+  nextTransition: CapabilitySettlingTransition;
+} {
+  const startTimestamp = transition.startTimestamp ?? timestamp;
+  const elapsed = Math.max(0, timestamp - startTimestamp);
+  const rawProgress = transition.durationMs <= 0 ? 1 : Math.min(1, elapsed / transition.durationMs);
+  // Cubic ease-out: 1 - (1 - t)^3
+  const progress = 1 - Math.pow(1 - rawProgress, 3);
+  const targetPos = getMountedCapabilityPosition(
+    transition.slotIndex,
+    transition.slotCount,
+    geometry,
+    reactorPhase
+  );
+  const position = {
+    x: transition.fromWorldPos.x + (targetPos.x - transition.fromWorldPos.x) * progress,
+    y: transition.fromWorldPos.y + (targetPos.y - transition.fromWorldPos.y) * progress,
+  };
+  const isComplete = rawProgress >= 1;
+  return {
+    position,
+    isComplete,
+    nextTransition: { ...transition, startTimestamp },
+  };
+}

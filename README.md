@@ -15,18 +15,40 @@ Fork it, point it at your own GitHub account and LinkedIn export, and deploy a s
 - **Static, self-hosted deployment** — the built site is plain static assets (Vite output); no server, no database.
 - **No visitor-time GitHub API dependency** — the GitHub snapshot is generated once at setup time and committed; the deployed site never calls the GitHub API at runtime, so it isn't subject to rate limits or GitHub outages.
 
-## Quick start
+## Quick owner setup
 
-1. **Fork this repository** on GitHub.
-2. **Clone your fork.**
-   ```bash
-   git clone https://github.com/<your-username>/Systems_Cartography_Portfolio.git
-   cd Systems_Cartography_Portfolio
-   ```
-3. **Install dependencies.**
-   ```bash
-   npm install
-   ```
+The fastest way to configure your fork is the local interactive setup wizard:
+
+```bash
+git clone https://github.com/<your-username>/Systems_Cartography_Portfolio.git
+cd Systems_Cartography_Portfolio
+npm install
+npm run setup:portfolio
+```
+
+Follow the local browser wizard:
+
+```text
+00 WELCOME → 01 PROFILE → 02 GITHUB → 03 FLAGSHIPS → 04 REVIEW → 05 VERIFY → 06 COMPLETE
+```
+
+Then start the portfolio:
+
+```bash
+npm run dev
+npm run build
+```
+
+Production builds are intentionally blocked until this fork has completed the
+wizard's `VERIFY` and `COMPLETE` steps. The completed setup is bound to the
+fork's repository identity, so copied upstream owner data cannot authorize a
+deployment by itself.
+
+---
+
+## Detailed / manual setup
+
+Advanced users or CI environments can also run each setup step individually:
 4. **Export your LinkedIn profile to PDF** (LinkedIn profile page → "More" → "Save to PDF") and save it somewhere local. `imports/` is convenient and `imports/*.pdf` is already gitignored.
    ```bash
    # macOS / Linux / Git Bash
@@ -44,16 +66,23 @@ Fork it, point it at your own GitHub account and LinkedIn export, and deploy a s
    ```bash
    npm run sync:github
    ```
-7. **Run the owner-setup diagnostic** to confirm everything is configured and scoped correctly.
+7. **Configure your flagship systems (optional).** Launch the local-only interactive configurator to drag and choose up to 4 key architectural flagship projects displayed in the Portfolio Brief.
+   ```bash
+   npm run setup:flagships
+   ```
+8. **Run the owner-setup diagnostic** to confirm everything is configured and scoped correctly.
    ```bash
    npm run setup:check
    ```
-8. **Run it locally.**
+   If these manual steps are being used in a new fork, finish in
+   `npm run setup:portfolio` and complete `VERIFY` then `COMPLETE`. Only the
+   verified wizard completion updates the repository-bound setup manifest.
+9. **Run it locally.**
    ```bash
    npm run dev
    ```
    Open `http://127.0.0.1:3000`.
-9. **Verify before you ship.**
+10. **Verify before you ship.**
    ```bash
    npm test
    npm run lint
@@ -61,7 +90,7 @@ Fork it, point it at your own GitHub account and LinkedIn export, and deploy a s
    # or, all at once:
    npm run verify
    ```
-10. **Deploy** the built static site — see [Deployment](#deployment) below.
+11. **Deploy** the built static site — see [Deployment](#deployment) below.
 
 ## Requirements
 
@@ -77,7 +106,8 @@ This is the most important thing to understand before customizing your fork. Own
 - `src/data/ownerProfile.generated.ts` — written by `npm run setup` (the LinkedIn importer).
 - `src/data/githubSnapshot.generated.ts` — written by `npm run sync:github`.
 
-**Persistent owner-curated data** — never touched by `setup` or `sync:github`; you edit these by hand and they survive re-imports:
+**Persistent owner-curated data** — never touched by `setup` or `sync:github`; you edit these by hand or through setup tools and they survive re-imports:
+- `src/config/ownerPreferences.ts` — curated flagship project display order for the Portfolio Brief (managed via `npm run setup:flagships`).
 - `src/data/ownerAdditionalExperience.ts` — professional history that isn't on LinkedIn (freelance work, private client engagements).
 - `src/data/ownerExperienceEvidence.ts` — structured engineering evidence attached to an employer (systems delivered, architecture decisions, infrastructure operations).
 - `src/data/repositoryEvidence.ts` — reviewed architecture notes for specific repositories, overlaid on top of generic repository analysis.
@@ -145,6 +175,12 @@ Always run `npm run setup:check` after re-running either tool to confirm the own
 
 The production build (`npm run build`) is a static site in `dist/` — deploy it to any static host.
 
+Before Vite emits production assets, the build compares
+`src/config/ownerSetup.generated.ts` with the current repository identity. It
+uses supported deployment-provider metadata first, then CI metadata, then the
+local `origin` Git remote. A fork that still carries the upstream repository's
+manifest fails closed and is instructed to run `npm run setup:portfolio`.
+
 **Vercel**
 - Framework preset: Vite. Build command: `npm run build`. Output directory: `dist`.
 - Set `VITE_CONTACT_FORM_ENDPOINT` (if used) as an environment variable in the Vercel project settings, not committed to source.
@@ -154,6 +190,11 @@ The production build (`npm run build`) is a static site in `dist/` — deploy it
 - Same environment-variable guidance applies.
 
 **Other static Vite hosts** (Cloudflare Pages, GitHub Pages, static S3/CDN, etc.) work the same way: run `npm run build`, deploy the contents of `dist/`.
+
+If a production build environment has neither trusted provider/CI repository
+metadata nor a checkout retaining a valid GitHub `origin`, the build fails
+closed. There is intentionally no manual repository-identity override or guard
+bypass.
 
 Because the GitHub snapshot is committed and there is no visitor-time API dependency, no server-side runtime or database is required anywhere in this deployment model.
 

@@ -1,0 +1,1068 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Systems Cartography // Owner Setup Wizard</title>
+  <style>
+    :root {
+      --bg: #DCD6B2;
+      --bg-darker: #CBC59B;
+      --bg-card: #E2DCB9;
+      --bg-active: #D4CDA4;
+      --text: #15150F;
+      --text-muted: #5C5946;
+      --border: #15150F;
+      --accent: #C3E54E;
+      --danger: #E5534E;
+      --success: #2E6B3A;
+      --warning: #D97706;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 24px 16px;
+      user-select: none;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      box-shadow: 8px 8px 0px var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--bg-darker);
+      border-bottom: 2px solid var(--border);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand h1 { font-size: 14px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+    .brand p { font-size: 11px; color: var(--text-muted); }
+    .stepper { display: flex; border-bottom: 2px solid var(--border); background: var(--bg-card); overflow-x: auto; }
+    .step-item {
+      flex: 1; padding: 10px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+      border-right: 1px solid var(--border); text-align: center; cursor: pointer; white-space: nowrap; opacity: 0.6;
+    }
+    .step-item:last-child { border-right: none; }
+    .step-item.active { background: var(--text); color: var(--accent); opacity: 1; }
+    .step-item.completed { background: var(--bg-active); color: var(--text); opacity: 0.9; }
+    .status-banner { padding: 10px 20px; font-size: 11px; font-weight: 700; display: none; border-bottom: 1px solid var(--border); }
+    .status-banner.success { display: block; background: var(--accent); color: var(--text); }
+    .status-banner.error { display: block; background: var(--danger); color: #FFF; }
+    .status-banner.warning { display: block; background: var(--warning); color: #FFF; }
+    .step-content { padding: 24px 20px; min-height: 480px; display: flex; flex-direction: column; gap: 16px; }
+    .step-pane { display: none; flex-direction: column; gap: 16px; }
+    .step-pane.active { display: flex; }
+    .title-block { border-bottom: 1.5px solid var(--border); padding-bottom: 8px; }
+    .title-block h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+    .title-block p { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .btn {
+      font-family: inherit; font-size: 11px; font-weight: 700; padding: 8px 16px; border: 1.5px solid var(--border);
+      background: var(--text); color: var(--bg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase;
+    }
+    .btn:hover:not(:disabled) { background: var(--accent); color: var(--text); }
+    .btn-accent { background: var(--accent); color: var(--text); }
+    .btn-accent:hover:not(:disabled) { background: var(--text); color: var(--accent); }
+    .btn-outline { background: var(--bg-card); color: var(--text); }
+    .btn-sm { padding: 3px 8px; font-size: 10px; }
+    .btn-remove { background: var(--bg-card); color: var(--danger); }
+    .btn-remove:hover:not(:disabled) { background: var(--danger); color: #FFF; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .actions-bar { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 16px; border-top: 1.5px solid var(--border); }
+    .actions-group { display: flex; gap: 10px; }
+    .card { background: var(--bg-card); border: 1.5px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .dropzone {
+      border: 2px dashed var(--border); background: var(--bg-card); padding: 36px 20px; text-align: center; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .dropzone.dragover { background: rgba(195, 229, 78, 0.2); border-color: var(--accent); }
+    .input-text { width: 100%; padding: 8px 12px; background: var(--bg-card); border: 1.5px solid var(--border); font-family: inherit; font-size: 11px; color: var(--text); outline: none; }
+    .input-text:focus { background: #FFF; border-color: var(--border); }
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .main-grid { grid-template-columns: 1fr; } }
+    .panel { border: 1.5px solid var(--border); background: var(--bg); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid var(--border); padding-bottom: 6px; }
+    .list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 400px; padding-right: 4px; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; background: var(--text); color: var(--bg); }
+    .badge-accent { background: var(--text); color: var(--accent); }
+    .rank-badge { font-size: 11px; font-weight: 800; background: var(--text); color: var(--accent); padding: 2px 6px; min-width: 26px; text-align: center; }
+    .tag { background: var(--bg-active); padding: 1px 5px; border: 1px solid rgba(21, 21, 15, 0.2); font-size: 10px; }
+    .flagship-card { background: var(--bg-card); border: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; cursor: grab; }
+    .flagship-card:active { cursor: grabbing; }
+    .flagship-card.dragging { opacity: 0.3; border-style: dashed; }
+    .flagship-card.drag-over { border-top: 3px solid var(--accent); background: var(--bg-active); }
+    .empty-slot { border: 1px dashed var(--text-muted); background: rgba(21, 21, 15, 0.03); padding: 20px; text-align: center; color: var(--text-muted); font-size: 11px; }
+    .diag-item { padding: 6px 10px; border: 1px solid var(--border); background: var(--bg-card); font-size: 11px; display: flex; align-items: center; gap: 8px; }
+    .diag-item.pass { border-left: 4px solid var(--accent); }
+    .diag-item.warn { border-left: 4px solid var(--warning); }
+    .diag-item.fail { border-left: 4px solid var(--danger); background: rgba(229, 83, 78, 0.1); }
+    footer { background: var(--bg-darker); border-top: 2px solid var(--border); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>SYSTEMS CARTOGRAPHY // OWNER SETUP WIZARD</h1>
+        <p>LOCAL CONFIGURATION &amp; INITIALIZATION PIPELINE · BOUND TO 127.0.0.1</p>
+      </div>
+      <div><span id="sessionStatus" class="badge badge-accent">CONNECTED // LOCALHOST</span></div>
+    </header>
+
+    <div class="stepper">
+      <div class="step-item active" onclick="jumpToStep(0)">00 WELCOME</div>
+      <div class="step-item" onclick="jumpToStep(1)">01 PROFILE</div>
+      <div class="step-item" onclick="jumpToStep(2)">02 GITHUB</div>
+      <div class="step-item" onclick="jumpToStep(3)">03 FLAGSHIPS</div>
+      <div class="step-item" onclick="jumpToStep(4)">04 REVIEW</div>
+      <div class="step-item" onclick="jumpToStep(5)">05 VERIFY</div>
+      <div class="step-item" onclick="jumpToStep(6)">06 COMPLETE</div>
+    </div>
+
+    <div id="statusBanner" class="status-banner"></div>
+
+    <div class="step-content">
+      <!-- 00 WELCOME -->
+      <div id="pane-0" class="step-pane active">
+        <div class="title-block">
+          <h2>00 // OWNER INITIALIZATION</h2>
+          <p>Configure your personal developer systems landscape in a few local steps.</p>
+        </div>
+
+        <div id="existingSetupCard" class="card" style="display: none;">
+          <div style="font-weight: 800; color: var(--text);">EXISTING CONFIGURATION DETECTED</div>
+          <p id="existingSetupSummary" style="color: var(--text-muted);"></p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
+            <button class="btn btn-outline btn-sm" onclick="jumpToStep(1)">UPDATE PROFILE</button>
+            <button class="btn btn-outline btn-sm" onclick="jumpToStep(2)">RESYNC GITHUB</button>
+            <button class="btn btn-outline btn-sm" onclick="jumpToStep(3)">EDIT FLAGSHIPS</button>
+            <button class="btn btn-outline btn-sm" onclick="jumpToStep(5)">RUN VERIFICATION</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight: 700; margin-bottom: 4px;">INITIALIZATION INVARIANTS</div>
+          <ul style="padding-left: 18px; line-height: 1.6;">
+            <li><strong>Local-only execution:</strong> Your LinkedIn PDF export is parsed purely in-memory and never uploaded to external servers.</li>
+            <li><strong>Committed snapshot:</strong> GitHub sync runs once at setup time. The deployed static portfolio never calls GitHub API at visitor runtime.</li>
+            <li><strong>Curated Flagships:</strong> You choose up to 4 flagship projects and control their display order.</li>
+            <li><strong>Read-only public site:</strong> Visitors cannot modify, configure, or persist data.</li>
+          </ul>
+        </div>
+
+        <div class="actions-bar">
+          <div></div>
+          <button class="btn btn-accent" onclick="jumpToStep(1)">BEGIN INITIALIZATION →</button>
+        </div>
+      </div>
+
+      <!-- 01 PROFILE -->
+      <div id="pane-1" class="step-pane">
+        <div class="title-block">
+          <h2>01 // LINKEDIN OPERATOR PROFILE</h2>
+          <p>Upload your exported LinkedIn PDF (Profile → More → "Save to PDF") to populate your operator metadata and career progression.</p>
+        </div>
+
+        <div class="dropzone" id="pdfDropzone" onclick="document.getElementById('pdfInput').click()">
+          <input type="file" id="pdfInput" accept=".pdf" style="display: none;" onchange="handleFileSelected(event)" />
+          <div style="font-size: 20px;">📄</div>
+          <div style="font-weight: 800;" id="dropzoneText">CHOOSE OR DROP LINKEDIN PDF</div>
+          <div style="color: var(--text-muted); font-size: 11px;" id="dropzoneSubtext">PDF format · Max 15 MB · Processed purely in-memory</div>
+        </div>
+
+        <div id="parsedProfileReview" class="card" style="display: none;">
+          <div style="font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 4px;">PARSED OPERATOR REVIEW</div>
+          <div style="display: grid; grid-template-columns: 120px 1fr; gap: 4px; font-size: 11px;">
+            <span style="color: var(--text-muted);">OPERATOR:</span>
+            <span id="reviewName" style="font-weight: 700;"></span>
+            <span style="color: var(--text-muted);">ROLE:</span>
+            <span id="reviewRole"></span>
+            <span style="color: var(--text-muted);">LOCATION:</span>
+            <span id="reviewLocation"></span>
+            <span style="color: var(--text-muted);">EXPERIENCE:</span>
+            <span id="reviewExpCount"></span>
+          </div>
+          <div id="reviewWarnings" style="color: var(--warning); font-size: 10px; margin-top: 4px;"></div>
+        </div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(0)">← BACK</button>
+          <div class="actions-group">
+            <button id="importPdfBtn" class="btn btn-accent" onclick="uploadAndParsePdf()" disabled>IMPORT PROFILE</button>
+            <button id="continueToGithubBtn" class="btn" onclick="saveProfileAndContinue()">CONTINUE TO GITHUB →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 GITHUB -->
+      <div id="pane-2" class="step-pane">
+        <div class="title-block">
+          <h2>02 // GITHUB REPOSITORY SYNC</h2>
+          <p>Sync your public GitHub repositories and synthesize capability technologies.</p>
+        </div>
+
+        <div class="card">
+          <label style="font-weight: 700; margin-bottom: 4px; display: block;">CONFIRMED GITHUB TARGET</label>
+          <input type="text" id="githubTargetInput" class="input-text" placeholder="https://github.com/your-username" />
+          <p style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Authoritative GitHub profile used for snapshot synchronization and evidence scoping.</p>
+        </div>
+
+        <!-- GITHUB ACCESS STATUS -->
+        <div id="githubAuthCard" class="card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <div>
+              <div style="font-weight: 800; font-size: 11px; letter-spacing: 0.08em;" id="githubAuthTitle">GITHUB ACCESS</div>
+              <div style="font-size: 12px; margin-top: 4px; font-weight: 700;" id="githubAuthBadge">CHECKING ACCESS...</div>
+            </div>
+            <button class="btn btn-outline" style="font-size: 10px; padding: 4px 8px;" onclick="recheckGitHubAuth()">RECHECK GITHUB ACCESS</button>
+          </div>
+          <div id="githubAuthDetails" style="font-size: 11px; color: var(--text-muted); line-height: 1.5;"></div>
+          <div id="githubAuthGuidance" style="display: none; margin-top: 10px; padding: 8px 12px; background: rgba(255,170,0,0.08); border: 1px dashed var(--accent-gold); border-radius: 4px; font-size: 11px;">
+            <div style="font-weight: 700; color: var(--accent-gold); margin-bottom: 4px;">RECOMMENDED TERMINAL SETUP</div>
+            <div style="font-family: monospace; color: var(--text); background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 2px;">gh auth login</div>
+            <div style="margin-top: 4px; color: var(--text-muted);">or set in PowerShell: <code style="color: var(--text);">$env:GITHUB_TOKEN = gh auth token</code></div>
+          </div>
+        </div>
+
+        <div id="syncProgressCard" class="card" style="display: none;">
+          <div style="font-weight: 800;" id="syncPhaseTitle">SYNCHRONIZING...</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="syncPhaseDesc">Querying GitHub public repositories...</div>
+        </div>
+
+        <div id="syncResultCard" class="card" style="display: none;">
+          <div style="font-weight: 800; color: var(--text);">✓ GITHUB SYNCHRONIZED</div>
+          <div style="display: flex; gap: 16px; margin-top: 4px;">
+            <span class="badge" id="syncRepoCount">0 REPOSITORIES</span>
+            <span class="badge" id="syncCapCount">0 CAPABILITIES</span>
+          </div>
+        </div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(1)">← BACK</button>
+          <div class="actions-group">
+            <button id="syncGithubBtn" class="btn btn-accent" onclick="runGithubSync()">SYNC GITHUB</button>
+            <button id="continueToFlagshipsBtn" class="btn" onclick="jumpToStep(3)">CONTINUE TO FLAGSHIPS →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 FLAGSHIPS -->
+      <div id="pane-3" class="step-pane">
+        <div class="title-block">
+          <h2>03 // FLAGSHIP SYSTEMS SELECTION</h2>
+          <p>Select and drag up to 4 key architectural systems for the Portfolio Brief.</p>
+        </div>
+
+        <div class="main-grid">
+          <!-- Left: Available -->
+          <div class="panel">
+            <div class="panel-header">
+              <span style="font-weight: 800;">AVAILABLE REPOSITORIES</span>
+              <span id="flagshipAvailCount" class="badge">0</span>
+            </div>
+            <input type="text" id="flagshipSearch" class="input-text" placeholder="Filter by title, code, or ID..." oninput="renderFlagshipAvailable()" />
+            <div id="flagshipAvailList" class="list" ondragover="handleDragOver(event)" ondrop="handleDropToAvailable(event)"></div>
+          </div>
+
+          <!-- Right: Selected -->
+          <div class="panel">
+            <div class="panel-header">
+              <span style="font-weight: 800;">SELECTED FLAGSHIPS (MAX 4)</span>
+              <span id="flagshipSelBadge" class="badge badge-accent">0 / 4</span>
+            </div>
+            <div id="flagshipSelList" class="list" ondragover="handleDragOver(event)" ondrop="handleDropToSelected(event)"></div>
+          </div>
+        </div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(2)">← BACK</button>
+          <button class="btn btn-accent" onclick="saveFlagshipsAndContinue()">SAVE &amp; CONTINUE TO REVIEW →</button>
+        </div>
+      </div>
+
+      <!-- 04 REVIEW -->
+      <div id="pane-4" class="step-pane">
+        <div class="title-block">
+          <h2>04 // REVIEW CONFIGURATION</h2>
+          <p>Review the configured operator profile, GitHub target, and flagship systems before verification.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="card">
+            <div style="font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 4px;">OPERATOR IDENTITY</div>
+            <div id="reviewOperatorBlock" style="font-size: 11px; line-height: 1.6;"></div>
+          </div>
+          <div class="card">
+            <div style="font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 4px;">GITHUB &amp; EXPERIENCE</div>
+            <div id="reviewGithubBlock" style="font-size: 11px; line-height: 1.6;"></div>
+          </div>
+        </div>
+
+        <div id="reviewIdentityMatchCard"></div>
+
+        <div class="card">
+          <div style="font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 4px;">SELECTED FLAGSHIP SYSTEMS</div>
+          <div id="reviewFlagshipsList" style="font-size: 11px; line-height: 1.6;"></div>
+        </div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(3)">← BACK</button>
+          <button class="btn btn-accent" onclick="jumpToStep(5)">PROCEED TO VERIFICATION →</button>
+        </div>
+      </div>
+
+      <!-- 05 VERIFY -->
+      <div id="pane-5" class="step-pane">
+        <div class="title-block">
+          <h2>05 // SYSTEM DIAGNOSTICS</h2>
+          <p>Run deterministic owner-setup checks to ensure complete internal consistency.</p>
+        </div>
+
+        <div id="diagList" style="display: flex; flex-direction: column; gap: 6px;"></div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(4)">← BACK</button>
+          <div class="actions-group">
+            <button class="btn btn-outline" onclick="runDiagnostics()">RE-RUN CHECKS</button>
+            <button id="completeSetupBtn" class="btn btn-accent" onclick="completeSetup()" disabled>COMPLETE SETUP →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 06 COMPLETE -->
+      <div id="pane-6" class="step-pane">
+        <div class="title-block">
+          <h2>06 // INITIALIZATION COMPLETE</h2>
+          <p>Your systems cartography portfolio is configured and ready to run.</p>
+        </div>
+
+        <div class="card" style="background: rgba(195, 229, 78, 0.15); border: 2px solid var(--border);">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">✓ PORTFOLIO READY</div>
+          <div style="font-size: 12px; line-height: 1.8;">
+            <div><strong>RUN LOCAL DEV SERVER:</strong></div>
+            <pre style="background: var(--text); color: var(--accent); padding: 8px 12px; margin: 6px 0; border: 1px solid var(--border);">npm run dev</pre>
+            <div>Open: <code>http://localhost:3000</code></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight: 800; margin-bottom: 4px;">PUBLISHING WORKFLOW</div>
+          <ol style="padding-left: 18px; line-height: 1.6;">
+            <li>Run <code>npm run verify</code> before pushing.</li>
+            <li>Commit your generated data: <code>git add . &amp;&amp; git commit -m "chore: initialize portfolio"</code></li>
+            <li>Push to your fork: <code>git push origin main</code></li>
+          </ol>
+        </div>
+
+        <div class="actions-bar">
+          <button class="btn btn-outline" onclick="jumpToStep(0)">RETURN TO START</button>
+          <a href="http://localhost:3000" target="_blank" class="btn btn-accent">LAUNCH PORTFOLIO (PORT 3000)</a>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span>PERSISTENT TARGETS: <code>src/data/*</code> · <code>src/config/*</code></span>
+      <span id="footerInfo">WIZARD READY</span>
+    </footer>
+  </div>
+
+  <script>
+    let currentStep = 0;
+    let csrfToken = '';
+    let selectedFile = null;
+    let parsedProfile = null;
+    let allProjects = [];
+    let selectedFlagshipIds = [];
+    let draggedId = null;
+    let dragSource = null;
+    let verificationPassed = false;
+
+    let isExistingSetup = false;
+    let githubSyncSuccessful = false;
+
+    function updateProfileProgressionUI() {
+      const btn = document.getElementById('continueToGithubBtn');
+      if (!btn) return;
+
+      if (parsedProfile) {
+        btn.disabled = false;
+        btn.innerText = 'SAVE PROFILE & CONTINUE →';
+        btn.className = 'btn btn-accent';
+      } else if (isExistingSetup) {
+        btn.disabled = false;
+        btn.innerText = 'KEEP EXISTING PROFILE & CONTINUE →';
+        btn.className = 'btn btn-outline';
+      } else {
+        btn.disabled = true;
+        btn.innerText = 'CONTINUE TO GITHUB →';
+        btn.className = 'btn';
+      }
+    }
+
+    function updateGithubProgressionUI() {
+      const btn = document.getElementById('continueToFlagshipsBtn');
+      if (!btn) return;
+
+      if (githubSyncSuccessful) {
+        btn.disabled = false;
+        btn.innerText = 'CONTINUE TO FLAGSHIPS →';
+        btn.className = 'btn btn-accent';
+      } else if (isExistingSetup && allProjects.length > 0) {
+        btn.disabled = false;
+        btn.innerText = 'KEEP EXISTING GITHUB SNAPSHOT & CONTINUE →';
+        btn.className = 'btn btn-outline';
+      } else {
+        btn.disabled = true;
+        btn.innerText = 'CONTINUE TO FLAGSHIPS →';
+        btn.className = 'btn';
+      }
+    }
+
+    function renderGitHubAuthStatus(auth) {
+      if (!auth) return;
+      const badgeEl = document.getElementById('githubAuthBadge');
+      const detailsEl = document.getElementById('githubAuthDetails');
+      const guidanceEl = document.getElementById('githubAuthGuidance');
+      if (!badgeEl || !detailsEl || !guidanceEl) return;
+
+      if (auth.authenticated) {
+        const sourceLabel = auth.authMode === 'github-cli' ? 'GITHUB CLI' : 'ENVIRONMENT TOKEN';
+        badgeEl.innerHTML = '<span style="color: var(--accent-green, #00ff88);">✓ AUTHENTICATED</span> · SOURCE // ' + sourceLabel;
+
+        let details = 'API ACCESS // AUTHENTICATED';
+        if (auth.rateLimit) {
+          details += ' · RATE LIMIT // ' + auth.rateLimit.remaining + ' / ' + auth.rateLimit.limit + ' REMAINING';
+        }
+        detailsEl.innerText = details;
+        guidanceEl.style.display = 'none';
+      } else {
+        badgeEl.innerHTML = '<span style="color: var(--accent-gold, #ffaa00);">! ANONYMOUS API MODE</span>';
+        let details = 'GitHub limits unauthenticated requests to a small per-IP budget (60 requests/hour). Large repository inventories may exceed this during one sync.';
+        if (auth.rateLimit) {
+          details += ' Rate limit remaining: ' + auth.rateLimit.remaining + ' / ' + auth.rateLimit.limit;
+        }
+        detailsEl.innerText = details;
+        guidanceEl.style.display = 'block';
+      }
+    }
+
+    async function recheckGitHubAuth() {
+      try {
+        const res = await fetch('/api/github-auth-status');
+        const data = await res.json();
+        if (data.success) {
+          renderGitHubAuthStatus(data);
+          showStatus('GitHub access updated: ' + (data.authenticated ? 'Authenticated (' + (data.authMode === 'github-cli' ? 'GitHub CLI' : 'Env Token') + ')' : 'Anonymous mode'), 'info');
+        }
+      } catch (err) {
+        showStatus('Failed to recheck GitHub access: ' + err.message, 'error');
+      }
+    }
+
+    async function init() {
+      try {
+        const res = await fetch('/api/session');
+        const data = await res.json();
+        csrfToken = data.csrfToken;
+
+        if (data.confirmedGitHub || data.detectedGitHub) {
+          document.getElementById('githubTargetInput').value = data.confirmedGitHub || data.detectedGitHub;
+        }
+
+        isExistingSetup = Boolean(data.existingSetup);
+
+        if (data.existingSetup) {
+          document.getElementById('existingSetupCard').style.display = 'block';
+          document.getElementById('existingSetupSummary').innerText =
+            'Owner: ' + (data.operator?.name || 'Configured') + ' (' + (data.operator?.role || 'Developer') + ') · ' + (data.projectsCount || 0) + ' repositories · ' + (data.flagshipsCount || 0) + ' flagships';
+        }
+
+        if (data.githubAuth) {
+          renderGitHubAuthStatus(data.githubAuth);
+        }
+
+        updateProfileProgressionUI();
+
+        const stateRes = await fetch('/api/state');
+        const state = await stateRes.json();
+        allProjects = state.snapshot?.projects || [];
+        selectedFlagshipIds = state.preferences?.flagshipProjectIds || [];
+
+        updateGithubProgressionUI();
+      } catch (err) {
+        showStatus('Failed to initialize setup session: ' + err.message, 'error');
+      }
+    }
+
+    function jumpToStep(step) {
+      if (step === 6 && !verificationPassed) {
+        showStatus('Cannot complete setup: Please run verification and resolve all blocking issues first.', 'error');
+        jumpToStep(5);
+        return;
+      }
+
+      currentStep = step;
+      document.querySelectorAll('.step-item').forEach((el, idx) => {
+        el.classList.toggle('active', idx === step);
+        el.classList.toggle('completed', idx < step);
+      });
+      document.querySelectorAll('.step-pane').forEach((el, idx) => {
+        el.classList.toggle('active', idx === step);
+      });
+
+      if (step === 3) { renderFlagships(); }
+      else if (step === 4) { renderReview(); }
+      else if (step === 5) { runDiagnostics(); }
+    }
+
+    function showStatus(msg, type = 'info') {
+      const banner = document.getElementById('statusBanner');
+      banner.className = 'status-banner ' + type;
+      banner.innerText = msg;
+      banner.style.display = 'block';
+    }
+
+    function hideStatus() {
+      document.getElementById('statusBanner').style.display = 'none';
+    }
+
+    function handleFileSelected(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showStatus('Please select a valid PDF file.', 'error');
+        return;
+      }
+      selectedFile = file;
+      parsedProfile = null;
+      document.getElementById('parsedProfileReview').style.display = 'none';
+      document.getElementById('dropzoneText').innerText = file.name;
+      document.getElementById('dropzoneSubtext').innerText = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+      document.getElementById('importPdfBtn').disabled = false;
+      updateProfileProgressionUI();
+      hideStatus();
+    }
+
+    const dropzone = document.getElementById('pdfDropzone');
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files?.length) {
+        document.getElementById('pdfInput').files = e.dataTransfer.files;
+        handleFileSelected({ target: { files: e.dataTransfer.files } });
+      }
+    });
+
+    async function uploadAndParsePdf() {
+      if (!selectedFile) return;
+      const btn = document.getElementById('importPdfBtn');
+      btn.disabled = true;
+      btn.innerText = 'PARSING...';
+
+      try {
+        const confirmedGithub = document.getElementById('githubTargetInput').value.trim();
+        const url = '/api/upload-pdf' + (confirmedGithub ? ('?githubTarget=' + encodeURIComponent(confirmedGithub)) : '');
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'x-setup-csrf-token': csrfToken,
+            'Content-Type': 'application/pdf'
+          },
+          body: selectedFile
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to parse LinkedIn PDF');
+        }
+
+        parsedProfile = data.profile;
+        document.getElementById('reviewName').innerText = parsedProfile.operator.name;
+        document.getElementById('reviewRole').innerText = parsedProfile.operator.role;
+        document.getElementById('reviewLocation').innerText = parsedProfile.operator.location;
+        document.getElementById('reviewExpCount').innerText = parsedProfile.experience.length + ' roles';
+
+        if (parsedProfile.githubTarget && !document.getElementById('githubTargetInput').value) {
+          document.getElementById('githubTargetInput').value = parsedProfile.githubTarget;
+        }
+
+        document.getElementById('parsedProfileReview').style.display = 'block';
+        updateProfileProgressionUI();
+        showStatus('✓ LinkedIn profile successfully parsed!', 'success');
+        parsedProfile = null;
+        document.getElementById('parsedProfileReview').style.display = 'none';
+        updateProfileProgressionUI();
+        const cleanMsg = (err.message || '').replace(/^(?:PDF\s+parse\s+error:\s*)+/i, '');
+        showStatus('PDF parse error: ' + cleanMsg, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'IMPORT PROFILE';
+      }
+    }
+
+    async function saveProfileAndContinue() {
+      if (parsedProfile) {
+        const btn = document.getElementById('continueToGithubBtn');
+        btn.disabled = true;
+        btn.innerText = 'SAVING...';
+        try {
+          const res = await fetch('/api/save-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': csrfToken },
+            body: JSON.stringify({ profile: parsedProfile })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save profile');
+          }
+          isExistingSetup = true;
+          jumpToStep(2);
+        } catch (err) {
+          showStatus('Error saving profile: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          updateProfileProgressionUI();
+        }
+      } else if (isExistingSetup) {
+        jumpToStep(2);
+      } else {
+        showStatus('Please import your LinkedIn profile PDF before continuing.', 'error');
+        updateProfileProgressionUI();
+      }
+    }
+
+    async function runGithubSync() {
+      const target = document.getElementById('githubTargetInput').value.trim();
+      if (!target) {
+        showStatus('Please provide a valid GitHub username or URL.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('syncGithubBtn');
+      btn.disabled = true;
+      document.getElementById('syncProgressCard').style.display = 'block';
+      document.getElementById('syncResultCard').style.display = 'none';
+
+      try {
+        const res = await fetch('/api/sync-github', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': csrfToken },
+          body: JSON.stringify({ githubTarget: target })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'GitHub sync failed');
+        }
+
+        document.getElementById('syncProgressCard').style.display = 'none';
+        document.getElementById('syncRepoCount').innerText = data.projectCount + ' REPOSITORIES';
+        document.getElementById('syncCapCount').innerText = data.skillCount + ' CAPABILITIES';
+        document.getElementById('syncResultCard').style.display = 'block';
+
+        const stateRes = await fetch('/api/state');
+        const state = await stateRes.json();
+        allProjects = state.snapshot?.projects || [];
+        githubSyncSuccessful = true;
+        updateGithubProgressionUI();
+        if (data.githubAuth) {
+          renderGitHubAuthStatus(data.githubAuth);
+        }
+
+        showStatus('✓ GitHub synchronized successfully!', 'success');
+      } catch (err) {
+        githubSyncSuccessful = false;
+        updateGithubProgressionUI();
+        document.getElementById('syncProgressCard').style.display = 'none';
+        showStatus('GitHub sync error: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderFlagships() {
+      renderFlagshipAvailable();
+      renderFlagshipSelected();
+    }
+
+    function renderFlagshipAvailable() {
+      const container = document.getElementById('flagshipAvailList');
+      const q = (document.getElementById('flagshipSearch')?.value || '').toLowerCase();
+      const filtered = allProjects.filter(p => {
+        if (selectedFlagshipIds.includes(p.id)) return false;
+        if (!q) return true;
+        return p.title.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+      });
+
+      document.getElementById('flagshipAvailCount').innerText = filtered.length;
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-slot">No available repositories match filter.</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(p => {
+        const canAdd = selectedFlagshipIds.length < 4;
+        return `
+          <div
+            class="flagship-card"
+            draggable="true"
+            ondragstart="handleDragStart(event, '${p.id}', 'available')"
+            ondragend="handleDragEnd(event)"
+          >
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <span class="badge">${escapeHtml(p.code)}</span>
+                <span style="font-weight:700;">${escapeHtml(p.title)}</span>
+              </div>
+              <button class="btn btn-sm" onclick="addFlagship('${p.id}')" ${canAdd ? '' : 'disabled'}>+ ADD</button>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
+              <span>${escapeHtml(p.id)}</span>
+              <span class="tag">${escapeHtml(p.category || 'repo')}</span>
+              <span class="tag">${escapeHtml(p.year || '')}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderFlagshipSelected() {
+      const container = document.getElementById('flagshipSelList');
+      document.getElementById('flagshipSelBadge').innerText = selectedFlagshipIds.length + ' / 4';
+
+      if (selectedFlagshipIds.length === 0) {
+        container.innerHTML = '<div class="empty-slot">No flagships selected. Click + ADD or drag from Available.</div>';
+        return;
+      }
+
+      const pMap = new Map(allProjects.map(p => [p.id, p]));
+      container.innerHTML = selectedFlagshipIds.map((id, index) => {
+        const p = pMap.get(id) || { id, code: 'GH-??', title: 'Unknown (' + id + ')', category: '', year: '' };
+        const isFirst = index === 0;
+        const isLast = index === selectedFlagshipIds.length - 1;
+        const rankStr = String(index + 1).padStart(2, '0');
+
+        return `
+          <div
+            class="flagship-card"
+            draggable="true"
+            ondragstart="handleDragStart(event, '${id}', 'selected')"
+            ondragover="handleCardDragOver(event)"
+            ondragleave="handleCardDragLeave(event)"
+            ondrop="handleCardDrop(event, ${index})"
+            ondragend="handleDragEnd(event)"
+          >
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <span class="rank-badge">${rankStr}</span>
+                <span class="badge">${escapeHtml(p.code)}</span>
+                <span style="font-weight:700;">${escapeHtml(p.title)}</span>
+              </div>
+              <div style="display:flex; gap:4px;">
+                <button class="btn btn-sm" onclick="moveFlagship(${index}, -1)" ${isFirst ? 'disabled' : ''}>↑</button>
+                <button class="btn btn-sm" onclick="moveFlagship(${index}, 1)" ${isLast ? 'disabled' : ''}>↓</button>
+                <button class="btn btn-sm btn-remove" onclick="removeFlagship('${id}')">✕</button>
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
+              <span>${escapeHtml(p.id)}</span>
+              <span class="tag">${escapeHtml(p.category || 'repo')}</span>
+              <span class="tag">${escapeHtml(p.year || '')}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function addFlagship(id) {
+      if (selectedFlagshipIds.length >= 4) {
+        showStatus('MAXIMUM FLAGSHIPS REACHED // REMOVE ONE FIRST', 'error');
+        return;
+      }
+      if (!selectedFlagshipIds.includes(id)) {
+        selectedFlagshipIds.push(id);
+        renderFlagships();
+        hideStatus();
+      }
+    }
+
+    function removeFlagship(id) {
+      selectedFlagshipIds = selectedFlagshipIds.filter(x => x !== id);
+      renderFlagships();
+      hideStatus();
+    }
+
+    function moveFlagship(index, delta) {
+      const target = index + delta;
+      if (target < 0 || target >= selectedFlagshipIds.length) return;
+      const tmp = selectedFlagshipIds[index];
+      selectedFlagshipIds[index] = selectedFlagshipIds[target];
+      selectedFlagshipIds[target] = tmp;
+      renderFlagships();
+    }
+
+    function handleDragStart(e, id, source) {
+      draggedId = id;
+      dragSource = source;
+      e.dataTransfer.setData('text/plain', id);
+      e.target.classList.add('dragging');
+    }
+
+    function handleDragEnd(e) {
+      e.target.classList.remove('dragging');
+      draggedId = null;
+      dragSource = null;
+      document.querySelectorAll('.flagship-card').forEach(c => c.classList.remove('drag-over'));
+    }
+
+    function handleDragOver(e) { e.preventDefault(); }
+    function handleCardDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+    function handleCardDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+    function handleCardDrop(e, targetIndex) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('drag-over');
+      if (!draggedId) return;
+
+      if (dragSource === 'selected') {
+        const fromIndex = selectedFlagshipIds.indexOf(draggedId);
+        if (fromIndex !== -1 && fromIndex !== targetIndex) {
+          selectedFlagshipIds.splice(fromIndex, 1);
+          selectedFlagshipIds.splice(targetIndex, 0, draggedId);
+          renderFlagships();
+        }
+      } else if (dragSource === 'available') {
+        if (selectedFlagshipIds.length >= 4) {
+          showStatus('MAXIMUM FLAGSHIPS REACHED // REMOVE ONE FIRST', 'error');
+          return;
+        }
+        if (!selectedFlagshipIds.includes(draggedId)) {
+          selectedFlagshipIds.splice(targetIndex, 0, draggedId);
+          renderFlagships();
+        }
+      }
+    }
+
+    function handleDropToSelected(e) {
+      e.preventDefault();
+      if (!draggedId) return;
+      if (dragSource === 'available') {
+        if (selectedFlagshipIds.length >= 4) {
+          showStatus('MAXIMUM FLAGSHIPS REACHED // REMOVE ONE FIRST', 'error');
+          return;
+        }
+        if (!selectedFlagshipIds.includes(draggedId)) {
+          selectedFlagshipIds.push(draggedId);
+          renderFlagships();
+        }
+      }
+    }
+
+    function handleDropToAvailable(e) {
+      e.preventDefault();
+      if (dragSource === 'selected' && draggedId) {
+        removeFlagship(draggedId);
+      }
+    }
+
+    async function saveFlagshipsAndContinue() {
+      try {
+        const res = await fetch('/api/save-flagships', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': csrfToken },
+          body: JSON.stringify({ flagshipProjectIds: selectedFlagshipIds })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to save flagships');
+        }
+        jumpToStep(4);
+      } catch (err) {
+        showStatus('Error saving flagships: ' + err.message, 'error');
+      }
+    }
+
+    async function confirmCrossOwnerMismatch() {
+      try {
+        const res = await fetch('/api/confirm-cross-owner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': csrfToken }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to confirm cross-owner mismatch');
+        }
+        showStatus('✓ Cross-owner identity mismatch explicitly confirmed for this setup session.', 'info');
+        if (currentStep === 4) {
+          renderReview();
+        } else if (currentStep === 5) {
+          runDiagnostics();
+        }
+      } catch (err) {
+        showStatus('Error confirming cross-owner: ' + err.message, 'error');
+      }
+    }
+
+    async function renderReview() {
+      const stateRes = await fetch('/api/state');
+      const state = await stateRes.json();
+
+      const op = state.ownerProfile?.operator || {};
+      document.getElementById('reviewOperatorBlock').innerHTML =
+        '<div><strong>Name:</strong> ' + escapeHtml(op.name || 'Not configured') + '</div>' +
+        '<div><strong>Role:</strong> ' + escapeHtml(op.role || 'Developer') + '</div>' +
+        '<div><strong>Location:</strong> ' + escapeHtml(op.location || 'Remote') + '</div>' +
+        '<div><strong>Email:</strong> ' + escapeHtml(op.contact?.email || 'N/A') + '</div>';
+
+      const snap = state.snapshot || {};
+      const exp = state.ownerProfile?.experience || [];
+      document.getElementById('reviewGithubBlock').innerHTML =
+        '<div><strong>GitHub Target:</strong> ' + escapeHtml(state.confirmedGitHub || state.ownerProfile?.githubTarget || 'N/A') + '</div>' +
+        '<div><strong>Repositories Indexed:</strong> ' + (snap.projects?.length || 0) + '</div>' +
+        '<div><strong>Capabilities Generated:</strong> ' + (snap.skills?.length || 0) + '</div>' +
+        '<div><strong>Professional Experience:</strong> ' + exp.length + ' roles</div>';
+
+      const match = state.identityMatch;
+      const matchCard = document.getElementById('reviewIdentityMatchCard');
+      if (matchCard && match) {
+        if (match.status === 'MATCH') {
+          matchCard.innerHTML = `
+            <div class="card" style="margin-top: 14px; border: 1px solid var(--accent); background: rgba(195,229,78,0.06);">
+              <div style="font-weight: 800; color: var(--text);">✓ OWNER IDENTITY MATCH</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Operator profile matches confirmed GitHub target (<strong>@${escapeHtml(match.profileIdentity)}</strong>).
+              </div>
+            </div>`;
+        } else if (match.status === 'UNKNOWN') {
+          matchCard.innerHTML = `
+            <div class="card" style="margin-top: 14px; border: 1px dashed var(--accent-gold); background: rgba(255,170,0,0.06);">
+              <div style="font-weight: 800; color: var(--accent-gold);">! IDENTITY MATCH NOT VERIFIABLE</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                No GitHub profile URL was detected in the imported profile. Cross-owner match cannot be checked.
+              </div>
+            </div>`;
+        } else if (match.status === 'MISMATCH') {
+          if (state.crossOwnerConfirmed) {
+            matchCard.innerHTML = `
+              <div class="card" style="margin-top: 14px; border: 1px dashed var(--accent-gold); background: rgba(255,170,0,0.06);">
+                <div style="font-weight: 800; color: var(--accent-gold);">! PROFILE / GITHUB OWNER MISMATCH // EXPLICITLY CONFIRMED</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                  Operator Profile (<strong>@${escapeHtml(match.profileIdentity)}</strong>) vs Selected GitHub (<strong>@${escapeHtml(match.targetIdentity)}</strong>) — confirmed for this setup session.
+                </div>
+              </div>`;
+          } else {
+            matchCard.innerHTML = `
+              <div class="card" style="margin-top: 14px; border: 1px solid var(--accent-gold); background: rgba(255,170,0,0.08);">
+                <div style="font-weight: 800; color: var(--accent-gold); margin-bottom: 4px;">! PROFILE / GITHUB OWNER MISMATCH</div>
+                <div style="font-size: 11px; line-height: 1.6; margin-bottom: 8px;">
+                  <div><strong>Operator profile:</strong> ${escapeHtml(op.name || 'Configured')} (github.com/${escapeHtml(match.profileIdentity || 'unknown')})</div>
+                  <div><strong>Selected GitHub:</strong> github.com/${escapeHtml(match.targetIdentity || 'unknown')}</div>
+                  <div style="color: var(--text-muted); margin-top: 4px;">These appear to belong to different owners. Is this intentional?</div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-outline" style="font-size: 11px; padding: 4px 8px;" onclick="jumpToStep(2)">← GO BACK</button>
+                  <button class="btn btn-accent" style="font-size: 11px; padding: 4px 8px;" onclick="confirmCrossOwnerMismatch()">YES // USE DIFFERENT GITHUB ACCOUNT</button>
+                </div>
+              </div>`;
+          }
+        }
+      }
+
+      const pMap = new Map((snap.projects || []).map(p => [p.id, p]));
+      const flagships = state.preferences?.flagshipProjectIds || [];
+      if (flagships.length === 0) {
+        document.getElementById('reviewFlagshipsList').innerHTML = '<div style="color:var(--text-muted);">No flagships configured (will use default first available projects).</div>';
+      } else {
+        document.getElementById('reviewFlagshipsList').innerHTML = flagships.map((id, i) => {
+          const p = pMap.get(id) || { id, title: 'Unknown' };
+          return '<div><strong>' + String(i + 1).padStart(2, '0') + '.</strong> ' + escapeHtml(p.title) + ' <span style="color:var(--text-muted); font-size:10px;">(' + escapeHtml(id) + ')</span></div>';
+        }).join('');
+      }
+    }
+
+    async function runDiagnostics() {
+      const list = document.getElementById('diagList');
+      list.innerHTML = '<div class="diag-item">Running system checks...</div>';
+
+      try {
+        const res = await fetch('/api/verify');
+        const data = await res.json();
+        const summary = data.summary;
+
+        verificationPassed = summary.failCount === 0;
+
+        list.innerHTML = (summary.results || []).map(r => {
+          const cls = r.level === 'PASS' ? 'pass' : (r.level === 'WARNING' ? 'warn' : 'fail');
+          const sym = r.level === 'PASS' ? '✓' : (r.level === 'WARNING' ? '!' : '✗');
+          const isMismatchFail = r.level === 'FAIL' && r.message.includes('Owner identity mismatch requires confirmation');
+          const inlineAction = isMismatchFail ?
+            ' <button class="btn btn-sm btn-accent" style="margin-left: 10px; font-size: 10px; padding: 2px 6px;" onclick="confirmCrossOwnerMismatch()">YES // CONFIRM DIFFERENT GITHUB ACCOUNT</button>' : '';
+          return '<div class="diag-item ' + cls + '"><div style="display:flex; align-items:center; gap:8px;"><span>' + sym + '</span><span>' + escapeHtml(r.message) + '</span></div>' + inlineAction + '</div>';
+        }).join('');
+
+        const completeBtn = document.getElementById('completeSetupBtn');
+        if (verificationPassed) {
+          completeBtn.disabled = false;
+          if (summary.warnCount === 0) {
+            showStatus('✓ ALL DIAGNOSTICS PASSED', 'success');
+          } else {
+            showStatus('✓ NO BLOCKING FAILURES // ' + summary.warnCount + ' WARNING' + (summary.warnCount === 1 ? '' : 'S'), 'info');
+          }
+        } else {
+          completeBtn.disabled = true;
+          showStatus('✗ ' + summary.failCount + ' blocking failure(s) detected. Please resolve issues before completing setup.', 'error');
+        }
+      } catch (err) {
+        verificationPassed = false;
+        list.innerHTML = '<div class="diag-item fail">Failed to run checks: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    async function completeSetup() {
+      if (!verificationPassed) {
+        showStatus('Cannot complete setup: run verification and resolve all blocking issues first.', 'error');
+        return;
+      }
+
+      const completeBtn = document.getElementById('completeSetupBtn');
+      completeBtn.disabled = true;
+      try {
+        const res = await fetch('/api/complete', {
+          method: 'POST',
+          headers: { 'X-Setup-CSRF-Token': csrfToken }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Setup completion failed');
+        }
+        showStatus('✓ SETUP BOUND TO ' + data.repository.owner + '/' + data.repository.name, 'success');
+        jumpToStep(6);
+      } catch (err) {
+        completeBtn.disabled = false;
+        showStatus('✗ ' + err.message, 'error');
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    init();
+  </script>
+</body>
+</html>

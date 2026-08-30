@@ -286,3 +286,162 @@ test('project orbital radii and canonical project positions remain owned by topo
   assert.ok(!topologyLayoutSource.includes('capabilityReactor'));
   assert.ok(!canvasSource.includes('getDynamicOrbitalPosition(\n        project,\n        i,\n        count,\n        capabilityReactorGeometry'));
 });
+
+// ---------------------------------------------------------------------------
+// PR28 — Capability Reactor Re-docking & Magnetic Capture Tests
+// ---------------------------------------------------------------------------
+
+import {
+  CAPABILITY_REACTOR_CAPTURE_BAND_ISO,
+  CAPABILITY_REACTOR_MAX_CAPTURE_PULL,
+  CAPABILITY_REACTOR_SETTLE_DURATION_MS,
+  computeCapabilityCaptureAttraction,
+  computeCapabilityMagneticRenderPosition,
+  createCapabilitySettlingTransition,
+  projectPointOntoCapabilityReactor,
+  stepCapabilitySettling,
+} from '../src/utils/capabilityReactor.ts';
+
+test('projectPointOntoCapabilityReactor projects points onto the exact reactor ellipse at any angle', () => {
+  const geometry = deriveCapabilityReactorGeometry(sources, lattice.skillPositions);
+  // Cardinal test points: top, right, bottom, left
+  const points = [
+    { x: geometry.centerIso.x, y: geometry.centerIso.y - geometry.radiusY - 30 }, // above top
+    { x: geometry.centerIso.x + geometry.radiusX + 40, y: geometry.centerIso.y }, // right
+    { x: geometry.centerIso.x, y: geometry.centerIso.y + geometry.radiusY + 50 }, // below bottom
+    { x: geometry.centerIso.x - geometry.radiusX - 25, y: geometry.centerIso.y }, // left
+    { x: geometry.centerIso.x + 100, y: geometry.centerIso.y + 80 }, // diagonal
+  ];
+
+  for (const pt of points) {
+    const projection = projectPointOntoCapabilityReactor(pt, geometry);
+    const residual =
+      ((projection.projectedPointIso.x - geometry.centerIso.x) / geometry.radiusX) ** 2 +
+      ((projection.projectedPointIso.y - geometry.centerIso.y) / geometry.radiusY) ** 2;
+    assert.ok(Math.abs(residual - 1) < 1e-9, `Projected point must lie exactly on ellipse: residual = ${residual}`);
+    assert.ok(projection.distanceIso >= 0, 'Distance must be non-negative');
+    const isoBack = project3DToIso(projection.projectedPointWorld.x, projection.projectedPointWorld.y, 0);
+    assert.ok(Math.abs(isoBack.x - projection.projectedPointIso.x) < 1e-6);
+    assert.ok(Math.abs(isoBack.y - projection.projectedPointIso.y) < 1e-6);
+  }
+});
+
+test('computeCapabilityCaptureAttraction: continuous magnetic attraction inside band and zero outside', () => {
+  // 1. Zero distance -> full attraction
+  const atZero = computeCapabilityCaptureAttraction(0);
+  assert.equal(atZero.isWithinCaptureRadius, true);
+  assert.equal(atZero.proximity, 1);
+  assert.equal(atZero.strength, CAPABILITY_REACTOR_MAX_CAPTURE_PULL);
+
+  // 2. Halfway distance
+  const halfway = computeCapabilityCaptureAttraction(CAPABILITY_REACTOR_CAPTURE_BAND_ISO / 2);
+  assert.equal(halfway.isWithinCaptureRadius, true);
+  assert.equal(halfway.proximity, 0.5);
+  assert.equal(halfway.strength, 0.25 * CAPABILITY_REACTOR_MAX_CAPTURE_PULL);
+
+  // 3. Exactly at band boundary
+  const atBoundary = computeCapabilityCaptureAttraction(CAPABILITY_REACTOR_CAPTURE_BAND_ISO);
+  assert.equal(atBoundary.isWithinCaptureRadius, true);
+  assert.equal(atBoundary.proximity, 0);
+  assert.equal(atBoundary.strength, 0);
+
+  // 4. Outside band
+  const outside = computeCapabilityCaptureAttraction(CAPABILITY_REACTOR_CAPTURE_BAND_ISO + 10);
+  assert.equal(outside.isWithinCaptureRadius, false);
+  assert.equal(outside.proximity, 0);
+  assert.equal(outside.strength, 0);
+});
+
+test('computeCapabilityMagneticRenderPosition: blends raw position towards projected world point', () => {
+  const raw = { x: 100, y: 200 };
+  const target = { x: 200, y: 300 };
+
+  // Zero pull returns raw position untouched
+  assert.deepEqual(computeCapabilityMagneticRenderPosition(raw, target, 0), raw);
+
+  // 50% pull returns midpoint
+  const mid = computeCapabilityMagneticRenderPosition(raw, target, 0.5);
+  assert.deepEqual(mid, { x: 150, y: 250 });
+
+  // 100% pull returns target
+  const full = computeCapabilityMagneticRenderPosition(raw, target, 1);
+  assert.deepEqual(full, target);
+});
+
+test('stepCapabilitySettling: smoothly interpolates without teleporting and tracks live moving phase', () => {
+  const geometry = deriveCapabilityReactorGeometry(sources, lattice.skillPositions);
+  const capabilityId = sources[0].id;
+  const fromPos = { x: 500, y: -200 };
+  const slotIndex = 0;
+  const slotCount = sources.length;
+  const transition = createCapabilitySettlingTransition(capabilityId, fromPos, slotIndex, slotCount, 200);
+
+  // First step (t = 1000): startTimestamp captured, progress = 0 -> exact fromPos (no jump)
+  const first = stepCapabilitySettling(transition, 1000, geometry, 0);
+  assert.equal(first.isComplete, false);
+  assert.deepEqual(first.position, fromPos);
+
+  // Mid step (t = 1100, half duration): progress ~ 0.875 with cubic ease-out, tracks moving phase -0.2
+  const mid = stepCapabilitySettling(first.nextTransition, 1100, geometry, -0.2);
+  assert.equal(mid.isComplete, false);
+  const targetAtMid = getMountedCapabilityPosition(slotIndex, slotCount, geometry, -0.2);
+  assert.notDeepEqual(mid.position, fromPos);
+  assert.notDeepEqual(mid.position, targetAtMid);
+
+  // Final step (t = 1200, full duration): progress = 1 -> exact target position evaluated at live phase -0.4
+  const finalStep = stepCapabilitySettling(first.nextTransition, 1200, geometry, -0.4);
+  assert.equal(finalStep.isComplete, true);
+  const targetAtEnd = getMountedCapabilityPosition(slotIndex, slotCount, geometry, -0.4);
+  assert.ok(Math.abs(finalStep.position.x - targetAtEnd.x) < 1e-9);
+  assert.ok(Math.abs(finalStep.position.y - targetAtEnd.y) < 1e-9);
+});
+
+test('reattached capability removes custom override and resumes moving with reactor phase without redistributing peer slots', () => {
+  const geometry = deriveCapabilityReactorGeometry(sources, lattice.skillPositions);
+  const order = getDeterministicCapabilityOrder(sources);
+  const detachedId = order[2];
+  const peerId1 = order[0];
+  const peerId2 = order[4];
+
+  // 1. Initial mounted state
+  const mountedAtPhase1 = Object.fromEntries(
+    order.map((id, index) => [id, getMountedCapabilityPosition(index, order.length, geometry, 0)])
+  );
+  // 2. Custom detached state
+  const customMap: Record<string, { x: number; y: number }> = {
+    [detachedId]: { x: 888, y: -444 },
+  };
+  const effectiveWhileDetached = getEffectiveCapabilityPositions(mountedAtPhase1, customMap);
+  assert.deepEqual(effectiveWhileDetached[detachedId], { x: 888, y: -444 });
+  assert.deepEqual(effectiveWhileDetached[peerId1], mountedAtPhase1[peerId1]);
+
+  // 3. Reattachment: delete custom position override
+  delete customMap[detachedId];
+  assert.equal(Object.keys(customMap).length, 0);
+
+  // 4. Position at phase 2 (-0.5 rad)
+  const mountedAtPhase2 = Object.fromEntries(
+    order.map((id, index) => [id, getMountedCapabilityPosition(index, order.length, geometry, -0.5)])
+  );
+  const effectiveAfterReattachment = getEffectiveCapabilityPositions(mountedAtPhase2, customMap);
+
+  // Reattached node derives from live slot calculation at phase 2
+  assert.deepEqual(effectiveAfterReattachment[detachedId], mountedAtPhase2[detachedId]);
+  assert.notDeepEqual(effectiveAfterReattachment[detachedId], { x: 888, y: -444 });
+
+  // Peers remain strictly in their deterministic canonical slots without redistribution
+  assert.deepEqual(effectiveAfterReattachment[peerId1], mountedAtPhase2[peerId1]);
+  assert.deepEqual(effectiveAfterReattachment[peerId2], mountedAtPhase2[peerId2]);
+});
+
+test('TopologyCanvas implements capability reactor capture check on release, clearing custom override inside capture band', () => {
+  const releaseStart = canvasSource.indexOf('const processRelease = () => {');
+  const projectReleaseStart = canvasSource.indexOf('// PROJECT', releaseStart);
+  const skillRelease = canvasSource.substring(releaseStart, projectReleaseStart);
+
+  assert.ok(skillRelease.includes('computeCapabilityCaptureAttraction'));
+  assert.ok(skillRelease.includes('attraction.isWithinCaptureRadius'));
+  assert.ok(skillRelease.includes('delete next[draggingNode.id]'), 'Capture release must remove customSkillPositions entry');
+  assert.ok(skillRelease.includes('commitCapabilitySettling('), 'Capture release must trigger capability settling transition');
+  assert.ok(skillRelease.includes('findNearestValidGridPosition('), 'Release outside capture band must use grid snap and collision avoidance');
+});
