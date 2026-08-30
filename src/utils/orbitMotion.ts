@@ -1,7 +1,7 @@
-// Pure, DOM-free orbital motion math: one shared phase drives every canonical
-// project's position around the PR21 static ellipse. No animation library, no
-// per-project timers — a single requestAnimationFrame loop in TopologyCanvas
-// advances one phase value and this module derives positions from it.
+// Pure, DOM-free orbital motion math. One requestAnimationFrame loop in
+// TopologyCanvas advances both the deployed-project phase and the structural
+// capability-reactor phase from the same frame timestamp. Project positions
+// remain a derivation of the project phase only.
 import { projectIsoTo3D } from './isometricProjection';
 import { getTopologyProjectDimensions, type ProjectDimensionsSource } from './projectTopologyGeometry';
 import type { StaticOrbitGeometry, StaticOrbitSlot } from './topologyLayout';
@@ -12,14 +12,17 @@ export const ORBIT_PERIOD_MS = 120_000;
 /** How long after a genuine system/reflow pause clears before motion resumes. */
 export const ORBIT_RESUME_DELAY_MS = 800;
 
-/** One shared runtime rate for the whole ring. Zero is an explicit user pause. */
+/** Shared rate vocabulary. Zero remains the legacy explicit-pause value. */
 export const ORBIT_RATE_MULTIPLIERS = [0, 0.5, 1, 2, 4, 8, 16, 32, 64] as const;
 export type OrbitRateMultiplier = (typeof ORBIT_RATE_MULTIPLIERS)[number];
+export const ACTIVE_ORBIT_RATE_MULTIPLIERS = [0.5, 1, 2, 4, 8, 16, 32, 64] as const;
+export type ActiveOrbitRateMultiplier = (typeof ACTIVE_ORBIT_RATE_MULTIPLIERS)[number];
 
 const TWO_PI = Math.PI * 2;
 
 /** Wraps a phase value into [0, 2π). */
 export function normalizeOrbitPhase(phase: number): number {
+  if (!Number.isFinite(phase)) return 0;
   const wrapped = phase % TWO_PI;
   return wrapped < 0 ? wrapped + TWO_PI : wrapped;
 }
@@ -30,8 +33,30 @@ export function computePhaseDelta(
   rateMultiplier: OrbitRateMultiplier = 1,
   periodMs: number = ORBIT_PERIOD_MS
 ): number {
-  if (!(deltaMs > 0) || !(rateMultiplier > 0) || !(periodMs > 0)) return 0;
+  if (
+    !Number.isFinite(deltaMs) ||
+    !Number.isFinite(rateMultiplier) ||
+    !Number.isFinite(periodMs) ||
+    !(deltaMs > 0) ||
+    !(rateMultiplier > 0) ||
+    !(periodMs > 0)
+  ) return 0;
   return (deltaMs / periodMs) * TWO_PI * rateMultiplier;
+}
+
+/** Steps the nonzero speed ladder without wrapping or implicitly pausing. */
+export function stepOrbitRate(
+  rate: ActiveOrbitRateMultiplier,
+  direction: 'decrease' | 'increase'
+): ActiveOrbitRateMultiplier {
+  const currentIndex = ACTIVE_ORBIT_RATE_MULTIPLIERS.indexOf(rate);
+  const safeIndex = currentIndex === -1 ? ACTIVE_ORBIT_RATE_MULTIPLIERS.indexOf(1) : currentIndex;
+  const offset = direction === 'decrease' ? -1 : 1;
+  const nextIndex = Math.min(
+    ACTIVE_ORBIT_RATE_MULTIPLIERS.length - 1,
+    Math.max(0, safeIndex + offset)
+  );
+  return ACTIVE_ORBIT_RATE_MULTIPLIERS[nextIndex];
 }
 
 /** Advances and normalizes a phase by the elapsed real time. */
@@ -48,6 +73,65 @@ export interface OrbitClockState {
   phase: number;
   /** Timestamp (rAF ms) of the last frame that actually advanced the phase, or null if the clock needs a fresh baseline. */
   lastTimestamp: number | null;
+}
+
+export interface DualOrbitClockState {
+  projectPhase: number;
+  reactorPhase: number;
+  /** One shared rAF timestamp baseline for both independently controlled phases. */
+  lastTimestamp: number | null;
+}
+
+/** Preserves both phases while forcing the shared clock to take a fresh baseline. */
+export function rebaselineDualOrbitClock(state: DualOrbitClockState): DualOrbitClockState {
+  return {
+    projectPhase: normalizeOrbitPhase(state.projectPhase),
+    reactorPhase: normalizeOrbitPhase(state.reactorPhase),
+    lastTimestamp: null,
+  };
+}
+
+/**
+ * Advances two independent phases from one timestamp and one elapsed interval.
+ * Projects retain their existing positive/clockwise direction; the structural
+ * reactor advances by the same base-period math in the negative/counter
+ * direction. A phase that is paused holds exactly while its peer may continue.
+ */
+export function stepDualOrbitClock(
+  state: DualOrbitClockState,
+  timestamp: number,
+  projectRunning: boolean,
+  projectRate: OrbitRateMultiplier = 1,
+  reactorRunning: boolean,
+  reactorRate: OrbitRateMultiplier = 0.5,
+  periodMs: number = ORBIT_PERIOD_MS
+): DualOrbitClockState {
+  const projectPhase = normalizeOrbitPhase(state.projectPhase);
+  const reactorPhase = normalizeOrbitPhase(state.reactorPhase);
+  const isProjectAdvancing = projectRunning && projectRate > 0;
+  const isReactorAdvancing = reactorRunning && reactorRate > 0;
+
+  if (!isProjectAdvancing && !isReactorAdvancing) {
+    return { projectPhase, reactorPhase, lastTimestamp: null };
+  }
+
+  if (!Number.isFinite(timestamp)) {
+    return { projectPhase, reactorPhase, lastTimestamp: null };
+  }
+
+  if (state.lastTimestamp === null || !Number.isFinite(state.lastTimestamp)) {
+    return { projectPhase, reactorPhase, lastTimestamp: timestamp };
+  }
+
+  const deltaMs = timestamp - state.lastTimestamp;
+  const projectDelta = isProjectAdvancing ? computePhaseDelta(deltaMs, projectRate, periodMs) : 0;
+  const reactorDelta = isReactorAdvancing ? computePhaseDelta(deltaMs, reactorRate, periodMs) : 0;
+
+  return {
+    projectPhase: normalizeOrbitPhase(projectPhase + projectDelta),
+    reactorPhase: normalizeOrbitPhase(reactorPhase - reactorDelta),
+    lastTimestamp: timestamp,
+  };
 }
 
 /** Preserves phase while forcing the next running frame to establish a fresh time baseline. */
