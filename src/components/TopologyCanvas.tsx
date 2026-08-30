@@ -1575,8 +1575,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               aria-label="Deployed systems orbit controls"
               className="grid grid-cols-[78px_34px_26px_40px_26px_58px] items-stretch border-b border-[#15150F]"
             >
-              <span className="flex items-center px-1.5 text-[9px] font-bold">R02 SYSTEMS</span>
-              <span className="flex items-center justify-center border-l border-[#15150F] text-[9px] font-bold">CW</span>
+              <span className="flex items-center px-1.5 text-[10px] font-bold">R02 SYSTEMS</span>
+              <span className="flex items-center justify-center border-l border-[#15150F] text-[10px] font-bold">CW</span>
               <button
                 type="button"
                 aria-label="Decrease deployed systems orbit speed"
@@ -1612,7 +1612,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   event.stopPropagation();
                   setIsProjectOrbitPaused(paused => !paused);
                 }}
-                className={`border-l border-[#15150F] px-1.5 py-1 text-[9px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                className={`border-l border-[#15150F] px-1.5 py-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
                   isProjectOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
                 }`}
               >
@@ -1624,8 +1624,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               aria-label="Capability reactor orbit controls"
               className="grid grid-cols-[78px_34px_26px_40px_26px_58px] items-stretch"
             >
-              <span className="flex items-center px-1.5 text-[9px] font-bold">R01 REACTOR</span>
-              <span className="flex items-center justify-center border-l border-[#15150F] text-[9px] font-bold">CCW</span>
+              <span className="flex items-center px-1.5 text-[10px] font-bold">R01 REACTOR</span>
+              <span className="flex items-center justify-center border-l border-[#15150F] text-[10px] font-bold">CCW</span>
               <button
                 type="button"
                 aria-label="Decrease capability reactor speed"
@@ -1661,7 +1661,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   event.stopPropagation();
                   setIsReactorOrbitPaused(paused => !paused);
                 }}
-                className={`border-l border-[#15150F] px-1.5 py-1 text-[9px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                className={`border-l border-[#15150F] px-1.5 py-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
                   isReactorOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
                 }`}
               >
