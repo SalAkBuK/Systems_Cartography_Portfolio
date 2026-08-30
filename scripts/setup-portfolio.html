@@ -214,7 +214,11 @@
         <div class="card">
           <label style="font-weight: 700; margin-bottom: 4px; display: block;">CONFIRMED GITHUB TARGET</label>
           <input type="text" id="githubTargetInput" class="input-text" placeholder="https://github.com/your-username" />
-          <p style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Authoritative GitHub profile used for snapshot synchronization and evidence scoping.</p>
+          <div id="detectedTargetHint" style="display: none; font-size: 10px; color: var(--text-muted); margin-top: 6px;">
+            Detected from repository context: <strong id="detectedTargetValue"></strong>
+            <button type="button" class="btn btn-outline btn-sm" onclick="useDetectedGithubTarget()" style="margin-left: 6px;">USE DETECTED TARGET</button>
+          </div>
+          <p style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Authoritative GitHub profile used for snapshot synchronization and evidence scoping. A detected suggestion is not used until confirmed here or via GitHub sync.</p>
         </div>
 
         <!-- GITHUB ACCESS STATUS -->
@@ -391,6 +395,13 @@
     let isExistingSetup = false;
     let githubSyncSuccessful = false;
 
+    // A GitHub target inferred from repository context (git origin) is only
+    // a SUGGESTION. It must never silently count as the user's confirmed
+    // GitHub association -- otherwise a freshly imported LinkedIn profile
+    // could get stamped with an identity the user never actually accepted.
+    let detectedGithubTarget = '';
+    let githubTargetConfirmed = false;
+
     function updateProfileProgressionUI() {
       const btn = document.getElementById('continueToGithubBtn');
       if (!btn) return;
@@ -476,11 +487,19 @@
         const data = await res.json();
         csrfToken = data.csrfToken;
 
+        detectedGithubTarget = data.detectedGitHub || '';
+        githubTargetConfirmed = Boolean(data.confirmedGitHub);
+
         if (data.confirmedGitHub || data.detectedGitHub) {
           document.getElementById('githubTargetInput').value = data.confirmedGitHub || data.detectedGitHub;
         }
+        updateDetectedTargetHint();
 
         isExistingSetup = Boolean(data.existingSetup);
+
+        if (data.repositoryReinitializationRequired) {
+          showStatus('FORK REINITIALIZATION // inherited owner configuration is inactive until setup completes.', 'info');
+        }
 
         if (data.existingSetup) {
           document.getElementById('existingSetupCard').style.display = 'block';
@@ -503,6 +522,25 @@
       } catch (err) {
         showStatus('Failed to initialize setup session: ' + err.message, 'error');
       }
+    }
+
+    function updateDetectedTargetHint() {
+      const hint = document.getElementById('detectedTargetHint');
+      if (!hint) return;
+      const showHint = Boolean(detectedGithubTarget) && !githubTargetConfirmed;
+      hint.style.display = showHint ? 'block' : 'none';
+      if (showHint) {
+        const valueEl = document.getElementById('detectedTargetValue');
+        if (valueEl) valueEl.innerText = detectedGithubTarget;
+      }
+    }
+
+    function useDetectedGithubTarget() {
+      if (!detectedGithubTarget) return;
+      document.getElementById('githubTargetInput').value = detectedGithubTarget;
+      githubTargetConfirmed = true;
+      updateDetectedTargetHint();
+      showStatus('Detected GitHub target accepted for this setup session.', 'info');
     }
 
     function jumpToStep(step) {
@@ -573,7 +611,11 @@
       btn.innerText = 'PARSING...';
 
       try {
-        const confirmedGithub = document.getElementById('githubTargetInput').value.trim();
+        // A detected-but-unconfirmed suggestion must never silently stamp
+        // the parsed profile's GitHub identity -- only a target the user has
+        // deliberately confirmed (via GitHub sync, "USE DETECTED TARGET", or
+        // a prior real setup) is sent here.
+        const confirmedGithub = githubTargetConfirmed ? document.getElementById('githubTargetInput').value.trim() : '';
         const url = '/api/upload-pdf' + (confirmedGithub ? ('?githubTarget=' + encodeURIComponent(confirmedGithub)) : '');
         const res = await fetch(url, {
           method: 'POST',
@@ -673,6 +715,11 @@
         document.getElementById('syncRepoCount').innerText = data.projectCount + ' REPOSITORIES';
         document.getElementById('syncCapCount').innerText = data.skillCount + ' CAPABILITIES';
         document.getElementById('syncResultCard').style.display = 'block';
+
+        // Running sync against this target IS the deliberate confirming
+        // action -- no redundant extra confirmation step is required.
+        githubTargetConfirmed = true;
+        updateDetectedTargetHint();
 
         const stateRes = await fetch('/api/state');
         const state = await stateRes.json();
