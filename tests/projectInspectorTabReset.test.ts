@@ -272,7 +272,11 @@ test('16. Search input in LeftNavigationRail uses 16px compact font to prevent i
 // ---------------------------------------------------------------------------
 test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('text-[9.5px]'), 'Mode subtitle must scale to text-[9.5px]');
+  assert.match(
+    railSource,
+    /<span className=\{`text-\[10px\][^`]*`\}>\s*\{mode\.sub\}/,
+    'Mode subtitle must scale to text-[10px]'
+  );
   assert.ok(railSource.includes('min-h-[42px] lg:min-h-[30px]'), 'Mode buttons must have >= 42px touch target on compact');
 });
 
