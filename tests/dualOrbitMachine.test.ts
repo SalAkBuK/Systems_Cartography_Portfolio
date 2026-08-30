@@ -97,10 +97,34 @@ test('dual clock rejects non-finite inputs without NaN or Infinity output', () =
   assert.deepEqual(corrupt, { projectPhase: 0, reactorPhase: 0, lastTimestamp: null });
 });
 
-test('nonzero rate ladder clamps at 0.5× and 64× without wrapping', () => {
-  assert.deepEqual(ACTIVE_ORBIT_RATE_MULTIPLIERS, [0.5, 1, 2, 4, 8, 16, 32, 64]);
+test('128×, 256×, and 512× dual-clock steps stay finite and normalized', () => {
+  for (const rate of [128, 256, 512] as const) {
+    const next = stepDualOrbitClock(initialClock, 61_000, true, rate, true, rate);
+    assert.ok(Number.isFinite(next.projectPhase));
+    assert.ok(Number.isFinite(next.reactorPhase));
+    assert.ok(next.projectPhase >= 0 && next.projectPhase < Math.PI * 2);
+    assert.ok(next.reactorPhase >= 0 && next.reactorPhase < Math.PI * 2);
+  }
+});
+
+test('either orbit can remain paused at 512× while its peer continues', () => {
+  const projectPaused = stepDualOrbitClock(initialClock, 1_016, false, 512, true, 512);
+  assert.equal(projectPaused.projectPhase, initialClock.projectPhase);
+  assert.notEqual(projectPaused.reactorPhase, initialClock.reactorPhase);
+
+  const reactorPaused = stepDualOrbitClock(initialClock, 1_016, true, 512, false, 512);
+  assert.notEqual(reactorPaused.projectPhase, initialClock.projectPhase);
+  assert.equal(reactorPaused.reactorPhase, initialClock.reactorPhase);
+});
+
+test('nonzero rate ladder reaches and clamps at 512× without wrapping', () => {
+  assert.deepEqual(ACTIVE_ORBIT_RATE_MULTIPLIERS, [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512]);
   assert.equal(stepOrbitRate(0.5, 'decrease'), 0.5);
-  assert.equal(stepOrbitRate(64, 'increase'), 64);
+  assert.equal(stepOrbitRate(64, 'increase'), 128);
+  assert.equal(stepOrbitRate(128, 'increase'), 256);
+  assert.equal(stepOrbitRate(256, 'increase'), 512);
+  assert.equal(stepOrbitRate(512, 'increase'), 512);
+  assert.equal(stepOrbitRate(512, 'decrease'), 256);
   assert.equal(stepOrbitRate(1, 'decrease'), 0.5);
   assert.equal(stepOrbitRate(1, 'increase'), 2);
 });

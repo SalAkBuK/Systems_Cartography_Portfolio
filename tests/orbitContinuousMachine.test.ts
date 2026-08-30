@@ -155,6 +155,6 @@ test('sanity: reduced motion / compact / hidden document remain authoritative pa
   assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, isDocumentHidden: true }), true);
 });
 
-test('sanity: ORBIT_RATE_MULTIPLIERS still exposes 64x as the ceiling', () => {
-  assert.equal(ORBIT_RATE_MULTIPLIERS[ORBIT_RATE_MULTIPLIERS.length - 1], 64);
+test('sanity: ORBIT_RATE_MULTIPLIERS exposes 512x as the hard ceiling', () => {
+  assert.equal(ORBIT_RATE_MULTIPLIERS[ORBIT_RATE_MULTIPLIERS.length - 1], 512);
 });
