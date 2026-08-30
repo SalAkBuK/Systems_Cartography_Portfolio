@@ -530,3 +530,23 @@ test('38. RightInspectorPanel binds content scroll ref and resets scrollTop to 0
   assert.ok(effectBlock.includes('selectedSubsystem?.id'), 'Effect dependencies must include selectedSubsystem?.id');
   assert.ok(effectBlock.includes('activeTab'), 'Effect dependencies must include activeTab');
 });
+
+// ---------------------------------------------------------------------------
+// 39. Responsive Inspector Height Contract
+// ---------------------------------------------------------------------------
+test('39. expanded inspector removes its mobile max-height cap on desktop', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  const branchMatch = inspectorSource.match(/isMobileExpanded\s*\?\s*'([^']+)'\s*:\s*'([^']+)'/);
+
+  assert.ok(branchMatch, 'isMobileExpanded expanded and collapsed class branches must exist');
+  const [, expandedBranch, collapsedBranch] = branchMatch;
+
+  assert.ok(expandedBranch.includes('h-[62vh]'), 'Mobile expanded inspector must remain 62vh high');
+  assert.ok(expandedBranch.includes('max-h-[75vh]'), 'Mobile expanded inspector must retain its 75vh maximum height');
+  assert.ok(expandedBranch.includes('lg:h-full'), 'Desktop expanded inspector must use full height');
+  assert.ok(expandedBranch.includes('lg:max-h-none'), 'Desktop expanded inspector must remove the mobile max-height cap');
+
+  assert.ok(collapsedBranch.includes('lg:h-full'), 'Desktop collapsed inspector must use full height');
+  assert.ok(!collapsedBranch.includes('max-h-[75vh]'), 'Collapsed inspector must not carry the mobile expanded max-height cap');
+  assert.ok(!collapsedBranch.includes('lg:max-h-none'), 'Collapsed inspector needs no desktop max-height override');
+});

@@ -153,7 +153,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
       id="right-inspector-panel"
       className={`w-full lg:w-96 xl:w-[420px] bg-[#D4CDA4] border-t-2 lg:border-t-0 lg:border-l border-[#15150F] flex flex-col shrink-0 select-none overflow-hidden transition-all duration-200 ${
         isMobileExpanded 
-          ? 'fixed bottom-0 left-0 right-0 z-30 h-[62vh] max-h-[75vh] shadow-[0_-6px_20px_rgba(21,21,15,0.45)] lg:static lg:h-full lg:shadow-none' 
+          ? 'fixed bottom-0 left-0 right-0 z-30 h-[62vh] max-h-[75vh] shadow-[0_-6px_20px_rgba(21,21,15,0.45)] lg:static lg:h-full lg:max-h-none lg:shadow-none'
           : 'fixed bottom-0 left-0 right-0 z-30 h-11 lg:static lg:h-full'
       }`}
     >
