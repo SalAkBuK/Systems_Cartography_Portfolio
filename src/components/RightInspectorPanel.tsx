@@ -1078,7 +1078,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
 
         {/* CASE 4: UNSELECTED ROOT CONSOLE / VIEW-SPECIFIC OVERVIEWS */}
         {!selectedProject && !selectedSkill && !selectedExperience && (
-          <div className="flex flex-col gap-4">
+          <div className="min-h-full flex-1 flex flex-col gap-4">
             {activeView === 'identity' ? (
               /* --- OPERATOR PROFILE CONSOLE --- */
               <>
@@ -1177,7 +1177,7 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                 </div>
 
                 {/* Actions */}
-                <div className="flex flex-col gap-1.5 mt-1">
+                <div className="flex flex-col gap-1.5 mt-auto pt-2">
                   <button
                     onClick={onOpenContact}
                     className="w-full min-h-[42px] py-2 bg-[#15150F] text-[#C3E54E] font-bold text-[12px] tracking-wider border border-[#15150F] hover:bg-[#2A2920] transition-colors cursor-pointer"
