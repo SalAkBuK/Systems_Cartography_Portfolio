@@ -1,10 +1,15 @@
-import { project3DToIso } from './isometricProjection';
+import { project3DToIso, projectIsoTo3D } from './isometricProjection';
 
 const TWO_PI = Math.PI * 2;
 const TRACK_CLEARANCE_X = 32;
 const TRACK_CLEARANCE_Y = 28;
 const MIN_RADIUS_X = 80;
 const MIN_RADIUS_Y = 55;
+const MOUNTED_VISUAL_HEIGHT = 58;
+const MOUNTED_CLEARANCE = 2;
+
+/** Canonical twelve-o'clock start shared by every capability constellation. */
+export const CAPABILITY_REACTOR_START_ANGLE = -Math.PI / 2;
 
 export interface CapabilityReactorSource {
   id: string;
@@ -28,6 +33,53 @@ export interface CapabilityReactorMarker {
   y2: number;
 }
 
+function getCapabilityVisualHalfWidth(capability: CapabilityReactorSource): number {
+  // Mirrors the existing 10px technology and 8.5px system-count labels in
+  // TopologyCanvas, while retaining the 48px plinth as the minimum footprint.
+  const technologyHalfWidth = capability.technologyLabel.length * 6.1 / 2;
+  const countHalfWidth = `${capability.systemCount} SYSTEMS`.length * 5.2 / 2;
+  return Math.max(24, technologyHalfWidth, countHalfWidth);
+}
+
+/**
+ * The full, unfiltered activeSkills sequence is the canonical identity order.
+ * Keeping this tiny helper explicit prevents search/focus/render subsets from
+ * ever becoming an accidental slot authority.
+ */
+export function getDeterministicCapabilityOrder(
+  capabilities: CapabilityReactorSource[]
+): string[] {
+  return capabilities.map(capability => capability.id);
+}
+
+/**
+ * Returns the world-coordinate center expected by TopologyCanvas for one
+ * capability mounted on the fixed reactor ellipse. reactorPhase already
+ * carries the counterclockwise sign, so it is applied exactly once here.
+ */
+export function getMountedCapabilityPosition(
+  index: number,
+  count: number,
+  geometry: CapabilityReactorGeometry,
+  reactorPhase: number
+): { x: number; y: number } {
+  const safeCount = Math.max(1, Math.floor(count));
+  const safeIndex = Number.isFinite(index) ? index : 0;
+  const safePhase = Number.isFinite(reactorPhase) ? reactorPhase : 0;
+  const angle = CAPABILITY_REACTOR_START_ANGLE + (safeIndex / safeCount) * TWO_PI + safePhase;
+  const isoX = geometry.centerIso.x + geometry.radiusX * Math.cos(angle);
+  const isoY = geometry.centerIso.y + geometry.radiusY * Math.sin(angle);
+  return projectIsoTo3D(isoX, isoY);
+}
+
+/** Runtime drag overrides are the only layer allowed to supersede mounting. */
+export function getEffectiveCapabilityPositions(
+  mountedPositions: Record<string, { x: number; y: number }>,
+  customPositions: Record<string, { x: number; y: number }>
+): Record<string, { x: number; y: number }> {
+  return { ...mountedPositions, ...customPositions };
+}
+
 /**
  * Derives a fixed reactor ellipse from canonical capability positions and the
  * actual plinth/label footprint. Runtime drag overrides are deliberately not
@@ -49,11 +101,7 @@ export function deriveCapabilityReactorGeometry(
   const bounds = capabilities.map(capability => {
     const canonicalPosition = canonicalPositions[capability.id] ?? { x: 0, y: 0 };
     const center = project3DToIso(canonicalPosition.x, canonicalPosition.y, 0);
-    // Capability labels use 10px and 8.5px monospace text in TopologyCanvas.
-    // These conservative character-width estimates include the plinth itself.
-    const technologyHalfWidth = capability.technologyLabel.length * 6.1 / 2;
-    const countHalfWidth = `${capability.systemCount} SYSTEMS`.length * 5.2 / 2;
-    const halfWidth = Math.max(24, technologyHalfWidth, countHalfWidth);
+    const halfWidth = getCapabilityVisualHalfWidth(capability);
     return {
       minX: center.x - halfWidth,
       maxX: center.x + halfWidth,
@@ -73,16 +121,43 @@ export function deriveCapabilityReactorGeometry(
     y: (canonicalVisualBounds.minY + canonicalVisualBounds.maxY) / 2,
   };
 
+  const baseRadiusX = Math.max(
+    MIN_RADIUS_X,
+    (canonicalVisualBounds.maxX - canonicalVisualBounds.minX) / 2 + TRACK_CLEARANCE_X
+  );
+  const baseRadiusY = Math.max(
+    MIN_RADIUS_Y,
+    (canonicalVisualBounds.maxY - canonicalVisualBounds.minY) / 2 + TRACK_CLEARANCE_Y
+  );
+
+  // Twenty-four mounted labels do not quite clear one another on the approved
+  // base ellipse. Grow both reactor-only radii by the smallest uniform scale
+  // that separates every canonical adjacent pair throughout a full rotation.
+  // For adjacent slot chord components A*sin(theta), B*cos(theta), the exact
+  // worst-case scale is hypot(requiredWidth/A, requiredHeight/B).
+  const count = capabilities.length;
+  const halfSlotChord = Math.sin(Math.PI / count);
+  let mountedClearanceScale = 1;
+  for (let index = 0; count > 1 && index < count; index++) {
+    const nextIndex = (index + 1) % count;
+    const requiredWidth =
+      getCapabilityVisualHalfWidth(capabilities[index]) +
+      getCapabilityVisualHalfWidth(capabilities[nextIndex]) +
+      MOUNTED_CLEARANCE;
+    const requiredHeight = MOUNTED_VISUAL_HEIGHT + MOUNTED_CLEARANCE;
+    mountedClearanceScale = Math.max(
+      mountedClearanceScale,
+      Math.hypot(
+        requiredWidth / (2 * baseRadiusX * halfSlotChord),
+        requiredHeight / (2 * baseRadiusY * halfSlotChord)
+      )
+    );
+  }
+
   return {
     centerIso,
-    radiusX: Math.max(
-      MIN_RADIUS_X,
-      (canonicalVisualBounds.maxX - canonicalVisualBounds.minX) / 2 + TRACK_CLEARANCE_X
-    ),
-    radiusY: Math.max(
-      MIN_RADIUS_Y,
-      (canonicalVisualBounds.maxY - canonicalVisualBounds.minY) / 2 + TRACK_CLEARANCE_Y
-    ),
+    radiusX: baseRadiusX * mountedClearanceScale,
+    radiusY: baseRadiusY * mountedClearanceScale,
     canonicalVisualBounds,
   };
 }
