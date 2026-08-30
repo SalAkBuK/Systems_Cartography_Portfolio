@@ -30,7 +30,6 @@ import {
   ViewportState,
   TopologyViewMode
 } from '../types';
-import { VERIFIED_TOPOLOGY_ZONES as TOPOLOGY_ZONES } from '../data/verifiedPortfolioData';
 import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
@@ -89,12 +88,19 @@ import {
 } from '../utils/orbitMotion';
 import {
   buildCapabilityReactorSegmentPaths,
+  CAPABILITY_REACTOR_SETTLE_DURATION_MS,
+  computeCapabilityCaptureAttraction,
+  computeCapabilityMagneticRenderPosition,
+  createCapabilitySettlingTransition,
   deriveCapabilityReactorGeometry,
-  getDeterministicCapabilityOrder,
-  getEffectiveCapabilityPositions,
   getCapabilityReactorDashOffset,
   getCapabilityReactorMarker,
-  getMountedCapabilityPosition
+  getDeterministicCapabilityOrder,
+  getEffectiveCapabilityPositions,
+  getMountedCapabilityPosition,
+  projectPointOntoCapabilityReactor,
+  stepCapabilitySettling,
+  type CapabilitySettlingTransition,
 } from '../utils/capabilityReactor';
 import {
   resolveProjectDockState,
@@ -353,6 +359,39 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const isReactorOrbitRunning = !isReactorOrbitPaused && !isPauseConditionActive && isResumeReady;
   const isDualOrbitMachineRunning = isProjectOrbitRunning || isReactorOrbitRunning;
 
+  // PR28: Capability Reactor re-docking settling transition.
+  // Evaluated directly on each dual orbit clock tick against next.reactorPhase.
+  const capabilitySettlingRef = useRef<CapabilitySettlingTransition | null>(null);
+  const [capabilitySettlingRenderPositions, setCapabilitySettlingRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
+
+  const cancelCapabilitySettling = useCallback(() => {
+    capabilitySettlingRef.current = null;
+    setCapabilitySettlingRenderPositions(null);
+  }, []);
+
+  const commitCapabilitySettling = useCallback((
+    capabilityId: string,
+    fromWorldPos: { x: number; y: number },
+    slotIndex: number,
+    slotCount: number,
+    durationMs: number = CAPABILITY_REACTOR_SETTLE_DURATION_MS
+  ) => {
+    if (prefersReducedMotion || !isDualOrbitMachineRunning) {
+      capabilitySettlingRef.current = null;
+      setCapabilitySettlingRenderPositions(null);
+      return;
+    }
+    const transition = createCapabilitySettlingTransition(
+      capabilityId,
+      fromWorldPos,
+      slotIndex,
+      slotCount,
+      durationMs
+    );
+    capabilitySettlingRef.current = transition;
+    setCapabilitySettlingRenderPositions({ [capabilityId]: fromWorldPos });
+  }, [prefersReducedMotion, isDualOrbitMachineRunning]);
+
   const [projectOrbitPhase, setProjectOrbitPhase] = useState(0);
   const projectOrbitPhaseRef = useRef(0);
   const [reactorOrbitPhase, setReactorOrbitPhase] = useState(0);
@@ -398,6 +437,25 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       projectOrbitPhaseRef.current = next.projectPhase;
       setProjectOrbitPhase(next.projectPhase);
       setReactorOrbitPhase(next.reactorPhase);
+
+      if (capabilitySettlingRef.current) {
+        const result = stepCapabilitySettling(
+          capabilitySettlingRef.current,
+          timestamp,
+          capabilityReactorGeometry,
+          next.reactorPhase
+        );
+        capabilitySettlingRef.current = result.nextTransition;
+        if (result.isComplete) {
+          capabilitySettlingRef.current = null;
+          setCapabilitySettlingRenderPositions(null);
+        } else {
+          setCapabilitySettlingRenderPositions({
+            [capabilitySettlingRef.current.capabilityId]: result.position,
+          });
+        }
+      }
+
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
@@ -408,6 +466,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projectOrbitRateMultiplier,
     isReactorOrbitRunning,
     reactorOrbitRateMultiplier,
+    capabilityReactorGeometry,
   ]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
@@ -604,8 +663,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
       return draggingNode.currentPos;
     }
+    if (capabilitySettlingRenderPositions && capabilitySettlingRenderPositions[skill.id]) {
+      return capabilitySettlingRenderPositions[skill.id];
+    }
     return effectiveSkillPositions[skill.id] || skill.gridPosition;
-  }, [draggingNode, effectiveSkillPositions]);
+  }, [draggingNode, capabilitySettlingRenderPositions, effectiveSkillPositions]);
 
   // PR23 product pivot: derives the actively-dragged project's magnetic dock
   // state and its whole-ellipse projection/attraction toward the shared orbit
@@ -638,6 +700,22 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
     return { project, projection, dockState, attraction, rawPos };
   }, [draggingNode, projectsById, projectDockState, staticOrbitalLattice]);
+
+  // PR28: Derives actively-dragged capability's projection and magnetic capture
+  // state relative to the Capability Reactor ellipse.
+  const activeCapabilityDockingPreview = useMemo(() => {
+    if (!draggingNode || draggingNode.type !== 'skill') return null;
+    const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
+    const rawIso = project3DToIso(rawPos.x, rawPos.y, 0);
+    const projection = projectPointOntoCapabilityReactor(rawIso, capabilityReactorGeometry);
+    const attraction = computeCapabilityCaptureAttraction(projection.distanceIso);
+    return {
+      projection,
+      attraction,
+      rawPos,
+      isCapturing: attraction.isWithinCaptureRadius,
+    };
+  }, [draggingNode, capabilityReactorGeometry]);
 
   // Check if a skill and project are connected through centralized association engine
   const isSkillConnectedToProject = useCallback((skillId: string, projectId: string) => {
@@ -707,12 +785,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const restoreCanonicalDockMembership = useCallback(() => {
     setDraggingNode(null);
     cancelOrbitReflow();
+    cancelCapabilitySettling();
     setCustomProjectPositions({});
     setCustomSkillPositions({});
     setProjectDockState({});
     setInteractiveOrbitOrder(null);
     resetOrbitPhasesToCanonical();
-  }, [cancelOrbitReflow, resetOrbitPhasesToCanonical]);
+  }, [cancelOrbitReflow, cancelCapabilitySettling, resetOrbitPhasesToCanonical]);
 
   const resetAllPositions = useCallback(() => {
     restoreCanonicalDockMembership();
@@ -772,6 +851,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return resolved.foundValidPosition ? resolved : null;
     }
 
+    if (activeCapabilityDockingPreview?.isCapturing) return null;
+
     return findNearestValidGridPosition(
       draggingNode.type,
       draggingNode.id,
@@ -784,7 +865,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       gridSnapEnabled
     );
   }, [
-    draggingNode, activeDockingPreview, projectsById, projectDockState,
+    draggingNode, activeDockingPreview, activeCapabilityDockingPreview, projectsById, projectDockState,
     dockedOrbitOrder, staticOrbitalLattice, effectiveProjectPositions,
     effectiveSkillPositions, projects, activeSkills, gridSnapEnabled
   ]);
@@ -792,6 +873,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // Real-time raw collision warning if directly hovering over another node
   const liveCollision = useMemo(() => {
     if (!draggingNode || !draggingNode.hasMoved) return null;
+    if (draggingNode.type === 'skill' && activeCapabilityDockingPreview?.isCapturing) return null;
     return checkCollisions(
       draggingNode.type,
       draggingNode.id,
@@ -801,7 +883,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       projects,
       activeSkills
     );
-  }, [draggingNode, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
+  }, [draggingNode, activeCapabilityDockingPreview, effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills]);
 
   // Update container size on resize
   useEffect(() => {
@@ -916,6 +998,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projectDockState,
     commitOrbitReflow,
     staticOrbitalLattice,
+    capabilityReactorGeometry,
+    canonicalCapabilityOrder,
+    commitCapabilitySettling,
   });
   dragRuntimeRef.current = {
     viewport,
@@ -932,6 +1017,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projectDockState,
     commitOrbitReflow,
     staticOrbitalLattice,
+    capabilityReactorGeometry,
+    canonicalCapabilityOrder,
+    commitCapabilitySettling,
   };
 
   // Global window mousemove & mouseup listeners for buttery smooth dragging
@@ -945,18 +1033,30 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const processMove = (clientX: number, clientY: number) => {
       const draggingNode = draggingNodeRef.current;
       if (!draggingNode) return;
-      const { viewport, projectsById, staticOrbitalLattice } = dragRuntimeRef.current;
+      const { viewport, projectsById, staticOrbitalLattice, capabilityReactorGeometry } = dragRuntimeRef.current;
       const deltaScreenX = (clientX - draggingNode.startClientX) / viewport.zoom;
       const deltaScreenY = (clientY - draggingNode.startClientY) / viewport.zoom;
       const moved = Math.hypot(deltaScreenX, deltaScreenY) > 3;
 
       if (draggingNode.type === 'skill') {
         const delta3D = projectIsoTo3D(deltaScreenX, deltaScreenY);
-        const newPos = {
+        const rawPos = {
           x: Math.round(draggingNode.startNodePos.x + delta3D.x),
           y: Math.round(draggingNode.startNodePos.y + delta3D.y),
         };
-        setDraggingNode(prev => prev ? { ...prev, currentPos: newPos, hasMoved: prev.hasMoved || moved } : null);
+        const rawIso = project3DToIso(rawPos.x, rawPos.y, 0);
+        const projection = projectPointOntoCapabilityReactor(rawIso, capabilityReactorGeometry);
+        const attraction = computeCapabilityCaptureAttraction(projection.distanceIso);
+        let renderedPos = rawPos;
+        if (attraction.isWithinCaptureRadius) {
+          renderedPos = computeCapabilityMagneticRenderPosition(rawPos, projection.projectedPointWorld, attraction.strength);
+        }
+        setDraggingNode(prev => prev ? {
+          ...prev,
+          rawPos,
+          currentPos: renderedPos,
+          hasMoved: prev.hasMoved || moved,
+        } : null);
         return;
       }
 
@@ -1037,25 +1137,55 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         projectDockState,
         commitOrbitReflow,
         staticOrbitalLattice,
+        capabilityReactorGeometry,
+        canonicalCapabilityOrder,
+        commitCapabilitySettling,
       } = dragRuntimeRef.current;
 
       if (draggingNode.type === 'skill') {
         if (!draggingNode.hasMoved) {
           onSelectSkill(draggingNode.id);
         } else {
-          const resolved = findNearestValidGridPosition(
-            'skill', draggingNode.id, draggingNode.currentPos,
-            effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills,
-            GRID_SNAP_STEP, gridSnapEnabled
-          );
-          const finalPos = { x: resolved.x, y: resolved.y };
-          setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
-          if (resolved.wasAdjusted) {
-            setSnapNotice({ message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`, type: 'collision' });
-            setTimeout(() => setSnapNotice(null), 2500);
-          } else if (gridSnapEnabled) {
-            setSnapNotice({ message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`, type: 'snap' });
-            setTimeout(() => setSnapNotice(null), 1800);
+          const rawPos = draggingNode.rawPos ?? draggingNode.currentPos;
+          const rawIso = project3DToIso(rawPos.x, rawPos.y, 0);
+          const projection = projectPointOntoCapabilityReactor(rawIso, capabilityReactorGeometry);
+          const attraction = computeCapabilityCaptureAttraction(projection.distanceIso);
+
+          if (attraction.isWithinCaptureRadius) {
+            // REATTACH TO CAPABILITY REACTOR
+            setCustomSkillPositions(prev => {
+              const next = { ...prev };
+              delete next[draggingNode.id];
+              return next;
+            });
+            const slotIndex = canonicalCapabilityOrder.indexOf(draggingNode.id);
+            const slotCount = canonicalCapabilityOrder.length;
+            if (slotIndex !== -1 && slotCount > 0) {
+              commitCapabilitySettling(
+                draggingNode.id,
+                draggingNode.currentPos,
+                slotIndex,
+                slotCount
+              );
+            }
+            setSnapNotice({ message: 'REACTOR CAPTURE // REATTACHED TO RING 01', type: 'snap' });
+            setTimeout(() => setSnapNotice(null), 2000);
+          } else {
+            // DETACHED // Freeform placement with grid snap and collision avoidance
+            const resolved = findNearestValidGridPosition(
+              'skill', draggingNode.id, draggingNode.currentPos,
+              effectiveProjectPositions, effectiveSkillPositions, projects, activeSkills,
+              GRID_SNAP_STEP, gridSnapEnabled
+            );
+            const finalPos = { x: resolved.x, y: resolved.y };
+            setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: finalPos }));
+            if (resolved.wasAdjusted) {
+              setSnapNotice({ message: `AUTO-ALIGNED // PREVENTED OVERLAP WITH ${resolved.collidingWith || 'ADJACENT NODE'}`, type: 'collision' });
+              setTimeout(() => setSnapNotice(null), 2500);
+            } else if (gridSnapEnabled) {
+              setSnapNotice({ message: `SNAPPED TO GRID [X:${finalPos.x}, Y:${finalPos.y}]`, type: 'snap' });
+              setTimeout(() => setSnapNotice(null), 1800);
+            }
           }
         }
         setDraggingNode(null);
@@ -1861,46 +1991,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           ))}
         </g>
 
-        {/* Regional Zone Boundaries */}
-        <g id="zones" className={`transition-opacity duration-200 ${isHoverFocus ? 'opacity-25' : 'opacity-100'}`}>
-          {TOPOLOGY_ZONES.map(zone => {
-            const topLeftIso = project3DToIso(zone.bounds.x, zone.bounds.y, 0);
-            const topRightIso = project3DToIso(zone.bounds.x + zone.bounds.width, zone.bounds.y, 0);
-            const bottomRightIso = project3DToIso(zone.bounds.x + zone.bounds.width, zone.bounds.y + zone.bounds.height, 0);
-            const bottomLeftIso = project3DToIso(zone.bounds.x, zone.bounds.y + zone.bounds.height, 0);
-
-            const path = `M ${topLeftIso.x} ${topLeftIso.y} L ${topRightIso.x} ${topRightIso.y} L ${bottomRightIso.x} ${bottomRightIso.y} L ${bottomLeftIso.x} ${bottomLeftIso.y} Z`;
-
-            return (
-              <g key={zone.id}>
-                <path
-                  d={path}
-                  fill="rgba(21, 21, 15, 0.025)"
-                  stroke="#15150F"
-                  strokeWidth="0.8"
-                  strokeDasharray="6 6"
-                />
-                {/* Zone Label */}
-                <text
-                  x={topLeftIso.x + 8}
-                  y={topLeftIso.y - 10}
-                  fontSize="9"
-                  fontWeight="bold"
-                  fill="#5C5946"
-                  fontFamily="monospace"
-                  letterSpacing="1"
-                >
-                  {zone.name}
-                </text>
-                {/* Corner registration crosshairs */}
-                <path d={`M ${topLeftIso.x - 4} ${topLeftIso.y} L ${topLeftIso.x + 4} ${topLeftIso.y} M ${topLeftIso.x} ${topLeftIso.y - 4} L ${topLeftIso.x} ${topLeftIso.y + 4}`} stroke="#15150F" strokeWidth="1" />
-                <path d={`M ${topRightIso.x - 4} ${topRightIso.y} L ${topRightIso.x + 4} ${topRightIso.y} M ${topRightIso.x} ${topRightIso.y - 4} L ${topRightIso.x} ${topRightIso.y + 4}`} stroke="#15150F" strokeWidth="1" />
-                <path d={`M ${bottomRightIso.x - 4} ${bottomRightIso.y} L ${bottomRightIso.x + 4} ${bottomRightIso.y} M ${bottomRightIso.x} ${bottomRightIso.y - 4} L ${bottomRightIso.x} ${bottomRightIso.y + 4}`} stroke="#15150F" strokeWidth="1" />
-                <path d={`M ${bottomLeftIso.x - 4} ${bottomLeftIso.y} L ${bottomLeftIso.x + 4} ${bottomLeftIso.y} M ${bottomLeftIso.x} ${bottomLeftIso.y - 4} L ${bottomLeftIso.x} ${bottomLeftIso.y + 4}`} stroke="#15150F" strokeWidth="1" />
-              </g>
-            );
-          })}
-        </g>
+        {/* Regional Zone Boundaries Layer */}
+        <g id="zones" className={`transition-opacity duration-200 ${isHoverFocus ? 'opacity-25' : 'opacity-100'}`} />
 
         {/* Orbital Field Guides: subtle drafting-style guide ellipse and registration ticks */}
         <g id="orbital-field-guides" pointerEvents="none" className="pointer-events-none" opacity={0.25}>
@@ -2224,6 +2316,42 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 >
                   {isSkillConnected && hoveredProjectId ? 'CONNECTED // ' : ''}{skill.systemCount} SYSTEMS
                 </text>
+
+                {/* PR28 / Capability Reactor Magnetic Capture Preview Tether & Target Diamond */}
+                {isThisDragging && draggingNode.hasMoved && activeCapabilityDockingPreview && (() => {
+                  const { projection, isCapturing } = activeCapabilityDockingPreview;
+                  const markerColor = isCapturing ? '#C3E54E' : '#15150F';
+                  const markerOpacity = isCapturing ? 0.9 : 0.35;
+                  const m = 5;
+                  return (
+                    <g className="pointer-events-none">
+                      <line
+                        x1={projection.projectedPointIso.x}
+                        y1={projection.projectedPointIso.y}
+                        x2={posIso.x}
+                        y2={posIso.y}
+                        stroke={isCapturing ? '#C3E54E' : 'rgba(21, 21, 15, 0.35)'}
+                        strokeWidth={isCapturing ? 1.1 : 0.6}
+                        strokeDasharray="3 3"
+                        opacity={isCapturing ? 0.7 : 0.3}
+                      />
+                      <path
+                        d={`M ${projection.projectedPointIso.x} ${projection.projectedPointIso.y - m} L ${projection.projectedPointIso.x + m} ${projection.projectedPointIso.y} L ${projection.projectedPointIso.x} ${projection.projectedPointIso.y + m} L ${projection.projectedPointIso.x - m} ${projection.projectedPointIso.y} Z`}
+                        fill="none"
+                        stroke={markerColor}
+                        strokeWidth={isCapturing ? 1.4 : 1}
+                        opacity={markerOpacity}
+                      />
+                      <circle
+                        cx={projection.projectedPointIso.x}
+                        cy={projection.projectedPointIso.y}
+                        r={1.2}
+                        fill={markerColor}
+                        opacity={markerOpacity}
+                      />
+                    </g>
+                  );
+                })()}
               </g>
             );
           })}

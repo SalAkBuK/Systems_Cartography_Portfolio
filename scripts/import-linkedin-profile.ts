@@ -36,12 +36,16 @@ function groupIntoLines(items: PositionedText[]): string[] {
     .filter(Boolean);
 }
 
-async function extractPdfColumns(pdfPath: string): Promise<{ main: string[]; sidebar: string[] }> {
+export async function extractPdfColumnsFromBytes(bytes: Uint8Array): Promise<{ main: string[]; sidebar: string[] }> {
+  if (!bytes || bytes.length === 0) {
+    throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
+  }
+
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const bytes = new Uint8Array(await readFile(pdfPath));
   const document = await pdfjs.getDocument({ data: bytes }).promise;
   const main: string[] = [];
   const sidebar: string[] = [];
+  let totalItems = 0;
 
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
     const page = await document.getPage(pageNumber);
@@ -57,26 +61,61 @@ async function extractPdfColumns(pdfPath: string): Promise<{ main: string[]; sid
       positioned.push({ str: item.str, x, y });
     }
 
+    totalItems += positioned.length;
+    if (positioned.length === 0) continue;
+
     const splitX = viewport.width * 0.35;
-    const pageSidebar = groupIntoLines(positioned.filter(item => item.x < splitX));
-    const pageMain = groupIntoLines(positioned.filter(item => item.x >= splitX));
-    main.push(...pageMain);
-    sidebar.push(...pageSidebar);
+    const leftItems = positioned.filter(item => item.x < splitX);
+    const rightItems = positioned.filter(item => item.x >= splitX);
+
+    const isSidebarHeading = (str: string) => /^(?:contact|top\s+skills|skills|certifications|licenses|languages|honors|publications|patents):?$/i.test(str.trim());
+    const hasSidebarHeadings = leftItems.some(item => isSidebarHeading(item.str));
+
+    if (pageNumber === 1 && (hasSidebarHeadings || rightItems.length > 0)) {
+      const pageSidebar = groupIntoLines(leftItems);
+      const pageMain = groupIntoLines(rightItems);
+      main.push(...pageMain);
+      sidebar.push(...pageSidebar);
+    } else if (hasSidebarHeadings) {
+      const pageSidebar = groupIntoLines(leftItems);
+      const pageMain = groupIntoLines(rightItems);
+      main.push(...pageMain);
+      sidebar.push(...pageSidebar);
+    } else {
+      // Full-width page (e.g. Page 2, 3+ with Experience, Education)
+      const pageMain = groupIntoLines(positioned);
+      main.push(...pageMain);
+    }
   }
 
-  if (!main.some(line => /^Experience$/i.test(line))) {
-    throw new Error('LinkedIn Experience section was not detected in the PDF. The export layout may not be supported yet.');
+  if (totalItems === 0 || (main.length === 0 && sidebar.length === 0)) {
+    throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
   }
+
   return { main, sidebar };
 }
 
-function githubProfileFromRemote(remote: string): string {
+export async function extractPdfColumns(pdfPath: string): Promise<{ main: string[]; sidebar: string[] }> {
+  const bytes = new Uint8Array(await readFile(pdfPath));
+  return extractPdfColumnsFromBytes(bytes);
+}
+
+export async function parseLinkedInPdfBytes(
+  bytes: Uint8Array,
+  githubTarget = ''
+): Promise<ReturnType<typeof buildGeneratedOwnerProfile>> {
+  const extracted = await extractPdfColumnsFromBytes(bytes);
+  const parsed = parseLinkedInProfileText(extracted.main, extracted.sidebar);
+  return buildGeneratedOwnerProfile(parsed, githubTarget, new Date().toISOString());
+}
+
+export function githubProfileFromRemote(remote: string): string {
   const normalized = remote.trim();
   const match = normalized.match(/github\.com(?::|\/)([^/]+)\/[^/]+(?:\.git)?$/i);
   return match ? `https://github.com/${match[1]}` : '';
 }
 
-async function inferGitHubTarget(): Promise<string> {
+export async function inferGitHubTarget(): Promise<string> {
   const explicit = readArg('--github');
   if (explicit) return explicit.replace(/\/$/, '');
   try {
@@ -87,11 +126,19 @@ async function inferGitHubTarget(): Promise<string> {
   }
 }
 
-function renderGeneratedModule(profile: ReturnType<typeof buildGeneratedOwnerProfile>): string {
+export function renderGeneratedModule(profile: ReturnType<typeof buildGeneratedOwnerProfile>): string {
   return `import type { GeneratedOwnerProfile } from '../types';\n\n/**\n * GENERATED OWNER PROFILE.\n *\n * Created by \`npm run setup -- <linkedin-profile.pdf>\`.\n * The source PDF is intentionally not stored in the repository.\n * Review this generated data before committing it.\n */\nexport const OWNER_PROFILE: GeneratedOwnerProfile = ${JSON.stringify(profile, null, 2)};\n`;
 }
 
-function printReview(profile: ReturnType<typeof buildGeneratedOwnerProfile>): void {
+export async function writeGeneratedOwnerProfile(
+  profile: ReturnType<typeof buildGeneratedOwnerProfile>,
+  outputPath = 'src/data/ownerProfile.generated.ts'
+): Promise<void> {
+  await mkdir('src/data', { recursive: true });
+  await writeFile(outputPath, renderGeneratedModule(profile), 'utf8');
+}
+
+export function printReview(profile: ReturnType<typeof buildGeneratedOwnerProfile>): void {
   console.log('\n========================================');
   console.log(' OWNER PROFILE IMPORT // REVIEW');
   console.log('========================================');
@@ -148,7 +195,9 @@ async function main(): Promise<void> {
   console.log('Next: npm test && npm run lint && npm run build');
 }
 
-main().catch(error => {
-  console.error(`\nLinkedIn import failed: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-});
+if (process.argv[1]?.endsWith('import-linkedin-profile.ts')) {
+  main().catch(error => {
+    console.error(`\nLinkedIn import failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}

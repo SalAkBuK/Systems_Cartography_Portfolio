@@ -1,6 +1,7 @@
 import { writeFile, rename, unlink } from 'node:fs/promises';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig';
 import { connectGitHubTarget, GitHubSyncResult, GitHubFetchOptions, DEFAULT_INSPECTION_CONCURRENCY } from '../src/services/githubService';
+import { resolveGitHubAuth } from './githubAuthResolver';
 import type { GitHubSnapshotMetadata } from '../src/types';
 
 function readArg(flag: string): string | undefined {
@@ -28,9 +29,16 @@ export async function generateGitHubSnapshot(
   target: string,
   options?: GitHubFetchOptions
 ): Promise<{ metadata: GitHubSnapshotMetadata; snapshot: GitHubSyncResult; outputContent: string }> {
+  let activeToken = options?.token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (!activeToken) {
+    const auth = await resolveGitHubAuth();
+    activeToken = auth.token;
+  }
+
   const result = await connectGitHubTarget(target, {
     inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
-    ...options
+    ...options,
+    token: activeToken
   });
 
   if (!result.inspectionSummary) {
@@ -63,7 +71,7 @@ export async function generateGitHubSnapshot(
   const outputContent = serializeGitHubSnapshot(metadata, result);
 
   // Safety audit: Check for token leaks or local machine paths
-  if (options?.token && outputContent.includes(options.token)) {
+  if (activeToken && outputContent.includes(activeToken)) {
     throw new Error('FATAL: Injected GitHub token detected in serialized snapshot output!');
   }
   if (outputContent.includes('Authorization: Bearer') || outputContent.includes('ghp_')) {
@@ -102,18 +110,18 @@ export async function syncGitHubSnapshotToFile(
 
 async function main() {
   const target = readArg('--target') || readArg('--github') || PORTFOLIO_CONFIG.githubTarget;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const auth = await resolveGitHubAuth();
 
   console.log(`[sync:github] Fetching public repository snapshot for target: ${target}`);
-  if (token) {
-    console.log(`[sync:github] Using authenticated GitHub API token.`);
+  if (auth.authenticated) {
+    console.log(`[sync:github] Using authenticated GitHub API (${auth.mode}).`);
   } else {
-    console.log(`[sync:github] No GITHUB_TOKEN detected. Requests will run unauthenticated.`);
+    console.log(`[sync:github] No GitHub credentials detected (${auth.mode}). Requests will run unauthenticated.`);
   }
 
   const startTime = Date.now();
   const { metadata, snapshot } = await syncGitHubSnapshotToFile(target, {
-    token,
+    token: auth.token,
     inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY
   });
 

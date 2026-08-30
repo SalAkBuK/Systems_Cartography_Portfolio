@@ -1,6 +1,7 @@
 import { ExperienceNode, OperatorMetadata } from '../types';
 import { OWNER_PROFILE } from '../data/ownerProfile.generated';
 import { resolveProfessionalExperience } from '../services/experienceResolver';
+import { OWNER_PORTFOLIO_PREFERENCES } from './ownerPreferences';
 
 const githubTarget = OWNER_PROFILE.githubTarget.replace(/\/$/, '');
 const githubUsername = githubTarget.split('/').filter(Boolean).pop() || 'owner';
@@ -25,6 +26,7 @@ export const PORTFOLIO_CONFIG: {
   contactFormEndpoint: string;
   operator: OperatorMetadata;
   projectLinks?: Record<string, string>;
+  flagshipProjectIds?: string[];
   experience?: ExperienceNode[];
 } = {
   siteId: `${siteOwnerId}.SYSTEMS.PORTFOLIO`,
@@ -58,5 +60,6 @@ export const PORTFOLIO_CONFIG: {
   projectLinks: {
     // Optional manual override. GitHub repository Website/Homepage remains the fallback.
   },
+  flagshipProjectIds: OWNER_PORTFOLIO_PREFERENCES.flagshipProjectIds,
   experience: resolveProfessionalExperience({ importedExperience: OWNER_PROFILE.experience })
 };

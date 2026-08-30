@@ -350,3 +350,54 @@ export function applyProjectLinkOverrides(
   });
 }
 
+/**
+ * Pure resolver for owner-curated flagship projects.
+ * - When `flagshipIds` is explicitly provided and non-empty:
+ *   - Respects the exact ordering of `flagshipIds`
+ *   - Safely ignores unknown, missing, or empty IDs
+ *   - Never returns duplicate projects
+ *   - Caps results at `limit` (default: 4)
+ *   - Does NOT backfill with unconfigured projects
+ * - Fallback: When `flagshipIds` is absent or empty, defaults to the first `limit` active projects.
+ */
+export function resolveFlagshipProjects(
+  projects: ProjectData[],
+  flagshipIds?: string[],
+  limit: number = 4
+): ProjectData[] {
+  if (!Array.isArray(projects) || projects.length === 0) {
+    return [];
+  }
+
+  const effectiveLimit = Math.max(1, limit);
+
+  // If flagshipIds is explicitly provided and non-empty, resolve strictly against configured IDs
+  if (Array.isArray(flagshipIds) && flagshipIds.length > 0) {
+    const projectMap = new Map<string, ProjectData>();
+    for (const p of projects) {
+      if (p && p.id) {
+        projectMap.set(p.id.toLowerCase().trim(), p);
+      }
+    }
+
+    const result: ProjectData[] = [];
+    const addedIds = new Set<string>();
+
+    for (const rawId of flagshipIds) {
+      if (result.length >= effectiveLimit) break;
+      if (!rawId || typeof rawId !== 'string') continue;
+      const normalizedId = rawId.toLowerCase().trim();
+      const match = projectMap.get(normalizedId);
+      if (match && !addedIds.has(match.id.toLowerCase().trim())) {
+        result.push(match);
+        addedIds.add(match.id.toLowerCase().trim());
+      }
+    }
+
+    return result;
+  }
+
+  // Fallback: when configuration is absent or empty, return the first `limit` active projects
+  return projects.slice(0, effectiveLimit);
+}
+

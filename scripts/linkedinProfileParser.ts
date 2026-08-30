@@ -24,13 +24,50 @@ export interface ParsedLinkedInProfile {
   warnings: string[];
 }
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
+const MONTH_NAMES: Array<{ name: string; index: number; patterns: string[] }> = [
+  { name: 'January', index: 1, patterns: ['january', 'jan'] },
+  { name: 'February', index: 2, patterns: ['february', 'feb'] },
+  { name: 'March', index: 3, patterns: ['march', 'mar'] },
+  { name: 'April', index: 4, patterns: ['april', 'apr'] },
+  { name: 'May', index: 5, patterns: ['may'] },
+  { name: 'June', index: 6, patterns: ['june', 'jun'] },
+  { name: 'July', index: 7, patterns: ['july', 'jul'] },
+  { name: 'August', index: 8, patterns: ['august', 'aug'] },
+  { name: 'September', index: 9, patterns: ['september', 'sep', 'sept'] },
+  { name: 'October', index: 10, patterns: ['october', 'oct'] },
+  { name: 'November', index: 11, patterns: ['november', 'nov'] },
+  { name: 'December', index: 12, patterns: ['december', 'dec'] }
 ];
-const MONTH_PATTERN = MONTHS.join('|');
-const DATE_RANGE_RE = new RegExp(`^(${MONTH_PATTERN})\\s+(\\d{4})\\s*[-–—]\\s*(Present|(${MONTH_PATTERN})\\s+(\\d{4}))(?:\\s*\\([^)]*\\))?$`, 'i');
-const DURATION_RE = /^\d+\s+(?:yr|yrs|year|years|mo|mos|month|months)(?:\s+\d+\s+(?:mo|mos|month|months))?$/i;
+
+function parseMonthIndex(token: string): number | null {
+  const clean = token.trim().toLowerCase();
+  for (const m of MONTH_NAMES) {
+    if (m.patterns.includes(clean)) return m.index;
+  }
+  return null;
+}
+
+const MONTH_PART = '(?:January|Jan|February|Feb|March|Mar|April|Apr|May|June|Jun|July|Jul|August|Aug|September|Sep|Sept|October|Oct|November|Nov|December|Dec)';
+const RANGE_SEP = '(?:\\s*[-–—]\\s*|\\s+to\\s+)';
+const PRESENT_PART = '(?:Present|Current|Now)';
+
+const FULL_DATE_RANGE_RE = new RegExp(
+  `^(${MONTH_PART})\\s+(\\d{4})` +
+  RANGE_SEP +
+  `(${PRESENT_PART}|(?:(${MONTH_PART})\\s+(\\d{4})))` +
+  `(?:[\\s·(].*)?$`,
+  'i'
+);
+
+const YEAR_ONLY_RANGE_RE = new RegExp(
+  `^(\\d{4})` +
+  RANGE_SEP +
+  `(${PRESENT_PART}|(\\d{4}))` +
+  `(?:[\\s·(].*)?$`,
+  'i'
+);
+
+const DURATION_RE = /^(?:[·•\s]*)?\d+\s+(?:yr|yrs|year|years|mo|mos|month|months)(?:\s+(?:\d+\s+)?(?:mo|mos|month|months))?$/i;
 const FOOTER_RE = /^Page\s+\d+\s+of\s+\d+$/i;
 const BULLET_RE = /^[•·▪◦*-]\s*/;
 
@@ -71,13 +108,58 @@ export function normalizeLinkedInLines(lines: string[]): string[] {
     .filter(line => !FOOTER_RE.test(line));
 }
 
-function section(lines: string[], heading: string, nextHeading?: string): string[] {
-  const start = lines.findIndex(line => line.toLowerCase() === heading.toLowerCase());
-  if (start < 0) return [];
-  const tail = lines.slice(start + 1);
-  if (!nextHeading) return tail;
-  const end = tail.findIndex(line => line.toLowerCase() === nextHeading.toLowerCase());
-  return end < 0 ? tail : tail.slice(0, end);
+const SECTION_PATTERNS: Array<{ type: string; regex: RegExp }> = [
+  { type: 'summary', regex: /^(?:summary|about|about\s+me):?$/i },
+  { type: 'experience', regex: /^(?:experience|work\s+experience|professional\s+experience|employment\s+history):?$/i },
+  { type: 'education', regex: /^(?:education|academic\s+background|degrees):?$/i },
+  { type: 'projects', regex: /^(?:projects|key\s+projects):?$/i },
+  { type: 'volunteer', regex: /^(?:volunteer\s+experience|volunteering):?$/i },
+  { type: 'contact', regex: /^(?:contact|contact\s+info|contact\s+information):?$/i },
+  { type: 'skills', regex: /^(?:top\s+skills|skills|key\s+skills):?$/i },
+  { type: 'certifications', regex: /^(?:certifications|licenses\s+(?:&|and)\s+certifications|licenses):?$/i },
+  { type: 'languages', regex: /^(?:languages):?$/i },
+  { type: 'honors', regex: /^(?:honors-awards|honors\s+(?:&|and)\s+awards|awards):?$/i },
+  { type: 'publications', regex: /^(?:publications):?$/i },
+  { type: 'patents', regex: /^(?:patents):?$/i }
+];
+
+function matchSectionHeading(line: string): string | null {
+  const trimmed = line.trim();
+  if (trimmed.length > 60) return null;
+  for (const s of SECTION_PATTERNS) {
+    if (s.regex.test(trimmed)) return s.type;
+  }
+  return null;
+}
+
+export function partitionSections(lines: string[]): { preamble: string[]; sections: Map<string, string[]> } {
+  const matches: Array<{ type: string; index: number; heading: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const matchedType = matchSectionHeading(lines[i]);
+    if (matchedType) {
+      matches.push({ type: matchedType, index: i, heading: lines[i] });
+    }
+  }
+
+  const sections = new Map<string, string[]>();
+  let preamble: string[] = [];
+
+  if (matches.length === 0) {
+    preamble = [...lines];
+    return { preamble, sections };
+  }
+
+  preamble = lines.slice(0, matches[0].index);
+
+  for (let k = 0; k < matches.length; k++) {
+    const curr = matches[k];
+    const nextIndex = k + 1 < matches.length ? matches[k + 1].index : lines.length;
+    const chunk = lines.slice(curr.index + 1, nextIndex);
+    const existing = sections.get(curr.type) || [];
+    sections.set(curr.type, [...existing, ...chunk]);
+  }
+
+  return { preamble, sections };
 }
 
 function normalizeUrl(url: string): string {
@@ -86,14 +168,17 @@ function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
 }
 
-function parseContact(sidebarLines: string[]): { email: string; linkedin: string } {
-  const contact = section(sidebarLines, 'Contact', 'Top Skills');
-  const email = contact.find(line => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(line)) || '';
-  const urlCandidate = contact
+function parseContact(contactLines: string[], allFallbackLines: string[]): { email: string; linkedin: string } {
+  const candidateLines = contactLines.length > 0 ? contactLines : allFallbackLines;
+  const emailMatch = candidateLines.map(l => l.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)).find(Boolean);
+  const email = emailMatch ? emailMatch[0] : '';
+
+  const cleaned = candidateLines
     .filter(line => line !== email)
     .join('')
-    .replace(/\(LinkedIn\)/gi, '');
-  const match = urlCandidate.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-z0-9_-]+\/?/i);
+    .replace(/\(LinkedIn\)/gi, '')
+    .replace(/\s+/g, '');
+  const match = cleaned.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-z0-9_-]+)/i);
   return { email, linkedin: normalizeUrl(match?.[0] || '') };
 }
 
@@ -128,25 +213,52 @@ function dedupe(values: string[], warningLabel: string, warnings: string[]): str
 
 function looksLikeOrganization(value: string): boolean {
   const line = value.trim();
-  if (!line || BULLET_RE.test(line) || DATE_RANGE_RE.test(line) || DURATION_RE.test(line)) return false;
+  if (!line || BULLET_RE.test(line) || parseDateRange(line) || DURATION_RE.test(line)) return false;
   if (/[.!?]$/.test(line)) return false;
   if (line.length > 80 || line.split(/\s+/).length > 8) return false;
   return true;
 }
 
-function monthIndex(name: string): number {
-  return MONTHS.findIndex(month => month.toLowerCase() === name.toLowerCase()) + 1;
-}
+export function parseDateRange(line: string): { startDate: string; endDate: string | null; yearRange: string } | null {
+  const trimmed = normalizeLinkedInLine(line);
+  if (!trimmed) return null;
 
-function parseDateRange(line: string): { startDate: string; endDate: string | null; yearRange: string } | null {
-  const normalized = normalizeLinkedInLine(line).replace(/\s+\([^)]*\)$/, '');
-  const match = normalized.match(new RegExp(`^(${MONTH_PATTERN})\\s+(\\d{4})\\s*-\\s*(Present|(${MONTH_PATTERN})\\s+(\\d{4}))$`, 'i'));
-  if (!match) return null;
-  const startDate = `${match[2]}-${String(monthIndex(match[1])).padStart(2, '0')}`;
-  const endDate = match[3].toLowerCase() === 'present'
-    ? null
-    : `${match[5]}-${String(monthIndex(match[4])).padStart(2, '0')}`;
-  return { startDate, endDate, yearRange: normalized };
+  const fullMatch = trimmed.match(FULL_DATE_RANGE_RE);
+  if (fullMatch) {
+    const startM = parseMonthIndex(fullMatch[1]);
+    const startY = fullMatch[2];
+    if (!startM) return null;
+    const startDate = `${startY}-${String(startM).padStart(2, '0')}`;
+
+    let endDate: string | null = null;
+    if (new RegExp(`^${PRESENT_PART}$`, 'i').test(fullMatch[3])) {
+      endDate = null;
+    } else {
+      const endM = parseMonthIndex(fullMatch[4]);
+      const endY = fullMatch[5];
+      if (endM && endY) {
+        endDate = `${endY}-${String(endM).padStart(2, '0')}`;
+      }
+    }
+    const yearRange = trimmed.replace(/\s*\([^)]*\)$/, '').replace(/\s*·.*$/, '').trim();
+    return { startDate, endDate, yearRange };
+  }
+
+  const yearMatch = trimmed.match(YEAR_ONLY_RANGE_RE);
+  if (yearMatch) {
+    const startY = yearMatch[1];
+    const startDate = `${startY}-01`;
+    let endDate: string | null = null;
+    if (new RegExp(`^${PRESENT_PART}$`, 'i').test(yearMatch[2])) {
+      endDate = null;
+    } else {
+      endDate = `${yearMatch[3]}-12`;
+    }
+    const yearRange = trimmed.replace(/\s*\([^)]*\)$/, '').replace(/\s*·.*$/, '').trim();
+    return { startDate, endDate, yearRange };
+  }
+
+  return null;
 }
 
 function mergeBullets(lines: string[]): string[] {
@@ -166,10 +278,14 @@ function mergeBullets(lines: string[]): string[] {
   return bullets;
 }
 
-function parseExperience(lines: string[]): ParsedExperience[] {
+export function parseExperience(lines: string[]): ParsedExperience[] {
   const dateEntries = lines
     .map((line, index) => ({ line, index, parsed: parseDateRange(line) }))
     .filter((entry): entry is { line: string; index: number; parsed: NonNullable<ReturnType<typeof parseDateRange>> } => Boolean(entry.parsed));
+
+  if (dateEntries.length === 0) {
+    return [];
+  }
 
   const prelim = dateEntries.map((entry, recordIndex) => {
     const roleIndex = entry.index - 1;
@@ -197,7 +313,7 @@ function parseExperience(lines: string[]): ParsedExperience[] {
     const endIndex = next ? (next.companyIndex >= 0 ? next.companyIndex : next.roleIndex) : lines.length;
     const afterDate = lines.slice(item.dateIndex + 1, endIndex);
     let location = '';
-    if (afterDate[0] && !BULLET_RE.test(afterDate[0]) && !DATE_RANGE_RE.test(afterDate[0])) {
+    if (afterDate[0] && !BULLET_RE.test(afterDate[0]) && !parseDateRange(afterDate[0])) {
       location = afterDate.shift() || '';
     }
     const bullets = mergeBullets(afterDate);
@@ -296,29 +412,73 @@ function firstSentence(text: string): string {
 export function parseLinkedInProfileText(mainInput: string[], sidebarInput: string[]): ParsedLinkedInProfile {
   const mainLines = normalizeLinkedInLines(mainInput);
   const sidebarLines = normalizeLinkedInLines(sidebarInput);
+
+  if (mainLines.length === 0 && sidebarLines.length === 0) {
+    throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
+  }
+
   const warnings: string[] = [];
 
-  const summaryIndex = mainLines.findIndex(line => line.toLowerCase() === 'summary');
-  const experienceIndex = mainLines.findIndex(line => line.toLowerCase() === 'experience');
-  const educationIndex = mainLines.findIndex(line => line.toLowerCase() === 'education');
-  const preamble = summaryIndex > 0 ? mainLines.slice(0, summaryIndex) : [];
-  const name = preamble[0] || '';
-  const location = preamble.length > 1 ? preamble[preamble.length - 1] : '';
-  const headline = preamble.slice(1, -1).join(' ');
-  const summary = summaryIndex >= 0 && experienceIndex > summaryIndex
-    ? mainLines.slice(summaryIndex + 1, experienceIndex).join(' ')
-    : '';
-  const experienceLines = experienceIndex >= 0
-    ? mainLines.slice(experienceIndex + 1, educationIndex > experienceIndex ? educationIndex : undefined)
-    : [];
-  const education = educationIndex >= 0 ? mainLines.slice(educationIndex + 1) : [];
+  const mainPartition = partitionSections(mainLines);
+  const sidebarPartition = partitionSections(sidebarLines);
 
-  const contact = parseContact(sidebarLines);
-  const topSkills = dedupe(section(sidebarLines, 'Top Skills', 'Certifications'), 'skill', warnings);
-  const certifications = parseCertifications(section(sidebarLines, 'Certifications'), warnings);
+  const preamble = mainPartition.preamble.length > 0 ? mainPartition.preamble : sidebarPartition.preamble;
+  const name = preamble[0]?.trim() || '';
+  if (!name) {
+    throw new Error('Profile identity (operator name) could not be detected from the PDF header.');
+  }
+
+  let location = '';
+  let headline = '';
+  if (preamble.length === 2) {
+    headline = preamble[1];
+  } else if (preamble.length > 2) {
+    location = preamble[preamble.length - 1];
+    headline = preamble.slice(1, -1).join(' ');
+  }
+
+  const summary = mainPartition.sections.get('summary')?.join(' ') || sidebarPartition.sections.get('summary')?.join(' ') || '';
+
+  const hasExperienceSection = mainPartition.sections.has('experience') || sidebarPartition.sections.has('experience');
+  if (!hasExperienceSection) {
+    throw new Error('LinkedIn Experience section was not detected in the PDF. Ensure the file was generated via LinkedIn "Save to PDF".');
+  }
+
+  const experienceLines = [
+    ...(mainPartition.sections.get('experience') || []),
+    ...(sidebarPartition.sections.get('experience') || [])
+  ];
+
   const parsedExperience = parseExperience(experienceLines);
-  if (!parsedExperience.length) warnings.push('No experience entries were detected. Review the PDF layout or extracted text.');
-  if (education.length > 1) warnings.push('Education entries are retained as raw lines for owner review; the importer does not merge ambiguous school records.');
+  if (parsedExperience.length === 0) {
+    throw new Error('LinkedIn Experience section was found, but no valid role or date records could be parsed.');
+  }
+
+  const education = [
+    ...(mainPartition.sections.get('education') || []),
+    ...(sidebarPartition.sections.get('education') || [])
+  ];
+  if (education.length > 1) {
+    warnings.push('Education entries are retained as raw lines for owner review; the importer does not merge ambiguous school records.');
+  }
+
+  const contactLines = [
+    ...(sidebarPartition.sections.get('contact') || []),
+    ...(mainPartition.sections.get('contact') || [])
+  ];
+  const contact = parseContact(contactLines, [...sidebarLines, ...mainLines]);
+
+  const skillLines = [
+    ...(sidebarPartition.sections.get('skills') || []),
+    ...(mainPartition.sections.get('skills') || [])
+  ];
+  const topSkills = dedupe(skillLines, 'skill', warnings);
+
+  const certLines = [
+    ...(sidebarPartition.sections.get('certifications') || []),
+    ...(mainPartition.sections.get('certifications') || [])
+  ];
+  const certifications = parseCertifications(certLines, warnings);
 
   return {
     name,

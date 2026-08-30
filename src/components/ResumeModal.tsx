@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   Printer, 
@@ -6,11 +6,12 @@ import {
   Copy, 
   Check, 
   FileText, 
-  Terminal, 
   ExternalLink
 } from 'lucide-react';
 import { OperatorMetadata, ProjectData, InfrastructureSkill, ExperienceNode } from '../types';
 import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
+import { PORTFOLIO_CONFIG } from '../config/portfolioConfig';
+import { resolveFlagshipProjects } from '../utils/portfolioUtils';
 
 interface ResumeModalProps {
   isOpen: boolean;
@@ -19,6 +20,48 @@ interface ResumeModalProps {
   projects?: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
+  flagshipProjectIds?: string[];
+}
+
+function groupSkillsByFamily(skills: InfrastructureSkill[]) {
+  const families: Record<string, { label: string; skills: InfrastructureSkill[] }> = {
+    frontend: { label: 'FRONTEND // PRODUCT ARCHITECTURE', skills: [] },
+    backend: { label: 'BACKEND // SERVICES & DISTRIBUTED SYSTEMS', skills: [] },
+    data: { label: 'DATA // PERSISTENCE & ACCESS LAYERS', skills: [] },
+    infra: { label: 'TESTING // DELIVERY & INFRASTRUCTURE', skills: [] },
+  };
+
+  for (const s of skills) {
+    const nameLower = s.name.toLowerCase();
+    if (
+      nameLower.includes('postgres') ||
+      nameLower.includes('mongo') ||
+      nameLower.includes('mysql') ||
+      nameLower.includes('sqlite') ||
+      nameLower.includes('redis') ||
+      nameLower.includes('prisma') ||
+      nameLower.includes('database') ||
+      nameLower.includes('storage')
+    ) {
+      families.data.skills.push(s);
+    } else if (
+      s.category === 'infrastructure' ||
+      s.category === 'tooling' ||
+      nameLower.includes('docker') ||
+      nameLower.includes('test') ||
+      nameLower.includes('jest') ||
+      nameLower.includes('vitest') ||
+      nameLower.includes('playwright')
+    ) {
+      families.infra.skills.push(s);
+    } else if (s.category === 'frontend' || nameLower.includes('tailwind') || nameLower.includes('native')) {
+      families.frontend.skills.push(s);
+    } else {
+      families.backend.skills.push(s);
+    }
+  }
+
+  return Object.values(families).filter(f => f.skills.length > 0);
 }
 
 export const ResumeModal: React.FC<ResumeModalProps> = ({
@@ -27,36 +70,66 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
   operator = OPERATOR_METADATA,
   projects = [],
   skills = [],
-  experience = []
+  experience = [],
+  flagshipProjectIds
 }) => {
   const [copied, setCopied] = useState(false);
-
-  if (!isOpen) return null;
 
   const activeOperator = operator || OPERATOR_METADATA;
   const activeProjects = projects;
   const activeSkills = skills;
   const activeExperience = experience;
 
+  const resolvedFlagships = useMemo(() => {
+    const configuredIds = (flagshipProjectIds && flagshipProjectIds.length > 0)
+      ? flagshipProjectIds
+      : PORTFOLIO_CONFIG.flagshipProjectIds;
+    return resolveFlagshipProjects(activeProjects, configuredIds, 4);
+  }, [activeProjects, flagshipProjectIds]);
+
+  const totalDeliveredSystems = useMemo(() => {
+    return activeExperience.reduce((sum, e) => sum + (e.systemsDelivered?.length || 0), 0);
+  }, [activeExperience]);
+
+  const capabilityFamilies = useMemo(() => {
+    return groupSkillsByFamily(activeSkills);
+  }, [activeSkills]);
+
+  if (!isOpen) return null;
+
   const generateMarkdownResume = () => {
+    const contactLinks = [
+      `Location: ${activeOperator.location}`,
+      `Email: ${activeOperator.contact.email}`,
+      activeOperator.contact.github ? `GitHub: ${activeOperator.contact.github.replace(/^https?:\/\//, '')}` : null,
+      activeOperator.contact.linkedin ? `LinkedIn: ${activeOperator.contact.linkedin.replace(/^https?:\/\//, '')}` : null,
+    ].filter(Boolean).join(' | ');
+
     return `# ${activeOperator.name.toUpperCase()}
-${activeOperator.role}
-Location: ${activeOperator.location} | Email: ${activeOperator.contact.email}
-GitHub: ${activeOperator.contact.github || 'Not provided'} | LinkedIn: ${activeOperator.contact.linkedin || 'Not provided'}
+${activeOperator.role.toUpperCase()}
+${contactLinks}
 
 ---
 
-## EXECUTIVE SUMMARY
+## 01 // ENGINEERING PROFILE
 ${activeOperator.systemManifesto}
 
+**VERIFIED EVIDENCE STATUS:**
+- Repositories Indexed: ${activeProjects.length}
+- Technical Capabilities: ${activeSkills.length}
+- Professional Systems Delivered: ${totalDeliveredSystems}
+- Selected Flagship Systems: ${resolvedFlagships.length}
+
 ---
 
-## CORE TECHNICAL CAPABILITIES
-${activeSkills.map(s => `- **${s.name}** (${s.category}): ${s.primaryUseCases.join(', ')}`).join('\n')}
+## 02 // TECHNICAL OPERATING RANGE
+
+${capabilityFamilies.map(fam => `### ${fam.label}
+${fam.skills.map(s => `- **${s.name}** (${s.systemCount} systems): ${s.primaryUseCases.join(' · ')}`).join('\n')}`).join('\n\n')}
 
 ---
 
-## PROFESSIONAL EXPERIENCE LOG
+## 03 // SYSTEM BUILD HISTORY
 
 ${activeExperience.map(exp => `### ${exp.role} — ${exp.organization}
 *${exp.yearRange} | ${exp.location}*
@@ -68,18 +141,17 @@ ${exp.keyOutputs.map(out => `- ${out}`).join('\n')}
 
 ---
 
-## SELECTED FLAGSHIP SYSTEM IMPLEMENTATIONS
+## 04 // SELECTED FLAGSHIP SYSTEMS
 
-${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
-*${p.tagline}*
-- **Problem:** ${p.problem}
-- **Architecture:** ${p.solution}
-- **Key Benchmarks:** ${p.metrics.map(m => `${m.label}: ${m.value}`).join(' | ')}
-- **Stack:** ${p.techStack.join(', ')}
-`).join('\n')}
+${resolvedFlagships.map(p => `### ${p.code}: ${p.title} (${p.year}) [${p.status}]
+*${p.tagline || p.summary}*
+- **Challenge:** ${p.problem || p.summary}
+- **Architecture:** ${p.solution || p.architectureNotes}
+${p.validationEvidence?.summary ? `- **Verification:** ${p.validationEvidence.summary}\n` : ''}- **Stack:** ${p.techStack.join(', ')}
+${p.links?.github ? `- **Repository:** ${p.links.github}\n` : ''}`).join('\n')}
 
 ---
-*Generated from public GitHub metadata via Systems Cartography.*
+*Generated from verified repository and employment metadata via Systems Cartography.*
 `;
   };
 
@@ -164,46 +236,85 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
             <div className="text-[11px] font-medium text-[#3D3A2C]">
               {activeOperator.focus}
             </div>
-            <div className="flex flex-wrap gap-4 text-[10px] text-[#5C5946] mt-1 font-mono">
+            <div className="flex flex-wrap items-center gap-3 text-[10px] text-[#5C5946] mt-1 font-mono">
               <span>LOC: {activeOperator.location}</span>
               <span>·</span>
               <span>EMAIL: {activeOperator.contact.email}</span>
-              <span>·</span>
-              <span>GITHUB: {activeOperator.contact.github.replace(/^https?:\/\//, '') || 'Not provided'}</span>
+              {activeOperator.contact.github && (
+                <>
+                  <span>·</span>
+                  <span>GITHUB: {activeOperator.contact.github.replace(/^https?:\/\//, '')}</span>
+                </>
+              )}
+              {activeOperator.contact.linkedin && (
+                <>
+                  <span>·</span>
+                  <span>LINKEDIN: {activeOperator.contact.linkedin.replace(/^https?:\/\//, '')}</span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Executive Architectural Summary */}
-          <div className="flex flex-col gap-1.5">
+          {/* 01 // Engineering Profile */}
+          <div className="flex flex-col gap-2">
             <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
-              01 // EXECUTIVE ARCHITECTURAL SUMMARY
+              01 // ENGINEERING PROFILE
             </span>
-            <p className="text-[13px] text-[#22211A] bg-[#E2DCB9] p-3 border border-precision leading-relaxed">
-              {activeOperator.systemManifesto}
-            </p>
+            <div className="bg-[#E2DCB9] p-3.5 border border-precision flex flex-col gap-3">
+              <p className="text-[12.5px] text-[#22211A] leading-relaxed">
+                {activeOperator.systemManifesto}
+              </p>
+              {/* Evidence Status Strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2.5 border-t border-precision/40 text-[10px] font-mono">
+                <div className="flex flex-col">
+                  <span className="text-[#6B664F]">REPOSITORIES</span>
+                  <span className="font-bold text-[#15150F]">{activeProjects.length} INDEXED</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[#6B664F]">CAPABILITIES</span>
+                  <span className="font-bold text-[#15150F]">{activeSkills.length} VERIFIED</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[#6B664F]">DELIVERED SYSTEMS</span>
+                  <span className="font-bold text-[#15150F]">{totalDeliveredSystems} RECORDED</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[#6B664F]">FLAGSHIPS</span>
+                  <span className="font-bold text-[#15150F]">{resolvedFlagships.length} CURATED</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Technical Infrastructure Skills Matrix */}
-          <div className="flex flex-col gap-1.5">
+          {/* 02 // Technical Operating Range */}
+          <div className="flex flex-col gap-2">
             <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
-              02 // CORE INFRASTRUCTURE CAPABILITIES
+              02 // TECHNICAL OPERATING RANGE
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {activeSkills.map(skill => (
-                <div key={skill.id} className="p-2.5 border border-precision bg-[#E2DCB9]/60 flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-[13px]">{skill.name}</span>
-                    <span className="text-[10px] bg-[#15150F] text-[#D4CDA4] px-1">{skill.systemCount} SYSTEMS</span>
-                  </div>
-                  <div className="text-[12.5px] text-[#5C5946] leading-snug">
-                    {skill.primaryUseCases.slice(0, 2).join(' · ')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {capabilityFamilies.map(family => (
+                <div key={family.label} className="p-3 border border-precision bg-[#E2DCB9]/70 flex flex-col gap-2">
+                  <span className="font-bold text-[10px] text-[#5C5946] tracking-wider uppercase border-b border-precision/30 pb-1">
+                    {family.label}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {family.skills.map(skill => (
+                      <span
+                        key={skill.id}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-[#DCD6B2] border border-precision/40 text-[11px]"
+                        title={skill.primaryUseCases.join(' · ')}
+                      >
+                        <span className="font-bold text-[#15150F]">{skill.name.split('&')[0].trim()}</span>
+                        <span className="text-[9.5px] text-[#5C5946]">({skill.systemCount})</span>
+                      </span>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Professional Experience History */}
+          {/* 03 // System Build History */}
           <div className="flex flex-col gap-3">
             <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
               03 // SYSTEM BUILD HISTORY
@@ -281,30 +392,86 @@ ${activeProjects.slice(0, 4).map(p => `### ${p.code}: ${p.title} (${p.year})
             </div>
           </div>
 
-          {/* Selected Flagship Systems */}
-          <div className="flex flex-col gap-3">
+          {/* 04 // Selected Flagship Systems */}
+          <div className="flex flex-col gap-2.5">
             <span className="text-[11px] font-bold text-[#5C5946] uppercase tracking-widest">
-              04 // SELECTED FLAGSHIP SYSTEMS ARCHITECTED
+              04 // SELECTED FLAGSHIP SYSTEMS
             </span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {activeProjects.slice(0, 4).map(p => (
-                <div key={p.id} className="p-3 border border-precision bg-[#E2DCB9]/80 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between border-b border-precision pb-1">
-                    <span className="font-bold text-[11px]">{p.code} // {p.title}</span>
-                    <span className="text-[10px] bg-[#15150F] text-[#C3E54E] px-1 font-bold">{p.status}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {resolvedFlagships.map(p => {
+                const verifiedMetrics = p.metrics.filter(
+                  m => m.value && m.value !== '0 ★' && m.value !== '0 ⑂' && m.value !== '0 open' && m.value !== 'Not reported'
+                );
+                return (
+                  <div key={p.id} className="p-3.5 border border-precision bg-[#E2DCB9] flex flex-col gap-2">
+                    <div className="flex items-center justify-between border-b border-precision pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-[12px] text-[#15150F]">{p.code} // {p.title}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9.5px] bg-[#15150F] text-[#C3E54E] px-1.5 py-0.5 font-bold">
+                          {p.status}
+                        </span>
+                        <span className="text-[10px] text-[#5C5946] font-mono">{p.year}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1 text-[11.5px] text-[#22211A] leading-snug">
+                      <div>
+                        <strong className="font-bold text-[10px] tracking-wide uppercase text-[#5C5946] block mb-0.5">
+                          CHALLENGE //
+                        </strong>
+                        <span>{p.problem || p.summary}</span>
+                      </div>
+                      <div className="mt-1">
+                        <strong className="font-bold text-[10px] tracking-wide uppercase text-[#5C5946] block mb-0.5">
+                          ARCHITECTURE //
+                        </strong>
+                        <span>{p.solution || p.architectureNotes}</span>
+                      </div>
+                    </div>
+
+                    {/* Verification / Metrics */}
+                    {p.validationEvidence?.summary && (
+                      <div className="text-[10px] text-[#5C5946] bg-[#DCD6B2]/60 p-1.5 border border-precision/30 font-mono">
+                        <span className="font-bold text-[#15150F]">VERIFICATION: </span>
+                        {p.validationEvidence.summary}
+                      </div>
+                    )}
+
+                    {verifiedMetrics.length > 0 && (
+                      <div className="flex flex-wrap gap-2 text-[10px] font-mono text-[#5C5946]">
+                        {verifiedMetrics.slice(0, 2).map(m => (
+                          <span key={m.label} className="bg-[#DCD6B2]/80 px-1.5 py-0.5 border border-precision/30">
+                            {m.label}: <strong className="text-[#15150F]">{m.value}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 mt-auto border-t border-precision/30">
+                      <div className="flex flex-wrap gap-1">
+                        {p.techStack.slice(0, 6).map(t => (
+                          <span key={t} className="text-[9.5px] px-1 bg-[#D4CDA4] border border-precision/40">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                      {p.links?.github && (
+                        <a
+                          href={p.links.github}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-[#15150F] hover:text-[#2E6B3A] transition-colors"
+                        >
+                          <span>REPO</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[12.5px] text-[#3D3A2C] leading-snug">
-                    {p.summary}
-                  </p>
-                  <div className="flex flex-wrap gap-1 pt-1 mt-auto">
-                    {p.techStack.map(t => (
-                      <span key={t} className="text-[10px] px-1 bg-[#D4CDA4] border border-precision/40">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
