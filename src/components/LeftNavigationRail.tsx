@@ -179,7 +179,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
                 title={`${mode.label} // ${mode.sub}`}
               >
                 <span className="text-[11px] font-bold uppercase tracking-tight">{mode.label}</span>
-                <span className={`text-[9.5px] tracking-tighter uppercase font-medium ${isSelected ? 'text-[#C3E54E]' : 'opacity-60'}`}>
+                <span className={`text-[10px] tracking-tighter uppercase font-medium ${isSelected ? 'text-[#C3E54E]' : 'opacity-60'}`}>
                   {mode.sub}
                 </span>
               </button>
