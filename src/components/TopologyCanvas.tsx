@@ -1465,7 +1465,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
     >
       {/* Visual Corner Framing / Region Labels */}
-      <div className="hidden lg:flex absolute top-3 left-3 pointer-events-none items-center gap-1.5 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-b-2">
+      <div className="hidden lg:flex absolute top-3 left-3 pointer-events-none items-center gap-1.5 text-[10.5px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2 py-1 border border-[#15150F] border-l-2 border-b-2">
         <Compass size={11} className="text-[#15150F]" />
         <span className="font-bold">APPLICATION SURFACE // CORE WORK</span>
       </div>
@@ -1477,7 +1477,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           id="topology-focus-status"
           className="hidden lg:flex absolute top-12 left-1/2 -translate-x-1/2 z-30 items-stretch max-w-[52%] border border-[#15150F] bg-[#15150F] font-mono"
         >
-          <span className="min-w-0 px-2.5 py-1.5 text-[9px] font-bold tracking-wide text-[#C3E54E] truncate">
+          <span className="min-w-0 px-2.5 py-1.5 text-[11px] font-bold tracking-wide text-[#C3E54E] truncate">
             FOCUS LOCK // {selectedFocusLabel}
           </span>
           <button
@@ -1489,7 +1489,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               event.stopPropagation();
               onClearSelection();
             }}
-            className="shrink-0 border-l border-[#C3E54E] px-2.5 py-1.5 text-[9px] font-bold text-[#15150F] bg-[#C3E54E] hover:bg-[#D5F06E] transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E]"
+            className="shrink-0 border-l border-[#C3E54E] px-2.5 py-1.5 text-[11px] font-bold text-[#15150F] bg-[#C3E54E] hover:bg-[#D5F06E] transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E]"
           >
             × RELEASE
           </button>
@@ -1498,7 +1498,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       {/* Snap / Collision Toast Notification */}
       {snapNotice && (
-        <div className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[9.5px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in slide-in-from-top-2 duration-150 ${
+        <div className={`absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-2 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[11px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in slide-in-from-top-2 duration-150 ${
           selectedFocusLabel ? 'top-24' : 'top-12'
         }`}>
           {snapNotice.type === 'collision' ? (
@@ -1513,7 +1513,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       )}
 
       {/* Bottom-Left Controls & Status */}
-      <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[9px] font-mono text-[#15150F] z-10">
+      <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[10px] font-mono text-[#15150F] z-10">
         {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
         {!isCompactViewport && !prefersReducedMotion && (
           <div
@@ -1522,7 +1522,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             onMouseDown={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
           >
-            <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[8.5px] font-bold text-[#C3E54E] whitespace-nowrap">
+            <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[10px] font-bold text-[#C3E54E] whitespace-nowrap">
               {orbitRateMultiplier === 0 ? 'ORBIT // PAUSED' : `ORBIT RATE // ${orbitRateMultiplier}×`}
             </span>
             <div role="group" aria-label="Autonomous orbit rate" className="flex divide-x divide-[#15150F]">
@@ -1539,7 +1539,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       event.stopPropagation();
                       setOrbitRateMultiplier(rate);
                     }}
-                    className={`px-2 py-1 text-[8.5px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
+                    className={`px-2 py-1 text-[10px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
                       isActive
                         ? 'bg-[#C3E54E] text-[#15150F]'
                         : 'bg-[#D4CDA4] text-[#15150F] hover:bg-[#E2DCB9]'
@@ -1560,7 +1560,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           </div>
           <button
             onClick={() => setGridSnapEnabled(prev => !prev)}
-            className={`pointer-events-auto px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1 transition-colors ${
+            className={`pointer-events-auto px-2 py-1 border border-[#15150F] text-[10px] font-bold flex items-center gap-1 transition-colors ${
               gridSnapEnabled ? 'bg-[#C3E54E] text-[#15150F]' : 'bg-[#15150F] text-[#9E997F]'
             }`}
             title="Toggle Grid Snapping & Overlap Prevention (G)"
@@ -1569,7 +1569,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             <span>GRID SNAP: {gridSnapEnabled ? 'ON (25PX)' : 'OFF'}</span>
           </button>
           {hasCustomLayout && (
-            <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[8.5px] font-bold flex items-center gap-1">
+            <div className="bg-[#15150F] text-[#C3E54E] px-2 py-1 border border-[#15150F] text-[10px] font-bold flex items-center gap-1">
               <Move size={10} />
               <span>CUSTOM LAYOUT ACTIVE</span>
             </div>
@@ -1578,7 +1578,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       </div>
 
       {/* Top-Right Viewport & Dragging Telemetry */}
-      <div className="hidden lg:flex absolute top-3 right-3 pointer-events-none items-center gap-2 text-[9px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2.5 py-1 border border-[#15150F]">
+      <div className="hidden lg:flex absolute top-3 right-3 pointer-events-none items-center gap-2 text-[10px] font-mono text-[#15150F] z-10 bg-[#D4CDA4]/90 px-2.5 py-1 border border-[#15150F]">
         <span>X: {viewport.x} Y: {viewport.y}</span>
         <span className="text-[#5C5946]">|</span>
         <span>SCALE: {viewport.zoom.toFixed(2)}x</span>
@@ -1608,7 +1608,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             e.stopPropagation();
             handleAssemble();
           }}
-          className="hidden lg:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[9px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
+          className="hidden lg:flex px-2 h-8 bg-[#15150F] border border-[#15150F] items-center justify-center gap-1 text-[#C3E54E] font-mono text-[11px] font-bold hover:bg-[#25241B] hover:text-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
           title="Restore Canonical Static Orbital Lattice"
         >
           <Layers size={12} />
@@ -1642,7 +1642,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               e.stopPropagation();
               resetAllPositions();
             }}
-            className="px-2 h-9 lg:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#D4CDA4] font-mono text-[9px] font-bold hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors shadow-[2px_2px_0px_#15150F]"
+            className="px-2 h-9 lg:h-8 bg-[#15150F] border border-[#15150F] flex items-center justify-center gap-1 text-[#D4CDA4] font-mono text-[11px] font-bold hover:text-[#C3E54E] hover:bg-[#25241B] transition-colors shadow-[2px_2px_0px_#15150F]"
             title="Reset Nodes to Default Schematic (Alt+R)"
           >
             <RotateCcw size={12} />
@@ -1675,7 +1675,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             e.stopPropagation();
             fitAll();
           }}
-          className="px-2 h-9 lg:h-8 bg-[#C3E54E] border border-[#15150F] flex items-center justify-center gap-1 text-[#15150F] font-mono text-[9px] font-bold hover:bg-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
+          className="px-2 h-9 lg:h-8 bg-[#C3E54E] border border-[#15150F] flex items-center justify-center gap-1 text-[#15150F] font-mono text-[11px] font-bold hover:bg-[#D5F06E] transition-colors shadow-[2px_2px_0px_#15150F]"
           title="Fit All Nodes (0 or F)"
         >
           <Maximize2 size={12} />
@@ -1710,9 +1710,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           {[-600, -400, -200, 200, 400, 600].map(val => (
             <React.Fragment key={val}>
               <line x1={val} y1="-5" x2={val} y2="5" stroke="#15150F" strokeWidth="1" />
-              <text x={val + 4} y="-8" fontSize="7" fill="#5C5946" fontFamily="monospace">X:{val}</text>
+              <text x={val + 4} y="-8" fontSize="8" fill="#5C5946" fontFamily="monospace">X:{val}</text>
               <line x1="-5" y1={val} x2="5" y2={val} stroke="#15150F" strokeWidth="1" />
-              <text x="8" y={val + 3} fontSize="7" fill="#5C5946" fontFamily="monospace">Y:{val}</text>
+              <text x="8" y={val + 3} fontSize="8" fill="#5C5946" fontFamily="monospace">Y:{val}</text>
             </React.Fragment>
           ))}
         </g>
@@ -1740,7 +1740,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 <text
                   x={topLeftIso.x + 8}
                   y={topLeftIso.y - 10}
-                  fontSize="8"
+                  fontSize="9"
                   fontWeight="bold"
                   fill="#5C5946"
                   fontFamily="monospace"
@@ -1967,7 +1967,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   x={posIso.x}
                   y={posIso.y + 24}
                   textAnchor="middle"
-                  fontSize="8.5"
+                  fontSize="10"
                   fontWeight="bold"
                   fill={isSelected ? '#15150F' : isSkillConnected ? '#15150F' : '#3D3A2C'}
                   fontFamily="monospace"
@@ -1978,7 +1978,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   x={posIso.x}
                   y={posIso.y + 33}
                   textAnchor="middle"
-                  fontSize="7"
+                  fontSize="8.5"
                   fontWeight={isSkillConnected ? 'bold' : 'normal'}
                   fill={isSkillConnected ? '#15150F' : '#6B664F'}
                   fontFamily="monospace"
@@ -2058,7 +2058,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         x="0"
                         y="3"
                         textAnchor="middle"
-                        fontSize="7.5"
+                        fontSize="8.5"
                         fontWeight="bold"
                         fill={isAdjusted ? '#FF7B72' : '#C3E54E'}
                         fontFamily="monospace"
@@ -2114,7 +2114,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         x="0"
                         y="3.5"
                         textAnchor="middle"
-                        fontSize="7"
+                        fontSize="8"
                         fontWeight="bold"
                         fill={isAdjusted ? '#FF7B72' : '#C3E54E'}
                         fontFamily="monospace"
@@ -2221,7 +2221,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   <text
                     x={pCorner.x + 3}
                     y={pCorner.y + 3}
-                    fontSize="6"
+                    fontSize="7"
                     fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
                     fontFamily="monospace"
                   >
@@ -2347,7 +2347,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     x="0"
                     y="3.5"
                     textAnchor="middle"
-                    fontSize="7"
+                    fontSize="8"
                     fontWeight="bold"
                     fill={isSelected || isHovered || isThisDragging ? '#15150F' : '#D4CDA4'}
                     fontFamily="monospace"
@@ -2402,7 +2402,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? -6 : -2}
-                        fontSize="7"
+                        fontSize="8.5"
                         fontWeight="bold"
                         fill="#8C8870"
                         fontFamily="monospace"
@@ -2414,7 +2414,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? 3 : 7}
-                        fontSize="8"
+                        fontSize="9"
                         fontWeight="bold"
                         fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
                         fontFamily="monospace"
@@ -2427,7 +2427,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                         <text
                           x="5"
                           y="12"
-                          fontSize="8"
+                          fontSize="9"
                           fontWeight="bold"
                           fill={isHovered || isThisDragging ? '#C3E54E' : '#D4CDA4'}
                           fontFamily="monospace"
@@ -2440,7 +2440,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                       <text
                         x="5"
                         y={isTwoLines ? 19 : 14}
-                        fontSize="6.5"
+                        fontSize="8"
                         fill={isSelected || isHovered || isThisDragging ? '#C3E54E' : '#8C8870'}
                         fontFamily="monospace"
                       >
@@ -2546,16 +2546,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             return (
               <div className="flex flex-col gap-1.5 font-mono text-[10px]">
                 <div className="flex items-center justify-between border-b border-precision pb-1">
-                  <div className="flex items-center gap-1.5 font-bold">
+                  <div className="flex items-center gap-1.5 text-[12px] font-bold">
                     <span className="w-2.5 h-2.5 bg-[#C3E54E] border border-[#15150F]"></span>
                     <span>{p.code} // {p.title}</span>
                   </div>
-                  <span className="text-[8px] bg-[#15150F] text-[#C3E54E] px-1 py-0.5 font-bold">{p.status}</span>
+                  <span className="text-[10px] bg-[#15150F] text-[#C3E54E] px-1 py-0.5 font-bold">{p.status}</span>
                 </div>
-                <p className="text-[9.5px] text-[#3D3A2C] leading-tight">{p.tagline}</p>
+                <p className="text-[11px] text-[#3D3A2C] leading-tight">{p.tagline}</p>
                 
                 {/* Active Conduits Counter Badge */}
-                <div className="flex items-center justify-between bg-[#15150F] text-[#C3E54E] px-2 py-1 text-[8.5px] font-bold">
+                <div className="flex items-center justify-between bg-[#15150F] text-[#C3E54E] px-2 py-1 text-[10px] font-bold">
                   <span>SIGNAL CONDUITS:</span>
                   <span className="flex items-center gap-1">
                     <Activity size={10} />
@@ -2567,13 +2567,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   {p.techStack.map(t => (
                     <span 
                       key={t} 
-                      className="text-[8px] border border-[#15150F] bg-[#E2DCB9] px-1 font-bold text-[#15150F]"
+                      className="text-[10px] border border-[#15150F] bg-[#E2DCB9] px-1 font-bold text-[#15150F]"
                     >
                       {t}
                     </span>
                   ))}
                 </div>
-                <div className="text-[8px] text-[#5C5946] border-t border-precision pt-1 flex justify-between font-bold">
+                <div className="text-[10px] text-[#5C5946] border-t border-precision pt-1 flex justify-between font-bold">
                   <span>CLICK TO INSPECT · DRAG TO MOVE</span>
                   <span>DBL-CLICK DRILL IN →</span>
                 </div>

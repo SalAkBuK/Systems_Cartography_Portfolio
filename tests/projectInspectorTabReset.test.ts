@@ -264,7 +264,7 @@ test('15. Escape key handler closes mobile drawer before resetting viewport and 
 // ---------------------------------------------------------------------------
 test('16. Search input in LeftNavigationRail uses 16px compact font to prevent iOS Safari page zoom', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('text-[16px] lg:text-[9.5px]'), 'Search input must use text-[16px] on compact and text-[9.5px] on lg+');
+  assert.ok(railSource.includes('text-[16px] lg:text-[12px]'), 'Search input must use text-[16px] on compact and text-[12px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
@@ -272,7 +272,11 @@ test('16. Search input in LeftNavigationRail uses 16px compact font to prevent i
 // ---------------------------------------------------------------------------
 test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('text-[9.5px] lg:text-[6.5px]'), 'Mode subtitle must scale to text-[9.5px] on compact');
+  assert.match(
+    railSource,
+    /<span className=\{`text-\[10px\][^`]*`\}>\s*\{mode\.sub\}/,
+    'Mode subtitle must scale to text-[10px]'
+  );
   assert.ok(railSource.includes('min-h-[42px] lg:min-h-[30px]'), 'Mode buttons must have >= 42px touch target on compact');
 });
 
@@ -282,7 +286,7 @@ test('17. Topology mode subtitle no longer uses 6.5px microtext on compact viewp
 test('18. Main navigation rows are >= 12px and >= 44px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[44px] lg:min-h-[34px]'), 'Main nav must have min-h-[44px] on compact');
-  assert.ok(railSource.includes('text-[13px] lg:text-[10.5px]'), 'Main nav must have text-[13px] on compact');
+  assert.ok(railSource.includes('text-[13px] lg:text-[12px]'), 'Main nav must have text-[13px] on compact and text-[12px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
@@ -291,41 +295,41 @@ test('18. Main navigation rows are >= 12px and >= 44px min-height on compact vie
 test('19. Project rows are >= 11px and >= 40px min-height on compact viewports', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('min-h-[40px] lg:min-h-[28px]'), 'Project rows must have min-h-[40px] on compact');
-  assert.ok(railSource.includes('text-[12px] lg:text-[9.5px]'), 'Project rows must have text-[12px] on compact');
+  assert.ok(railSource.includes('text-[12px] lg:text-[11.5px]'), 'Project rows must have text-[12px] on compact and text-[11.5px] on lg+');
 });
 
 // ---------------------------------------------------------------------------
 // 20. ProvenanceBadge Readable Compact Typography
 // ---------------------------------------------------------------------------
-test('20. ProvenanceBadge uses readable compact typography (text-[9.5px] lg:text-[7px])', () => {
+test('20. ProvenanceBadge uses readable compact typography (text-[10px])', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
-  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7px]'), 'ProvenanceBadge must use text-[9.5px] on compact and text-[7px] on desktop');
+  assert.ok(inspectorSource.includes('text-[10px] font-bold px-1.5 py-0.5'), 'ProvenanceBadge must use text-[10px]');
 });
 
 // ---------------------------------------------------------------------------
 // 21. Inspector Section Headings Typography
 // ---------------------------------------------------------------------------
-test('21. RightInspectorPanel section headings use readable compact typography (text-[10.5px] lg:text-[8.5px])', () => {
+test('21. RightInspectorPanel section headings use readable compact typography (text-[11px])', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
-  assert.ok(inspectorSource.includes('text-[10.5px] lg:text-[8.5px] font-bold opacity-60 uppercase tracking-wider'), 'Section headings must use text-[10.5px] on compact');
+  assert.ok(inspectorSource.includes('text-[11px] font-bold opacity-60 uppercase tracking-wider'), 'Section headings must use text-[11px]');
 });
 
 // ---------------------------------------------------------------------------
 // 22. Project Summary, Challenge, and Solution Typography
 // ---------------------------------------------------------------------------
-test('22. Project summary, challenge, and solution copy use readable compact scale (text-[12px])', () => {
+test('22. Project summary, challenge, and solution copy use readable compact scale (text-[13px])', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
-  assert.ok(inspectorSource.includes('text-[12px] lg:text-[10.5px] text-[#15150F] bg-[#E2DCB9]/70'), 'Summary body must use text-[12px] on compact');
-  assert.ok(inspectorSource.includes('text-[12px] lg:text-[10px] text-[#22211A] leading-relaxed'), 'Problem/solution copy must use text-[12px] on compact');
+  assert.ok(inspectorSource.includes('text-[13px] text-[#15150F] bg-[#E2DCB9]/70'), 'Summary body must use text-[13px]');
+  assert.ok(inspectorSource.includes('text-[13px] text-[#22211A] leading-relaxed'), 'Problem/solution copy must use text-[13px]');
 });
 
 // ---------------------------------------------------------------------------
 // 23. Meaningful Project Technology Metadata Scale
 // ---------------------------------------------------------------------------
-test('23. Project tech badges and validation pills use readable compact scale (text-[9.5px])', () => {
+test('23. Project tech badges and validation pills use readable compact scale (text-[10px])', () => {
   const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
-  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7.5px] px-1 bg-[#DCD6B2]'), 'Subsystem tech badges must use text-[9.5px] on compact');
-  assert.ok(inspectorSource.includes('text-[9.5px] lg:text-[7.5px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E]'), 'Validation test pills must use text-[9.5px] on compact');
+  assert.ok(inspectorSource.includes('text-[10px] px-1 bg-[#DCD6B2]'), 'Subsystem tech badges must use text-[10px]');
+  assert.ok(inspectorSource.includes('text-[10px] px-1.5 py-0.5 bg-[#15150F] text-[#C3E54E]'), 'Validation test pills must use text-[10px]');
 });
 
 // ---------------------------------------------------------------------------
@@ -350,8 +354,8 @@ test('25. TopTelemetryBar OWNER SOURCE remains hidden until lg breakpoint', () =
 // ---------------------------------------------------------------------------
 test('26. TopTelemetryBar OWNER PROJECTS and CONTACT use increased compact typography and touch targets', () => {
   const telemetrySource = readFileSync(resolve(process.cwd(), 'src/components/TopTelemetryBar.tsx'), 'utf8');
-  assert.ok(telemetrySource.includes('text-[9.5px] lg:text-[7.5px]'), 'OWNER PROJECTS label must use text-[9.5px] on compact');
-  assert.ok(telemetrySource.includes('text-[11.5px] lg:text-[9.5px]'), 'Public repos count must use text-[11.5px] on compact');
+  assert.ok(telemetrySource.includes('text-[10px] text-[#D4CDA4]'), 'OWNER PROJECTS label must use text-[10px]');
+  assert.ok(telemetrySource.includes('text-[12px] tracking-wider'), 'Public repos count must use text-[12px]');
   assert.ok(telemetrySource.includes('min-h-[36px]'), 'Action buttons must have >= 36px touch targets on compact');
 });
 
@@ -483,7 +487,7 @@ test('34. Desktop inspector omits duplicate clear control while mobile CLEAR rem
 // ---------------------------------------------------------------------------
 test('35. Compact drawer header hides decorative INDX badge below lg while desktop shows it at lg+', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
-  assert.ok(railSource.includes('hidden lg:inline text-[8.5px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
+  assert.ok(railSource.includes('hidden lg:inline text-[10px] px-1 bg-[#15150F] text-[#D4CDA4] font-mono whitespace-nowrap'), 'INDX badge must use hidden lg:inline');
 });
 
 // ---------------------------------------------------------------------------
@@ -500,5 +504,53 @@ test('36. Compact drawer header displays internal CLOSE control below lg', () =>
 test('37. Compact drawer header title and button use whitespace-nowrap preventing row wrapping', () => {
   const railSource = readFileSync(resolve(process.cwd(), 'src/components/LeftNavigationRail.tsx'), 'utf8');
   assert.ok(railSource.includes('Owner Technical Index'), 'Title must be Owner Technical Index');
-  assert.ok(railSource.includes('text-[12px] lg:text-[11px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
+  assert.ok(railSource.includes('text-[12px] font-bold uppercase tracking-tight text-[#15150F] whitespace-nowrap'), 'Title must include whitespace-nowrap');
+});
+
+// ---------------------------------------------------------------------------
+// 38. Inspector Content Area Scroll Reset Contract
+// ---------------------------------------------------------------------------
+test('38. RightInspectorPanel binds content scroll ref and resets scrollTop to 0 on context transition', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  assert.ok(inspectorSource.includes('const contentScrollRef = React.useRef<HTMLDivElement>(null);'), 'contentScrollRef must be defined');
+  assert.ok(inspectorSource.includes('ref={contentScrollRef}'), 'contentScrollRef must be attached to the content scroller element');
+
+  const effectComment = '// Deterministic immediate scroll reset to top whenever inspector content context changes';
+  const effectCommentIndex = inspectorSource.indexOf(effectComment);
+  assert.ok(effectCommentIndex !== -1, 'Scroll reset effect comment must exist');
+
+  const effectBlock = inspectorSource.substring(
+    effectCommentIndex,
+    inspectorSource.indexOf('// Shared generic progression grouping', effectCommentIndex)
+  );
+
+  assert.ok(effectBlock.includes('React.useLayoutEffect('), 'Reset effect must use useLayoutEffect');
+  assert.ok(effectBlock.includes('contentScrollRef.current.scrollTop = 0;'), 'Effect must reset scrollTop to 0');
+  assert.ok(effectBlock.includes('contentScrollRef.current.scrollLeft = 0;'), 'Effect must reset scrollLeft to 0');
+  assert.ok(effectBlock.includes('activeView'), 'Effect dependencies must include activeView');
+  assert.ok(effectBlock.includes('selectedProject?.id'), 'Effect dependencies must include selectedProject?.id');
+  assert.ok(effectBlock.includes('selectedSkill?.id'), 'Effect dependencies must include selectedSkill?.id');
+  assert.ok(effectBlock.includes('selectedExperience?.id'), 'Effect dependencies must include selectedExperience?.id');
+  assert.ok(effectBlock.includes('selectedSubsystem?.id'), 'Effect dependencies must include selectedSubsystem?.id');
+  assert.ok(effectBlock.includes('activeTab'), 'Effect dependencies must include activeTab');
+});
+
+// ---------------------------------------------------------------------------
+// 39. Responsive Inspector Height Contract
+// ---------------------------------------------------------------------------
+test('39. expanded inspector removes its mobile max-height cap on desktop', () => {
+  const inspectorSource = readFileSync(resolve(process.cwd(), 'src/components/RightInspectorPanel.tsx'), 'utf8');
+  const branchMatch = inspectorSource.match(/isMobileExpanded\s*\?\s*'([^']+)'\s*:\s*'([^']+)'/);
+
+  assert.ok(branchMatch, 'isMobileExpanded expanded and collapsed class branches must exist');
+  const [, expandedBranch, collapsedBranch] = branchMatch;
+
+  assert.ok(expandedBranch.includes('h-[62vh]'), 'Mobile expanded inspector must remain 62vh high');
+  assert.ok(expandedBranch.includes('max-h-[75vh]'), 'Mobile expanded inspector must retain its 75vh maximum height');
+  assert.ok(expandedBranch.includes('lg:h-full'), 'Desktop expanded inspector must use full height');
+  assert.ok(expandedBranch.includes('lg:max-h-none'), 'Desktop expanded inspector must remove the mobile max-height cap');
+
+  assert.ok(collapsedBranch.includes('lg:h-full'), 'Desktop collapsed inspector must use full height');
+  assert.ok(!collapsedBranch.includes('max-h-[75vh]'), 'Collapsed inspector must not carry the mobile expanded max-height cap');
+  assert.ok(!collapsedBranch.includes('lg:max-h-none'), 'Collapsed inspector needs no desktop max-height override');
 });
