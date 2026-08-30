@@ -36,7 +36,79 @@ import { OWNER_PORTFOLIO_PREFERENCES } from '../src/config/ownerPreferences';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig';
 import type { GeneratedOwnerProfile, GitHubSnapshotMetadata } from '../src/types';
 import type { GitHubSyncResult } from '../src/services/githubService';
+import { sanitizeGitHubUser } from '../src/services/githubService';
 import type { OwnerPortfolioPreferences } from '../src/config/ownerPreferences';
+
+/**
+ * A fork inherits the previous owner's generated files (ownerProfile,
+ * githubSnapshot, preferences) physically on disk. When the current
+ * repository identity does not match `OWNER_SETUP_MANIFEST`'s configured
+ * repository, that inherited data must never become active runtime setup
+ * state -- the wizard must start from a genuinely unconfigured baseline
+ * instead. These builders produce that baseline without inventing fake
+ * identity values.
+ */
+function createUnconfiguredOwnerProfile(): GeneratedOwnerProfile {
+  return {
+    source: { kind: 'linkedin_pdf', importedAt: '', reviewed: false, warnings: [] },
+    githubTarget: '',
+    operator: {
+      name: '',
+      role: '',
+      location: '',
+      focus: '',
+      primaryStack: [],
+      systemManifesto: '',
+      contact: { email: '', linkedin: '' }
+    },
+    experience: [],
+    skills: [],
+    certifications: [],
+    education: []
+  };
+}
+
+function createUnconfiguredSnapshot(): GitHubSyncResult {
+  return {
+    sourceType: 'user',
+    sourceIdentifier: '',
+    user: sanitizeGitHubUser(null),
+    projects: [],
+    skills: [],
+    operator: {
+      name: '',
+      handle: '',
+      role: '',
+      location: '',
+      status: '',
+      focus: '',
+      yearsActive: 0,
+      commitsIndexed: '',
+      productionUptime: '',
+      primaryStack: [],
+      systemManifesto: '',
+      contact: { email: '', github: '', linkedin: '', pgpKeyId: '', pgpFingerprint: '', matrix: '', availability: '' }
+    },
+    experience: []
+  };
+}
+
+function createUnconfiguredSnapshotMetadata(): GitHubSnapshotMetadata {
+  return {
+    schemaVersion: 1,
+    generatedAt: '',
+    githubTarget: '',
+    sourceIdentifier: '',
+    rawRepositoryCount: 0,
+    canonicalRepositoryCount: 0,
+    inspectedRepositoryCount: 0,
+    inspectionWarnings: []
+  };
+}
+
+function createUnconfiguredPreferences(): OwnerPortfolioPreferences {
+  return { flagshipProjectIds: [] };
+}
 
 export const WIZARD_PORT = 4174;
 export const WIZARD_HOST = '127.0.0.1';
@@ -139,18 +211,38 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
   const repositoryIdentityResolver = options?.repositoryIdentityResolver || resolveCurrentRepository;
   const setupManifestWriter = options?.setupManifestWriter || writeOwnerSetupManifest;
 
-  const confirmedTarget = initialStateOverrides?.confirmedGitHub || initialStateOverrides?.ownerProfile?.githubTarget || OWNER_PROFILE.githubTarget || '';
+  // A fork's checked-in generated files (OWNER_PROFILE, GITHUB_SNAPSHOT,
+  // OWNER_PORTFOLIO_PREFERENCES) belong to whichever owner last ran
+  // `npm run setup:portfolio` -- not necessarily the current repository.
+  // Only treat them as active runtime state when the current repository
+  // identity actually matches the setup manifest's configured repository;
+  // otherwise this session must start from an unconfigured baseline
+  // (FRESH FORK REINITIALIZATION MODE).
+  const initialRepositoryReadiness = evaluateDeploymentReadiness(
+    OWNER_SETUP_MANIFEST,
+    repositoryIdentityResolver()
+  );
+  const repositoryReinitializationRequired = !initialRepositoryReadiness.ready;
 
-  const snapshotMetadata: GitHubSnapshotMetadata = initialStateOverrides?.snapshotMetadata || {
-    ...GITHUB_SNAPSHOT_METADATA,
-    githubTarget: confirmedTarget || GITHUB_SNAPSHOT_METADATA.githubTarget
-  };
+  const confirmedTarget = initialStateOverrides?.confirmedGitHub
+    || initialStateOverrides?.ownerProfile?.githubTarget
+    || (repositoryReinitializationRequired ? '' : OWNER_PROFILE.githubTarget)
+    || '';
+
+  const snapshotMetadata: GitHubSnapshotMetadata = initialStateOverrides?.snapshotMetadata || (
+    repositoryReinitializationRequired
+      ? createUnconfiguredSnapshotMetadata()
+      : { ...GITHUB_SNAPSHOT_METADATA, githubTarget: confirmedTarget || GITHUB_SNAPSHOT_METADATA.githubTarget }
+  );
 
   const runtimeState: WizardRuntimeState = {
-    ownerProfile: initialStateOverrides?.ownerProfile || { ...OWNER_PROFILE },
-    snapshot: initialStateOverrides?.snapshot || { ...GITHUB_SNAPSHOT },
+    ownerProfile: initialStateOverrides?.ownerProfile
+      || (repositoryReinitializationRequired ? createUnconfiguredOwnerProfile() : { ...OWNER_PROFILE }),
+    snapshot: initialStateOverrides?.snapshot
+      || (repositoryReinitializationRequired ? createUnconfiguredSnapshot() : { ...GITHUB_SNAPSHOT }),
     snapshotMetadata,
-    preferences: initialStateOverrides?.preferences || { ...OWNER_PORTFOLIO_PREFERENCES },
+    preferences: initialStateOverrides?.preferences
+      || (repositoryReinitializationRequired ? createUnconfiguredPreferences() : { ...OWNER_PORTFOLIO_PREFERENCES }),
     detectedGitHub: initialStateOverrides?.detectedGitHub || '',
     confirmedGitHub: confirmedTarget,
     verificationPassed: Boolean(initialStateOverrides?.verificationPassed),
@@ -211,16 +303,22 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         && repositorySetup.ready
       );
       const githubAuth = await getGitHubAuthStatus({ fetchImpl: options?.fetchImpl });
-      const target = runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget || runtimeState.detectedGitHub;
+      // Merely detected (git-origin) targets participate in identity-match
+      // evaluation as a best-effort guess, but must never be reported back to
+      // the client under the `confirmedGitHub` key -- that key is a claim of
+      // genuine confirmation, and the wizard UI uses its presence to decide
+      // whether a GitHub identity may be stamped onto an imported profile.
+      const matchEvaluationTarget = runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget || runtimeState.detectedGitHub;
       const identityMatch = evaluateOwnerIdentityMatch({
         ownerProfile: runtimeState.ownerProfile,
-        githubTarget: target
+        githubTarget: matchEvaluationTarget
       });
+      const confirmedGitHub = runtimeState.confirmedGitHub || runtimeState.ownerProfile.githubTarget || '';
 
       sendJson(200, {
         csrfToken: WIZARD_SESSION_CSRF_TOKEN,
         detectedGitHub: runtimeState.detectedGitHub,
-        confirmedGitHub: target,
+        confirmedGitHub,
         existingSetup,
         operator: runtimeState.ownerProfile.operator,
         githubTarget: runtimeState.ownerProfile.githubTarget,
@@ -230,6 +328,7 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         githubAuth,
         crossOwnerConfirmed: runtimeState.crossOwnerConfirmed,
         repositorySetupRequired: !repositorySetup.ready,
+        repositoryReinitializationRequired: !repositorySetup.ready,
         identityMatch
       });
       return;
@@ -259,6 +358,10 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         ownerProfile: runtimeState.ownerProfile,
         githubTarget: target
       });
+      const repositorySetup = evaluateDeploymentReadiness(
+        OWNER_SETUP_MANIFEST,
+        repositoryIdentityResolver()
+      );
 
       sendJson(200, {
         ownerProfile: runtimeState.ownerProfile,
@@ -267,6 +370,7 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         detectedGitHub: runtimeState.detectedGitHub,
         confirmedGitHub: runtimeState.confirmedGitHub,
         crossOwnerConfirmed: runtimeState.crossOwnerConfirmed,
+        repositoryReinitializationRequired: !repositorySetup.ready,
         identityMatch
       });
       return;
@@ -325,10 +429,16 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
             runtimeState.confirmedGitHub = queryTarget.trim().replace(/\/$/, '');
           }
 
-          const targetToUse = runtimeState.confirmedGitHub || (await inferGitHubTarget());
+          // A detected-but-unconfirmed suggestion (from git origin / repository
+          // context) must never be silently promoted into a confirmed GitHub
+          // association merely because the PDF importer needs *some* target.
+          // Only genuinely confirmed state (an explicit query target above, or
+          // a target already confirmed earlier this session) may be used here;
+          // otherwise the profile is built with no GitHub association at all.
+          const targetToUse = runtimeState.confirmedGitHub || '';
           const parsed = await parseLinkedInPdfBytes(pdfBytes, targetToUse);
 
-          if (parsed.githubTarget) {
+          if (targetToUse && parsed.githubTarget) {
             runtimeState.confirmedGitHub = parsed.githubTarget;
           }
 
