@@ -90,8 +90,11 @@ import {
 import {
   buildCapabilityReactorSegmentPaths,
   deriveCapabilityReactorGeometry,
+  getDeterministicCapabilityOrder,
+  getEffectiveCapabilityPositions,
   getCapabilityReactorDashOffset,
-  getCapabilityReactorMarker
+  getCapabilityReactorMarker,
+  getMountedCapabilityPosition
 } from '../utils/capabilityReactor';
 import {
   resolveProjectDockState,
@@ -277,7 +280,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // ---------------------------------------------------------------------------
   // PR27 dual orbital motion. ONE requestAnimationFrame loop and ONE shared
   // timestamp advance two independent phases: clockwise deployed projects and
-  // a counter-moving structural reactor. Capability nodes remain stationary.
+  // a counter-moving reactor with its mounted capability nodes.
   // ---------------------------------------------------------------------------
 
   const isCompactViewport = containerDimensions.width < 1024;
@@ -461,9 +464,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     () => ({ ...dockedProjectPositions, ...customProjectPositions }),
     [dockedProjectPositions, customProjectPositions]
   );
+  // Canonical full activeSkills identity order is the permanent slot authority.
+  // It is never derived from search/focus/filter state, and a detached skill
+  // leaves its original index reserved rather than redistributing its peers.
+  const canonicalCapabilityOrder = useMemo(
+    () => getDeterministicCapabilityOrder(activeSkills.map(skill => ({
+      id: skill.id,
+      technologyLabel: getCapabilityCoreTechnology(skill),
+      systemCount: skill.systemCount,
+    }))),
+    [activeSkills]
+  );
+  const mountedCapabilityOrbitPositions = useMemo(() => {
+    const positions: Record<string, { x: number; y: number }> = {};
+    const count = canonicalCapabilityOrder.length;
+    canonicalCapabilityOrder.forEach((skillId, index) => {
+      positions[skillId] = getMountedCapabilityPosition(
+        index,
+        count,
+        capabilityReactorGeometry,
+        reactorOrbitPhase
+      );
+    });
+    return positions;
+  }, [canonicalCapabilityOrder, capabilityReactorGeometry, reactorOrbitPhase]);
   const effectiveSkillPositions = useMemo(
-    () => ({ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }),
-    [staticOrbitalLattice, customSkillPositions]
+    () => getEffectiveCapabilityPositions(mountedCapabilityOrbitPositions, customSkillPositions),
+    [mountedCapabilityOrbitPositions, customSkillPositions]
   );
 
   // PR23 product pivot: cancels any in-flight shared orbital reflow without
@@ -930,7 +957,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           y: Math.round(draggingNode.startNodePos.y + delta3D.y),
         };
         setDraggingNode(prev => prev ? { ...prev, currentPos: newPos, hasMoved: prev.hasMoved || moved } : null);
-        setCustomSkillPositions(prev => ({ ...prev, [draggingNode.id]: newPos }));
         return;
       }
 
