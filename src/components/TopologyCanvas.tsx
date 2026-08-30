@@ -76,16 +76,23 @@ import {
   PROJECT_CALLOUT_DOUBLE_Y
 } from '../utils/projectTopologyGeometry';
 import {
+  ACTIVE_ORBIT_RATE_MULTIPLIERS,
   getDynamicOrbitalPosition,
   isOrbitPauseConditionActive,
-  rebaselineOrbitClock,
-  stepOrbitClock,
-  ORBIT_RATE_MULTIPLIERS,
+  rebaselineDualOrbitClock,
+  stepDualOrbitClock,
+  stepOrbitRate,
   ORBIT_RESUME_DELAY_MS,
-  type OrbitClockState,
-  type OrbitRateMultiplier,
+  type ActiveOrbitRateMultiplier,
+  type DualOrbitClockState,
   type OrbitPauseState
 } from '../utils/orbitMotion';
+import {
+  buildCapabilityReactorSegmentPaths,
+  deriveCapabilityReactorGeometry,
+  getCapabilityReactorDashOffset,
+  getCapabilityReactorMarker
+} from '../utils/capabilityReactor';
 import {
   resolveProjectDockState,
   getProjectVisualCenterIso,
@@ -181,6 +188,21 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     () => assembleTopologyLayout(projects, activeSkills),
     [projects, activeSkills]
   );
+  const capabilityReactorGeometry = useMemo(
+    () => deriveCapabilityReactorGeometry(
+      activeSkills.map(skill => ({
+        id: skill.id,
+        technologyLabel: getCapabilityCoreTechnology(skill),
+        systemCount: skill.systemCount,
+      })),
+      staticOrbitalLattice.skillPositions
+    ),
+    [activeSkills, staticOrbitalLattice.skillPositions]
+  );
+  const capabilityReactorSegmentPaths = useMemo(
+    () => buildCapabilityReactorSegmentPaths(capabilityReactorGeometry),
+    [capabilityReactorGeometry]
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -253,14 +275,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [orbitReflowRenderPositions, setOrbitReflowRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
 
   // ---------------------------------------------------------------------------
-  // PR22: Orbital motion. ONE shared phase drives every canonical (non-custom)
-  // project's position around the PR21 static ellipse. No per-project timers,
-  // no animation library — a single requestAnimationFrame loop advances one
-  // phase value; positions are a pure derivation of it (orbitMotion.ts).
+  // PR27 dual orbital motion. ONE requestAnimationFrame loop and ONE shared
+  // timestamp advance two independent phases: clockwise deployed projects and
+  // a counter-moving structural reactor. Capability nodes remain stationary.
   // ---------------------------------------------------------------------------
 
   const isCompactViewport = containerDimensions.width < 1024;
-  const [orbitRateMultiplier, setOrbitRateMultiplier] = useState<OrbitRateMultiplier>(1);
+  const [projectOrbitRateMultiplier, setProjectOrbitRateMultiplier] = useState<ActiveOrbitRateMultiplier>(1);
+  const [reactorOrbitRateMultiplier, setReactorOrbitRateMultiplier] = useState<ActiveOrbitRateMultiplier>(0.5);
+  const [isProjectOrbitPaused, setIsProjectOrbitPaused] = useState(false);
+  const [isReactorOrbitPaused, setIsReactorOrbitPaused] = useState(false);
 
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
@@ -283,9 +307,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // One ring, one phase, one pause state — never per-project. PR24: an
-  // active detach/reinsertion reflow is deliberately absent here — the ring
-  // is a continuous machine and never stops for a drop or its redistribution.
+  // Both moving structures share the same machine-level pause state. PR24's
+  // direct-interaction behavior remains unchanged: drag, hover, selection,
+  // focus, pan, and reflow never become pause authorities.
   const orbitPauseState: OrbitPauseState = useMemo(() => ({
     isProjectHovered: Boolean(hoveredProjectId),
     isSkillHovered: Boolean(hoveredSkillId),
@@ -322,13 +346,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return () => clearTimeout(timer);
   }, [isPauseConditionActive]);
 
-  const isOrbitRunning = orbitRateMultiplier > 0 && !isPauseConditionActive && isResumeReady;
+  const isProjectOrbitRunning = !isProjectOrbitPaused && !isPauseConditionActive && isResumeReady;
+  const isReactorOrbitRunning = !isReactorOrbitPaused && !isPauseConditionActive && isResumeReady;
+  const isDualOrbitMachineRunning = isProjectOrbitRunning || isReactorOrbitRunning;
 
-  const [orbitPhase, setOrbitPhase] = useState(0);
-  const orbitPhaseRef = useRef(0);
-  const orbitClockRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
+  const [projectOrbitPhase, setProjectOrbitPhase] = useState(0);
+  const projectOrbitPhaseRef = useRef(0);
+  const [reactorOrbitPhase, setReactorOrbitPhase] = useState(0);
+  const dualOrbitClockRef = useRef<DualOrbitClockState>({
+    projectPhase: 0,
+    reactorPhase: 0,
+    lastTimestamp: null,
+  });
 
-  // The RAF loop is only ALIVE while isOrbitRunning is true — at most one
+  // The autonomous RAF loop is only ALIVE while either orbit is running — one
   // active chain, and genuinely zero scheduled repeating callbacks while
   // paused (user pause, compact, reduced motion, hidden tab), rather than a
   // mount-lifetime loop that keeps waking the browser and merely holding
@@ -337,31 +368,44 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // advancing through a drag, a drop, and the resulting redistribution alike
   // (see commitOrbitReflow/stepOrbitReflow's moving-frame interpolation,
   // which is what makes this safe: reflow targets are recomputed against
-  // this very orbitPhase every frame, never a frozen snapshot). Every pause
+  // this very projectOrbitPhase every frame, never a frozen snapshot). Every pause
   // clears lastTimestamp (not the phase itself) so a later resume
   // re-baselines instead of applying a catch-up jump for however long it was
   // paused.
   useEffect(() => {
-    // isOrbitRunning changes re-baseline genuine pause/resume boundaries;
-    // orbitRateMultiplier changes re-baseline speed boundaries. In both cases
-    // phase is preserved and no elapsed interval is charged at the new rate.
-    orbitClockRef.current = rebaselineOrbitClock(orbitClockRef.current);
+    // Pause/resume and either speed boundary re-baseline the one shared clock.
+    // Both phases are preserved, so no old interval is charged at a new rate.
+    dualOrbitClockRef.current = rebaselineDualOrbitClock(dualOrbitClockRef.current);
 
-    if (!isOrbitRunning) {
+    if (!isDualOrbitMachineRunning) {
       return;
     }
 
     let rafId: number;
     const tick = (timestamp: number) => {
-      const next = stepOrbitClock(orbitClockRef.current, timestamp, true, orbitRateMultiplier);
-      orbitClockRef.current = next;
-      orbitPhaseRef.current = next.phase;
-      setOrbitPhase(next.phase);
+      const next = stepDualOrbitClock(
+        dualOrbitClockRef.current,
+        timestamp,
+        isProjectOrbitRunning,
+        projectOrbitRateMultiplier,
+        isReactorOrbitRunning,
+        reactorOrbitRateMultiplier
+      );
+      dualOrbitClockRef.current = next;
+      projectOrbitPhaseRef.current = next.projectPhase;
+      setProjectOrbitPhase(next.projectPhase);
+      setReactorOrbitPhase(next.reactorPhase);
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isOrbitRunning, orbitRateMultiplier]);
+  }, [
+    isDualOrbitMachineRunning,
+    isProjectOrbitRunning,
+    projectOrbitRateMultiplier,
+    isReactorOrbitRunning,
+    reactorOrbitRateMultiplier,
+  ]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
@@ -387,7 +431,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     [dockedOrbitOrder, projectsById]
   );
 
-  // Pure derivation from orbitPhase + dockedProjectsInOrder — index/N based,
+  // Pure derivation from projectOrbitPhase + dockedProjectsInOrder — index/N based,
   // so canonical (full membership) and visitor-modified membership share ONE
   // formula (getDynamicOrbitalPosition) rather than two parallel systems. No
   // per-frame allocation beyond this one small map rebuild.
@@ -401,11 +445,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         i,
         count,
         staticOrbitalLattice.orbitGeometry,
-        orbitPhase
+        projectOrbitPhase
       );
     }
     return positions;
-  }, [dockedProjectsInOrder, staticOrbitalLattice, orbitPhase]);
+  }, [dockedProjectsInOrder, staticOrbitalLattice, projectOrbitPhase]);
 
   // Effective position maps: the animated docked orbit as the base layer,
   // with any manually dragged/detached positions layered on top. Passed to
@@ -446,7 +490,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // PR24 (continuous machine): the autonomous orbit never pauses for this —
   // not even for the reflow itself — so the plan stores SLOT descriptors
   // (buildOrbitReflowPlan), not fixed positions. Every frame of the reflow
-  // resolves those slots against whatever orbitPhase is at that instant
+  // resolves those slots against whatever projectOrbitPhase is at that instant
   // (see the reflow tick effect below), so the interpolation and the
   // continuously-advancing ring share one moving frame and can never
   // produce a jump when the reflow hands off to the normal dynamic formula.
@@ -468,7 +512,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const initialPositions = resolveOrbitReflowPositions(
       plan,
       0,
-      orbitPhaseRef.current,
+      projectOrbitPhaseRef.current,
       staticOrbitalLattice.orbitGeometry,
       (id) => projectsById.get(id)
     );
@@ -483,7 +527,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // exactly like the PR22 orbit clock. Elapsed-time based via stepOrbitReflow,
   // so frame-rate variance cannot change perceived speed and every affected
   // project shares the exact same eased progress value. PR24: resolves the
-  // plan's slot descriptors against orbitPhaseRef.current — the LIVE,
+  // plan's slot descriptors against projectOrbitPhaseRef.current — the LIVE,
   // continuously-advancing phase — on every single tick, never a value
   // captured once at commit time, so the ring never has to stop for this.
   useEffect(() => {
@@ -497,7 +541,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       const result = stepOrbitReflow(
         transition,
         timestamp,
-        orbitPhaseRef.current,
+        projectOrbitPhaseRef.current,
         staticOrbitalLattice.orbitGeometry,
         (id) => projectsById.get(id)
       );
@@ -616,15 +660,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return getCapabilitiesLinkedToExperience(selectedExp, projects, activeSkills);
   }, [selectedExp, projects, activeSkills]);
 
-  // Resets manual overrides AND the shared orbit phase back to canonical 0.
+  // Resets manual overrides AND both shared-clock phases back to canonical 0.
   // No return to legacy project.gridPosition — the animated canonical lattice
   // is the default. Motion resumes from phase 0 only if no pause condition
   // currently prohibits it (for example compact or reduced-motion mode) —
   // this does not force-start the ring.
-  const resetOrbitPhaseToCanonical = useCallback(() => {
-    orbitClockRef.current = { phase: 0, lastTimestamp: null };
-    orbitPhaseRef.current = 0;
-    setOrbitPhase(0);
+  const resetOrbitPhasesToCanonical = useCallback(() => {
+    dualOrbitClockRef.current = { projectPhase: 0, reactorPhase: 0, lastTimestamp: null };
+    projectOrbitPhaseRef.current = 0;
+    setProjectOrbitPhase(0);
+    setReactorOrbitPhase(0);
   }, []);
 
   // PR23: ASSEMBLE/RESET both mean "restore complete canonical orbital
@@ -639,8 +684,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setCustomSkillPositions({});
     setProjectDockState({});
     setInteractiveOrbitOrder(null);
-    resetOrbitPhaseToCanonical();
-  }, [cancelOrbitReflow, resetOrbitPhaseToCanonical]);
+    resetOrbitPhasesToCanonical();
+  }, [cancelOrbitReflow, resetOrbitPhasesToCanonical]);
 
   const resetAllPositions = useCallback(() => {
     restoreCanonicalDockMembership();
@@ -1044,7 +1089,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // be inserted at a new angular gap. Read the live phase at mouseup;
         // the orbit has continued to advance throughout the drag.
         const theta = projection!.theta;
-        const phaseAtRelease = orbitPhaseRef.current;
+        const phaseAtRelease = projectOrbitPhaseRef.current;
         const insertionIndex = resolveOrbitInsertionIndex(
           theta,
           phaseAtRelease,
@@ -1514,41 +1559,114 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       {/* Bottom-Left Controls & Status */}
       <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[10px] font-mono text-[#15150F] z-10">
-        {/* Desktop autonomous-orbit rate console; hidden when motion is unavailable. */}
+        {/* Desktop dual-orbit console; hidden when autonomous motion is unavailable. */}
         {!isCompactViewport && !prefersReducedMotion && (
           <div
             id="orbit-rate-controls"
-            className="pointer-events-auto flex items-stretch border border-[#15150F] bg-[#D4CDA4] font-mono"
+            className="pointer-events-auto flex flex-col border border-[#15150F] bg-[#D4CDA4] font-mono shadow-[2px_2px_0px_#15150F]"
             onMouseDown={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
           >
-            <span className="flex items-center border-r border-[#15150F] bg-[#15150F] px-2 text-[10px] font-bold text-[#C3E54E] whitespace-nowrap">
-              {orbitRateMultiplier === 0 ? 'ORBIT // PAUSED' : `ORBIT RATE // ${orbitRateMultiplier}×`}
+            <span className="bg-[#15150F] px-2 py-1 text-[10px] font-bold tracking-[0.12em] text-[#C3E54E]">
+              ORBIT CONTROL
             </span>
-            <div role="group" aria-label="Autonomous orbit rate" className="flex divide-x divide-[#15150F]">
-              {ORBIT_RATE_MULTIPLIERS.map(rate => {
-                const isActive = orbitRateMultiplier === rate;
-                const label = rate === 0 ? 'PAUSE' : `${rate}×`;
-                return (
-                  <button
-                    key={rate}
-                    type="button"
-                    aria-label={rate === 0 ? 'Pause autonomous orbit' : `Set autonomous orbit rate to ${rate} times`}
-                    aria-pressed={isActive}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setOrbitRateMultiplier(rate);
-                    }}
-                    className={`px-2 py-1 text-[10px] font-bold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] ${
-                      isActive
-                        ? 'bg-[#C3E54E] text-[#15150F]'
-                        : 'bg-[#D4CDA4] text-[#15150F] hover:bg-[#E2DCB9]'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div
+              role="group"
+              aria-label="Deployed systems orbit controls"
+              className="grid grid-cols-[78px_34px_26px_40px_26px_58px] items-stretch border-b border-[#15150F]"
+            >
+              <span className="flex items-center px-1.5 text-[9px] font-bold">R02 SYSTEMS</span>
+              <span className="flex items-center justify-center border-l border-[#15150F] text-[9px] font-bold">CW</span>
+              <button
+                type="button"
+                aria-label="Decrease deployed systems orbit speed"
+                disabled={projectOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[0]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setProjectOrbitRateMultiplier(rate => stepOrbitRate(rate, 'decrease'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                −
+              </button>
+              <output className="flex items-center justify-center border-l border-[#15150F] bg-[#E2DCB9] text-[10px] font-bold">
+                {projectOrbitRateMultiplier}×
+              </output>
+              <button
+                type="button"
+                aria-label="Increase deployed systems orbit speed"
+                disabled={projectOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[ACTIVE_ORBIT_RATE_MULTIPLIERS.length - 1]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setProjectOrbitRateMultiplier(rate => stepOrbitRate(rate, 'increase'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label={isProjectOrbitPaused ? 'Resume deployed systems orbit' : 'Pause deployed systems orbit'}
+                aria-pressed={isProjectOrbitPaused}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsProjectOrbitPaused(paused => !paused);
+                }}
+                className={`border-l border-[#15150F] px-1.5 py-1 text-[9px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                  isProjectOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
+                }`}
+              >
+                {isProjectOrbitPaused ? 'RESUME' : 'PAUSE'}
+              </button>
+            </div>
+            <div
+              role="group"
+              aria-label="Capability reactor orbit controls"
+              className="grid grid-cols-[78px_34px_26px_40px_26px_58px] items-stretch"
+            >
+              <span className="flex items-center px-1.5 text-[9px] font-bold">R01 REACTOR</span>
+              <span className="flex items-center justify-center border-l border-[#15150F] text-[9px] font-bold">CCW</span>
+              <button
+                type="button"
+                aria-label="Decrease capability reactor speed"
+                disabled={reactorOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[0]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactorOrbitRateMultiplier(rate => stepOrbitRate(rate, 'decrease'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                −
+              </button>
+              <output className="flex items-center justify-center border-l border-[#15150F] bg-[#E2DCB9] text-[10px] font-bold">
+                {reactorOrbitRateMultiplier}×
+              </output>
+              <button
+                type="button"
+                aria-label="Increase capability reactor speed"
+                disabled={reactorOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[ACTIVE_ORBIT_RATE_MULTIPLIERS.length - 1]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactorOrbitRateMultiplier(rate => stepOrbitRate(rate, 'increase'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label={isReactorOrbitPaused ? 'Resume capability reactor orbit' : 'Pause capability reactor orbit'}
+                aria-pressed={isReactorOrbitPaused}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsReactorOrbitPaused(paused => !paused);
+                }}
+                className={`border-l border-[#15150F] px-1.5 py-1 text-[9px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                  isReactorOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
+                }`}
+              >
+                {isReactorOrbitPaused ? 'RESUME' : 'PAUSE'}
+              </button>
             </div>
           </div>
         )}
@@ -1799,6 +1917,101 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
+        {/* Fixed capability-reactor ellipse with phase-driven structure circulating along it. */}
+        <g id="capability-reactor" pointerEvents="none" className="pointer-events-none" opacity={0.46}>
+          {capabilityReactorSegmentPaths.map((path, index) => (
+            <path
+              key={`reactor-segment-${index}`}
+              d={path}
+              pathLength="100"
+              fill="none"
+              stroke="#15150F"
+              strokeWidth="1.25"
+              strokeDasharray="5 3 1 3"
+              strokeDashoffset={getCapabilityReactorDashOffset(reactorOrbitPhase)}
+            />
+          ))}
+          {Array.from({ length: 8 }, (_, index) => {
+            const marker = getCapabilityReactorMarker(
+              capabilityReactorGeometry,
+              reactorOrbitPhase,
+              index,
+              8,
+              7
+            );
+            return (
+              <g key={`reactor-major-marker-${index}`}>
+                <line
+                  x1={marker.x1}
+                  y1={marker.y1}
+                  x2={marker.x2}
+                  y2={marker.y2}
+                  stroke="#15150F"
+                  strokeWidth="2"
+                />
+                <rect
+                  x={marker.x - 1.75}
+                  y={marker.y - 1.75}
+                  width="3.5"
+                  height="3.5"
+                  fill="#C3E54E"
+                  stroke="#15150F"
+                  strokeWidth="0.8"
+                />
+              </g>
+            );
+          })}
+          {Array.from({ length: 16 }, (_, index) => {
+            const marker = getCapabilityReactorMarker(
+              capabilityReactorGeometry,
+              reactorOrbitPhase,
+              index + 0.5,
+              16,
+              3.5
+            );
+            return (
+              <line
+                key={`reactor-minor-marker-${index}`}
+                x1={marker.x1}
+                y1={marker.y1}
+                x2={marker.x2}
+                y2={marker.y2}
+                stroke="#15150F"
+                strokeWidth="0.85"
+              />
+            );
+          })}
+          {Array.from({ length: 4 }, (_, index) => {
+            const registration = getCapabilityReactorMarker(
+              capabilityReactorGeometry,
+              0,
+              index,
+              4,
+              10
+            );
+            return (
+              <g key={`reactor-cardinal-registration-${index}`}>
+                <line
+                  x1={registration.x1}
+                  y1={registration.y1}
+                  x2={registration.x2}
+                  y2={registration.y2}
+                  stroke="#15150F"
+                  strokeWidth="1.15"
+                />
+                <circle
+                  cx={registration.x}
+                  cy={registration.y}
+                  r="2.25"
+                  fill="#D4CDA4"
+                  stroke="#15150F"
+                  strokeWidth="0.9"
+                />
+              </g>
+            );
+          })}
+        </g>
+
         {/* Orbital Field Annotations: hierarchy drafting labels */}
         <g
           id="orbital-field-annotations"
@@ -1807,8 +2020,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           opacity={0.55}
         >
           <text
-            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.centerIso.y + 220}
+            x={capabilityReactorGeometry.centerIso.x}
+            y={capabilityReactorGeometry.centerIso.y + capabilityReactorGeometry.radiusY + 42}
             fontSize="18"
             fontWeight="bold"
             fill="#5C5946"
@@ -1816,7 +2029,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             letterSpacing="1.2"
             textAnchor="middle"
           >
-            RING 01 // CAPABILITY NUCLEUS
+            RING 01 // CAPABILITY REACTOR
           </text>
           <text
             x={staticOrbitalLattice.orbitGeometry.centerIso.x}
