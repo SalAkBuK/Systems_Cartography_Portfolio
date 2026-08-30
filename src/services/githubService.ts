@@ -21,6 +21,17 @@ import { parseGitHubTarget } from '../utils/portfolioUtils';
 export const DEFAULT_INSPECTION_CONCURRENCY = 3;
 export const MAX_MANIFEST_DEPTH = 4;
 export const MAX_MANIFEST_FILES_PER_REPO = 15;
+export const MAX_RAW_README_BYTES = 1024 * 1024;
+export const MAX_RAW_MANIFEST_BYTES = 512 * 1024;
+
+const RAW_GITHUB_ORIGIN = 'https://raw.githubusercontent.com';
+const README_FILE_PRIORITY = [
+  'readme.md',
+  'readme.markdown',
+  'readme.rst',
+  'readme.txt',
+  'readme'
+] as const;
 
 export interface GitHubUser {
   login: string;
@@ -120,7 +131,10 @@ export interface GitHubSyncResult {
 export interface GitHubFetchOptions {
   token?: string;
   inspectionConcurrency?: number;
+  /** GitHub REST API transport. Retained as fetchImpl for backwards compatibility. */
   fetchImpl?: typeof fetch;
+  /** Public raw-content transport. Defaults to fetchImpl when injected, otherwise global fetch. */
+  rawFetchImpl?: typeof fetch;
 }
 
 /**
@@ -160,6 +174,131 @@ function getGitHubHeaders(options?: GitHubFetchOptions, acceptHeader = 'applicat
     headers['Authorization'] = `Bearer ${options.token.trim()}`;
   }
   return headers;
+}
+
+function encodeRawPath(path: string): string {
+  return path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+}
+
+/**
+ * Build a public raw-content URL without consulting the Contents API.
+ * Every path component is encoded independently so repository refs and file names
+ * cannot change the fixed HTTPS raw.githubusercontent.com origin.
+ */
+export function buildGitHubRawContentUrl(
+  owner: string,
+  repo: string,
+  ref: string,
+  filePath: string
+): string {
+  const cleanOwner = owner.trim();
+  const cleanRepo = repo.trim();
+  const cleanRef = ref.trim();
+  const cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!cleanOwner || !cleanRepo || !cleanRef || !cleanPath) {
+    throw new Error('Cannot build GitHub raw-content URL from an empty owner, repository, ref, or path.');
+  }
+
+  const url = new URL(
+    `${RAW_GITHUB_ORIGIN}/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/${encodeURIComponent(cleanRef)}/${encodeRawPath(cleanPath)}`
+  );
+  if (url.protocol !== 'https:' || url.hostname !== 'raw.githubusercontent.com') {
+    throw new Error('Refusing to fetch GitHub raw content from an untrusted host.');
+  }
+  return url.toString();
+}
+
+/** Select one supported repository README using GitHub's location precedence. */
+export function discoverRepositoryReadme(treeFiles: string[]): string | undefined {
+  const locationCandidates: string[][] = [[], [], []];
+  for (const file of treeFiles) {
+    const segments = file.split('/');
+    if (segments.length === 1 && segments[0]) {
+      locationCandidates[1].push(file);
+    } else if (segments.length === 2) {
+      const directory = segments[0].toLowerCase();
+      if (directory === '.github') locationCandidates[0].push(file);
+      else if (directory === 'docs') locationCandidates[2].push(file);
+    }
+  }
+
+  for (const candidates of locationCandidates) {
+    for (const supportedName of README_FILE_PRIORITY) {
+      const matches = candidates
+        .filter(file => file.split('/').pop()?.toLowerCase() === supportedName)
+        .sort((a, b) => a.localeCompare(b));
+      if (matches.length > 0) return matches[0];
+    }
+  }
+  return undefined;
+}
+
+async function readBoundedResponseText(res: Response, maxBytes: number, context: string): Promise<string> {
+  const contentLength = res.headers?.get?.('content-length');
+  if (contentLength && Number.isFinite(Number(contentLength)) && Number(contentLength) > maxBytes) {
+    throw new Error(`${context} exceeds the ${maxBytes}-byte raw-content limit.`);
+  }
+
+  if (!res.body) {
+    const text = await res.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error(`${context} exceeds the ${maxBytes}-byte raw-content limit.`);
+    }
+    return text;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel();
+        throw new Error(`${context} exceeds the ${maxBytes}-byte raw-content limit.`);
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function fetchPublicRawText(
+  owner: string,
+  repo: string,
+  ref: string,
+  filePath: string,
+  maxBytes: number,
+  options?: GitHubFetchOptions
+): Promise<{ status: number; statusText: string; text?: string }> {
+  const rawFetchImpl = options?.rawFetchImpl || options?.fetchImpl || globalThis.fetch;
+  const rawUrl = buildGitHubRawContentUrl(owner, repo, ref, filePath);
+  const res = await rawFetchImpl(rawUrl, {
+    headers: { Accept: 'text/plain' },
+    redirect: 'error'
+  });
+
+  if (res.url) {
+    const finalUrl = new URL(res.url);
+    if (finalUrl.protocol !== 'https:' || finalUrl.hostname !== 'raw.githubusercontent.com') {
+      throw new Error('Refusing a GitHub raw-content response from an untrusted host.');
+    }
+  }
+
+  if (!res.ok) {
+    return { status: res.status, statusText: res.statusText };
+  }
+  return {
+    status: res.status,
+    statusText: res.statusText,
+    text: await readBoundedResponseText(res, maxBytes, `Raw file "${filePath}" for "${owner}/${repo}"`)
+  };
 }
 
 export function handleGitHubHttpError(res: Response, contextMessage: string): never {
@@ -694,23 +833,7 @@ export async function fetchRepoInspection(
     configFiles: []
   };
 
-  // 1. Fetch README (missing README / 404 remains non-fatal)
-  try {
-    const readmeRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/readme`, {
-      headers: getGitHubHeaders(options, 'application/vnd.github.v3.raw')
-    });
-    if (readmeRes.ok) {
-      inspection.readmeContent = await readmeRes.text();
-    } else if (readmeRes.status !== 404) {
-      handleGitHubHttpError(readmeRes, `fetching README for "${cleanOwner}/${cleanRepo}"`);
-    }
-  } catch (err: any) {
-    if (err.message && (err.message.includes('rate limit') || err.message.includes('forbidden') || err.message.includes('Failed to fetch'))) {
-      throw err;
-    }
-  }
-
-  // 2. Fetch Git Tree
+  // 1. Fetch the recursive Git tree. It remains authoritative for all discovery.
   const treeRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
     headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
   });
@@ -726,11 +849,36 @@ export async function fetchRepoInspection(
   if (!treeData || !Array.isArray(treeData.tree)) {
     throw new Error(`Incomplete inspection for "${cleanOwner}/${cleanRepo}": Git tree payload is missing or not an array.`);
   }
-  inspection.treeFiles = treeData.tree.map((t: { path: string }) => t.path);
+  inspection.treeFiles = treeData.tree
+    .filter((entry: { path?: unknown; type?: unknown }) => typeof entry.path === 'string' && (!entry.type || entry.type === 'blob'))
+    .map((entry: { path: string }) => entry.path);
 
-  // 3. Scan tree paths for categorized artifact collections and manifest candidates
+  // Raw content uses the repository's authoritative default branch. The tree
+  // payload SHA identifies a Git tree object, not necessarily a raw-content ref.
+  const rawRef = defaultBranch;
+
+  // 2. Scan tree paths for README, categorized artifacts, and manifest candidates.
   if (inspection.treeFiles && inspection.treeFiles.length > 0) {
     const files = inspection.treeFiles;
+
+    const readmePath = discoverRepositoryReadme(files);
+    if (readmePath) {
+      const readmeResult = await fetchPublicRawText(
+        cleanOwner,
+        cleanRepo,
+        rawRef,
+        readmePath,
+        MAX_RAW_README_BYTES,
+        options
+      );
+      if (readmeResult.status >= 200 && readmeResult.status < 300) {
+        inspection.readmeContent = readmeResult.text;
+      } else if (readmeResult.status !== 404) {
+        throw new Error(
+          `Failed to fetch raw README "${readmePath}" for "${cleanOwner}/${cleanRepo}": ${readmeResult.statusText || readmeResult.status}.`
+        );
+      }
+    }
 
     inspection.dockerFiles = files.filter(f => /dockerfile|docker-compose|compose\.ya?ml/i.test(f.split('/').pop() || ''));
     inspection.workflowFiles = files.filter(f => f.startsWith('.github/workflows/'));
@@ -790,19 +938,26 @@ export async function fetchRepoInspection(
     // Cap at MAX_MANIFEST_FILES_PER_REPO
     const cappedManifests = manifestCandidates.slice(0, MAX_MANIFEST_FILES_PER_REPO);
 
-    // Fetch recognized manifest contents
+    // Fetch recognized manifest contents directly from the public raw host.
     for (const manifestPath of cappedManifests) {
-      const manifestRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/contents/${encodeURIComponent(manifestPath)}?ref=${encodeURIComponent(defaultBranch)}`, {
-        headers: getGitHubHeaders(options, 'application/vnd.github.v3.raw')
-      });
+      const manifestResult = await fetchPublicRawText(
+        cleanOwner,
+        cleanRepo,
+        rawRef,
+        manifestPath,
+        MAX_RAW_MANIFEST_BYTES,
+        options
+      );
 
-      if (!manifestRes.ok) {
-        if (manifestRes.status === 404) {
+      if (manifestResult.status < 200 || manifestResult.status >= 300) {
+        if (manifestResult.status === 404) {
           throw new Error(`Manifest file "${manifestPath}" listed in tree for "${cleanOwner}/${cleanRepo}" was not found (404). Inconsistent repository state.`);
         }
-        handleGitHubHttpError(manifestRes, `fetching manifest "${manifestPath}" for "${cleanOwner}/${cleanRepo}"`);
+        throw new Error(
+          `Failed to fetch raw manifest "${manifestPath}" for "${cleanOwner}/${cleanRepo}": ${manifestResult.statusText || manifestResult.status}.`
+        );
       } else {
-        const content = await manifestRes.text();
+        const content = manifestResult.text || '';
         if (inspection.manifestContents) {
           inspection.manifestContents[manifestPath] = content;
         }

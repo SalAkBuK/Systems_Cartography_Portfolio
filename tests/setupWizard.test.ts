@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as http from 'node:http';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vm from 'node:vm';
 import {
   createSetupPortfolioServer,
   validateLocalhostHost,
@@ -45,6 +46,79 @@ function makeHttpRequest(
     if (options.body) req.write(options.body);
     req.end();
   });
+}
+
+function createWizardBrowserHarness() {
+  const html = fs.readFileSync(path.resolve('scripts/setup-portfolio.html'), 'utf8');
+  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(inlineScript, 'Wizard inline script must be present');
+
+  const elements = new Map<string, any>();
+  const getElement = (id: string) => {
+    if (!elements.has(id)) {
+      elements.set(id, {
+        id,
+        value: '',
+        innerText: '',
+        innerHTML: '',
+        disabled: false,
+        style: { display: 'none' },
+        className: '',
+        classList: { add() {}, remove() {}, toggle() {} },
+        addEventListener() {}
+      });
+    }
+    return elements.get(id);
+  };
+
+  let uploadResponse: { ok: boolean; body: any } = { ok: false, body: { success: false, error: 'not configured' } };
+  let savedProfile: any = null;
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input.toString();
+    if (url === '/api/session') {
+      return { ok: true, json: async () => ({ csrfToken: 'csrf', existingSetup: false }) };
+    }
+    if (url === '/api/state') {
+      return { ok: true, json: async () => ({ snapshot: { projects: [] }, preferences: { flagshipProjectIds: [] } }) };
+    }
+    if (url.startsWith('/api/upload-pdf')) {
+      return { ok: uploadResponse.ok, json: async () => uploadResponse.body };
+    }
+    if (url === '/api/save-profile') {
+      savedProfile = JSON.parse(String(init?.body)).profile;
+      return { ok: true, json: async () => ({ success: true }) };
+    }
+    throw new Error(`Unexpected wizard fetch: ${url}`);
+  };
+
+  const context: any = {
+    document: {
+      getElementById: getElement,
+      querySelectorAll: () => []
+    },
+    fetch: fetchImpl,
+    console
+  };
+  vm.runInNewContext(`${inlineScript}\n;globalThis.__wizardTestApi = {
+    handleFileSelected,
+    uploadAndParsePdf,
+    saveProfileAndContinue,
+    getParsedProfile: () => parsedProfile,
+    getCurrentStep: () => currentStep
+  };`, context, { filename: 'setup-portfolio.inline.js' });
+
+  return {
+    api: context.__wizardTestApi as {
+      handleFileSelected(event: any): void;
+      uploadAndParsePdf(): Promise<void>;
+      saveProfileAndContinue(): Promise<void>;
+      getParsedProfile(): any;
+      getCurrentStep(): number;
+    },
+    element: getElement,
+    setUploadResponse(response: { ok: boolean; body: any }) { uploadResponse = response; },
+    getSavedProfile: () => savedProfile
+  };
 }
 
 test('1. setup:portfolio: script registered in package.json and host binds strictly to 127.0.0.1', () => {
@@ -456,4 +530,41 @@ test('11. setup:portfolio: wizard enforces first-time owner profile progression 
   assert.ok(htmlContent.includes('KEEP EXISTING PROFILE & CONTINUE'), 'Template must support KEEP EXISTING PROFILE & CONTINUE for configured owners');
   assert.ok(htmlContent.includes('SAVE PROFILE & CONTINUE'), 'Template must support SAVE PROFILE & CONTINUE after successful new parse');
   assert.ok(htmlContent.includes('updateProfileProgressionUI'), 'Template must implement reactive progression UI updates');
+});
+
+test('12. setup wizard PDF browser flow retains successful state, saves it, and clears stale state on parse failure', async () => {
+  const harness = createWizardBrowserHarness();
+  await new Promise(resolve => setImmediate(resolve));
+  const profile = {
+    githubTarget: 'https://github.com/inferred-owner',
+    operator: { name: 'PDF Owner', role: 'Engineer', location: 'Remote' },
+    experience: [{ role: 'Engineer' }]
+  };
+  harness.api.handleFileSelected({ target: { files: [{ name: 'profile.pdf', size: 4096 }] } });
+  harness.setUploadResponse({ ok: true, body: { success: true, profile } });
+
+  await harness.api.uploadAndParsePdf();
+
+  assert.deepEqual(harness.api.getParsedProfile(), profile);
+  assert.equal(harness.element('parsedProfileReview').style.display, 'block');
+  assert.equal(harness.element('githubTargetInput').value, profile.githubTarget);
+  assert.equal(harness.element('continueToGithubBtn').disabled, false);
+  assert.equal(harness.element('statusBanner').className, 'status-banner success');
+  assert.match(harness.element('statusBanner').innerText, /successfully parsed/);
+  assert.equal(harness.element('importPdfBtn').disabled, false);
+  assert.equal(harness.element('importPdfBtn').innerText, 'IMPORT PROFILE');
+
+  await harness.api.saveProfileAndContinue();
+  assert.deepEqual(harness.getSavedProfile(), profile);
+  assert.equal(harness.api.getCurrentStep(), 2);
+
+  harness.setUploadResponse({ ok: false, body: { success: false, error: 'PDF parse error: malformed export' } });
+  await harness.api.uploadAndParsePdf();
+
+  assert.equal(harness.api.getParsedProfile(), null);
+  assert.equal(harness.element('parsedProfileReview').style.display, 'none');
+  assert.equal(harness.element('statusBanner').className, 'status-banner error');
+  assert.equal(harness.element('statusBanner').innerText, 'PDF parse error: malformed export');
+  assert.equal(harness.element('importPdfBtn').disabled, false);
+  assert.equal(harness.element('importPdfBtn').innerText, 'IMPORT PROFILE');
 });

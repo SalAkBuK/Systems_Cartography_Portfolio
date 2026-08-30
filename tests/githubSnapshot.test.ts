@@ -15,6 +15,11 @@ import {
   inspectCanonicalRepositories,
   handleGitHubHttpError,
   generateGitHubProfileDetails,
+  buildGitHubRawContentUrl,
+  discoverRepositoryReadme,
+  MAX_MANIFEST_DEPTH,
+  MAX_MANIFEST_FILES_PER_REPO,
+  MAX_RAW_README_BYTES,
   sanitizeGitHubUser,
   GitHubRepoRaw 
 } from '../src/services/githubService.ts';
@@ -274,20 +279,18 @@ test('fetchGitHubUserData deep-inspects all canonical repos without top-3 limit'
       } as Response;
     }
 
-    if (url.includes('/readme')) {
-      const repoMatch = url.match(/\/repos\/test-user\/([^\/]+)\/readme/);
-      if (repoMatch) {
-        inspectedRepos.push(repoMatch[1]);
-      }
-      return { ok: true, status: 200, text: async () => '# Service' } as Response;
-    }
-
     if (url.includes('/git/trees/')) {
-      return { ok: true, status: 200, json: async () => ({ tree: [{ path: 'package.json' }] }) } as Response;
+      const repoMatch = url.match(/\/repos\/test-user\/([^\/]+)\/git\/trees/);
+      if (repoMatch) inspectedRepos.push(repoMatch[1]);
+      return new Response(JSON.stringify({ tree: [{ path: 'README.md', type: 'blob' }, { path: 'package.json', type: 'blob' }] }), { status: 200 });
     }
 
-    if (url.includes('/contents/package.json')) {
-      return { ok: true, status: 200, text: async () => JSON.stringify({ name: 'test', dependencies: { express: '^4.0.0' } }) } as Response;
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/README.md')) {
+      return new Response('# Service', { status: 200 });
+    }
+
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/package.json')) {
+      return new Response(JSON.stringify({ name: 'test', dependencies: { express: '^4.0.0' } }), { status: 200 });
     }
 
     return { ok: false, status: 404, text: async () => 'Not found' } as Response;
@@ -300,6 +303,223 @@ test('fetchGitHubUserData deep-inspects all canonical repos without top-3 limit'
 
   assert.equal(result.projects.length, 6);
   assert.equal(inspectedRepos.length, 6, 'All 6 canonical repositories must be deeply inspected (no idx < 3 cap)');
+});
+
+test('README discovery prefers .github over repository root', () => {
+  assert.equal(
+    discoverRepositoryReadme(['README.md', '.github/README.md']),
+    '.github/README.md'
+  );
+});
+
+test('README discovery prefers repository root over docs', () => {
+  assert.equal(
+    discoverRepositoryReadme(['docs/README.md', 'README.rst']),
+    'README.rst'
+  );
+});
+
+test('README discovery selects docs when .github and root candidates are absent', () => {
+  assert.equal(discoverRepositoryReadme(['src/index.ts', 'docs/README.md']), 'docs/README.md');
+});
+
+test('README discovery matches supported filenames case-insensitively and deterministically', () => {
+  assert.equal(
+    discoverRepositoryReadme(['.GiTHuB/ReAdMe.TxT', '.github/rEaDmE.Md']),
+    '.github/rEaDmE.Md'
+  );
+  assert.equal(discoverRepositoryReadme(['ReadMe.MarkDown', 'README']), 'ReadMe.MarkDown');
+});
+
+test('README discovery ignores arbitrary nested package and vendor READMEs', () => {
+  assert.equal(
+    discoverRepositoryReadme(['packages/foo/README.md', 'vendor/lib/README.rst', 'docs/guides/README.txt']),
+    undefined
+  );
+});
+
+test('README discovery returns no candidate when supported locations contain no README', () => {
+  assert.equal(discoverRepositoryReadme(['README.adoc', '.github/CONTRIBUTING.md', 'docs/guide.md']), undefined);
+});
+
+test('raw-content URLs pin the HTTPS GitHub raw host and encode refs and path segments safely', () => {
+  const url = buildGitHubRawContentUrl('owner', 'repo', 'feature/odd branch', 'apps/web app/package.json');
+  assert.equal(
+    url,
+    'https://raw.githubusercontent.com/owner/repo/feature%2Fodd%20branch/apps/web%20app/package.json'
+  );
+  const parsed = new URL(url);
+  assert.equal(parsed.protocol, 'https:');
+  assert.equal(parsed.hostname, 'raw.githubusercontent.com');
+  assert.throws(
+    () => buildGitHubRawContentUrl('owner', 'repo', 'main', ''),
+    /empty owner, repository, ref, or path/
+  );
+});
+
+test('inspection uses one REST tree plus credential-free raw README/manifests and preserves exact analyzer inputs', async () => {
+  const restCalls: string[] = [];
+  const rawCalls: Array<{ url: string; authorization: string | null }> = [];
+  const readme = '# Exact README\n\n## Challenge\nPreserve this documentation.';
+  const manifest = '{"name":"exact","dependencies":{"react":"^19.0.0"}}';
+
+  const restFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    restCalls.push(url);
+    assert.ok(url.includes('/git/trees/feature%2Fraw?recursive=1'));
+    return new Response(JSON.stringify({
+      truncated: false,
+      tree: [
+        { path: 'README.markdown', type: 'blob' },
+        { path: 'package.json', type: 'blob' },
+        { path: 'apps/api/package.json', type: 'blob' },
+        { path: 'vendor/pkg/package.json', type: 'blob' },
+        { path: 'docs/README.md', type: 'blob' }
+      ]
+    }), { status: 200 });
+  }) as typeof fetch;
+
+  const rawFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input.toString();
+    const authorization = new Headers(init?.headers).get('authorization');
+    rawCalls.push({ url, authorization });
+    if (url.endsWith('/README.markdown')) return new Response(readme, { status: 200 });
+    if (url.endsWith('/package.json')) return new Response(manifest, { status: 200 });
+    return new Response('Not Found', { status: 404 });
+  }) as typeof fetch;
+
+  const inspection = await fetchRepoInspection('owner', 'repo', 'feature/raw', {
+    token: 'secret-rest-token',
+    fetchImpl: restFetch,
+    rawFetchImpl: rawFetch
+  });
+
+  assert.equal(restCalls.length, 1);
+  assert.ok(!restCalls.some(url => url.includes('/readme') || url.includes('/contents/')));
+  assert.equal(rawCalls.length, 3);
+  assert.ok(rawCalls.every(call => call.url.startsWith('https://raw.githubusercontent.com/owner/repo/feature%2Fraw/')));
+  assert.ok(rawCalls.every(call => call.authorization === null && !call.url.includes('secret-rest-token')));
+  assert.equal(inspection.readmeContent, readme);
+  assert.equal(inspection.manifestContents?.['package.json'], manifest);
+  assert.equal(inspection.manifestContents?.['apps/api/package.json'], manifest);
+  assert.equal(inspection.packageJsonContent, manifest);
+  const analyzed = analyzeRepository(sampleRepo, 0, 1, inspection);
+  assert.ok(analyzed.techStack.includes('React'));
+});
+
+test('missing repository README is nonfatal and causes no speculative raw README request', async () => {
+  let rawCalls = 0;
+  const inspection = await fetchRepoInspection('owner', 'repo', 'main', {
+    fetchImpl: (async () => new Response(JSON.stringify({
+      truncated: false,
+      tree: [{ path: 'packages/app/README.md', type: 'blob' }, { path: 'src/index.ts', type: 'blob' }]
+    }), { status: 200 })) as typeof fetch,
+    rawFetchImpl: (async () => {
+      rawCalls++;
+      return new Response('Not Found', { status: 404 });
+    }) as typeof fetch
+  });
+  assert.equal(inspection.readmeContent, undefined);
+  assert.equal(rawCalls, 0);
+});
+
+test('README 404 is optional, while a tree-listed raw manifest 404 preserves repository-state integrity failure', async () => {
+  const rawFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.endsWith('/README.md')) return new Response('Not Found', { status: 404 });
+    return new Response('Not Found', { status: 404 });
+  }) as typeof fetch;
+  await assert.rejects(
+    fetchRepoInspection('owner', 'repo', 'main', {
+      fetchImpl: (async () => new Response(JSON.stringify({
+        truncated: false,
+        tree: [{ path: 'README.md', type: 'blob' }, { path: 'package.json', type: 'blob' }]
+      }), { status: 200 })) as typeof fetch,
+      rawFetchImpl: rawFetch
+    }),
+    /Manifest file "package\.json" listed in tree.*not found \(404\)/
+  );
+});
+
+test('raw response sizes are bounded before oversized README content is consumed', async () => {
+  await assert.rejects(
+    fetchRepoInspection('owner', 'repo', 'main', {
+      fetchImpl: (async () => new Response(JSON.stringify({
+        truncated: false,
+        tree: [{ path: 'README.md', type: 'blob' }]
+      }), { status: 200 })) as typeof fetch,
+      rawFetchImpl: (async () => new Response('small fixture', {
+        status: 200,
+        headers: { 'content-length': String(MAX_RAW_README_BYTES + 1) }
+      })) as typeof fetch
+    }),
+    /exceeds the 1048576-byte raw-content limit/
+  );
+});
+
+test('manifest depth and per-repository count limits remain enforced for raw downloads', async () => {
+  const paths = [
+    'package.json',
+    ...Array.from({ length: MAX_MANIFEST_FILES_PER_REPO + 4 }, (_, i) => `apps/app-${String(i).padStart(2, '0')}/package.json`),
+    `${Array.from({ length: MAX_MANIFEST_DEPTH }, () => 'deep').join('/')}/package.json`,
+    'node_modules/pkg/package.json',
+    'vendor/pkg/composer.json'
+  ];
+  const rawPaths: string[] = [];
+  const inspection = await fetchRepoInspection('owner', 'repo', 'main', {
+    fetchImpl: (async () => new Response(JSON.stringify({
+      truncated: false,
+      tree: paths.map(path => ({ path, type: 'blob' }))
+    }), { status: 200 })) as typeof fetch,
+    rawFetchImpl: (async (input: RequestInfo | URL) => {
+      rawPaths.push(decodeURIComponent(new URL(input.toString()).pathname));
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch
+  });
+  assert.equal(rawPaths.length, MAX_MANIFEST_FILES_PER_REPO);
+  assert.equal(Object.keys(inspection.manifestContents || {}).length, MAX_MANIFEST_FILES_PER_REPO);
+  assert.ok(!rawPaths.some(path => path.includes('/deep/deep/deep/deep/package.json')));
+  assert.ok(!rawPaths.some(path => path.includes('/node_modules/') || path.includes('/vendor/')));
+});
+
+test('18-repository anonymous fixture consumes exactly 20 core REST requests and keeps README/dependency evidence raw', async () => {
+  const restCalls: string[] = [];
+  const rawCalls: string[] = [];
+  const owner = 'budget-owner';
+  const repos: GitHubRepoRaw[] = Array.from({ length: 18 }, (_, index) => ({
+    ...sampleRepo,
+    id: index + 1,
+    name: `repo-${index + 1}`,
+    full_name: `${owner}/repo-${index + 1}`,
+    html_url: `https://github.com/${owner}/repo-${index + 1}`,
+    owner: { ...sampleRepo.owner, login: owner }
+  }));
+  const restFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    restCalls.push(url);
+    if (url.includes(`/users/${owner}/repos`)) return new Response(JSON.stringify(repos), { status: 200 });
+    if (url.includes(`/users/${owner}`)) return new Response(JSON.stringify({ login: owner, public_repos: 18 }), { status: 200 });
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify({
+      truncated: false,
+      tree: [{ path: 'README.md', type: 'blob' }, { path: 'package.json', type: 'blob' }]
+    }), { status: 200 });
+    return new Response('Not Found', { status: 404 });
+  }) as typeof fetch;
+  const rawFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    rawCalls.push(url);
+    return new Response(url.endsWith('/README.md') ? '# Repository' : '{"dependencies":{"react":"^19.0.0"}}', { status: 200 });
+  }) as typeof fetch;
+
+  const result = await fetchGitHubUserData(owner, { fetchImpl: restFetch, rawFetchImpl: rawFetch });
+  assert.equal(result.projects.length, 18);
+  assert.equal(restCalls.length, 20);
+  assert.ok(restCalls.length < 60);
+  assert.equal(restCalls.filter(url => url.includes('/git/trees/')).length, 18);
+  assert.ok(!restCalls.some(url => url.includes('/readme') || url.includes('/contents/')));
+  assert.equal(rawCalls.length, 36);
+  assert.equal(rawCalls.filter(url => url.endsWith('/README.md')).length, 18);
+  assert.equal(rawCalls.filter(url => url.endsWith('/package.json')).length, 18);
 });
 
 // ---------------------------------------------------------------------------
@@ -451,10 +671,10 @@ test('fetchRepoInspection throws in strict mode when tree-listed manifest return
         })
       } as Response;
     }
-    if (url.includes('/contents/package.json')) {
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/package.json') && !url.includes('/apps/api/')) {
       return { ok: true, status: 200, text: async () => '{"name":"root"}' } as Response;
     }
-    if (url.includes('/contents/apps%2Fapi%2Fpackage.json')) {
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/apps/api/package.json')) {
       return { ok: false, status: 404, statusText: 'Not Found' } as Response;
     }
     return { ok: false, status: 404 } as Response;

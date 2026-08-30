@@ -115,7 +115,7 @@ test('7. Token never appears in HTTP rate limit diagnostic headers or error text
   });
 });
 
-test('8. Existing GitHub fetch layer receives authentication token across all calls', async () => {
+test('8. Authenticated REST calls retain Bearer headers while public raw calls receive no credentials', async () => {
   const calls: Array<{ url: string; authHeader: string | null }> = [];
   const secretToken = 'gho_test_token_alpha';
 
@@ -161,21 +161,22 @@ test('8. Existing GitHub fetch layer receives authentication token across all ca
       }), { status: 200 });
     }
 
-    if (url.includes('/readme')) {
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/README.md')) {
       return new Response('# Repo One', { status: 200 });
     }
 
     if (url.includes('/git/trees/')) {
       return new Response(JSON.stringify({
         tree: [
-          { path: 'package.json' },
+          { path: 'README.md', type: 'blob' },
+          { path: 'package.json', type: 'blob' },
           { path: 'src/index.ts' }
         ],
         truncated: false
       }), { status: 200 });
     }
 
-    if (url.includes('/contents/package.json')) {
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/package.json')) {
       return new Response(JSON.stringify({
         name: 'repo-one',
         dependencies: { react: '^18.0.0' }
@@ -191,19 +192,21 @@ test('8. Existing GitHub fetch layer receives authentication token across all ca
   });
 
   assert.equal(result.projects.length, 1);
-  assert.ok(calls.length >= 4, 'Must make profile, repo, tree, readme, and manifest calls');
+  assert.equal(calls.filter(call => call.url.startsWith('https://api.github.com/')).length, 3);
+  assert.equal(calls.filter(call => call.url.startsWith('https://raw.githubusercontent.com/')).length, 2);
 
-  // Verify EVERY call to api.github.com included the Authorization header with Bearer token
+  // GitHub REST remains authenticated, while public raw-content URLs never carry credentials.
   for (const call of calls) {
-    assert.equal(
-      call.authHeader,
-      `Bearer ${secretToken}`,
-      `Call to ${call.url} must include Authorization header`
-    );
+    if (call.url.startsWith('https://api.github.com/')) {
+      assert.equal(call.authHeader, `Bearer ${secretToken}`, `REST call to ${call.url} must include Authorization`);
+    } else {
+      assert.equal(call.authHeader, null, `Raw call to ${call.url} must not include Authorization`);
+      assert.ok(!call.url.includes(secretToken), 'Raw URL must not contain the token');
+    }
   }
 });
 
-test('9. Manifest fetching explicitly receives authentication header', async () => {
+test('9. Public raw manifest fetching explicitly omits authentication', async () => {
   let manifestAuthHeader: string | null = null;
   const secretToken = 'gho_manifest_auth_token';
 
@@ -211,12 +214,9 @@ test('9. Manifest fetching explicitly receives authentication header', async () 
     const url = input.toString();
     const headers = new Headers(init?.headers);
 
-    if (url.includes('/contents/package.json')) {
+    if (url.startsWith('https://raw.githubusercontent.com/') && url.endsWith('/package.json')) {
       manifestAuthHeader = headers.get('authorization');
       return new Response('{"name":"pkg"}', { status: 200 });
-    }
-    if (url.includes('/readme')) {
-      return new Response('README', { status: 200 });
     }
     if (url.includes('/git/trees/')) {
       return new Response(JSON.stringify({
@@ -232,7 +232,7 @@ test('9. Manifest fetching explicitly receives authentication header', async () 
     fetchImpl: mockFetch
   });
 
-  assert.equal(manifestAuthHeader, `Bearer ${secretToken}`);
+  assert.equal(manifestAuthHeader, null);
 });
 
 test('10. Authenticated rate-limit metadata handled safely without credentials', async () => {

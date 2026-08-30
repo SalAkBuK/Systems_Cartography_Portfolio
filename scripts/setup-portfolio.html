@@ -602,6 +602,7 @@
         document.getElementById('parsedProfileReview').style.display = 'block';
         updateProfileProgressionUI();
         showStatus('✓ LinkedIn profile successfully parsed!', 'success');
+      } catch (err) {
         parsedProfile = null;
         document.getElementById('parsedProfileReview').style.display = 'none';
         updateProfileProgressionUI();
