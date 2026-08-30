@@ -28,9 +28,9 @@ const idlePauseState: OrbitPauseState = {
   isExperienceSelected: false,
 };
 
-test('orbit rate architecture exposes PAUSE through 64×', () => {
-  assert.deepEqual(ORBIT_RATE_MULTIPLIERS, [0, 0.5, 1, 2, 4, 8, 16, 32, 64]);
-  assert.ok(!ORBIT_RATE_MULTIPLIERS.some(rate => rate > 64), 'PR24 must not expose a rate faster than 64×');
+test('orbit rate architecture exposes PAUSE through 512×', () => {
+  assert.deepEqual(ORBIT_RATE_MULTIPLIERS, [0, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512]);
+  assert.ok(!ORBIT_RATE_MULTIPLIERS.some(rate => rate > 512), 'PR27 must not expose a rate faster than 512×');
 });
 
 test('1× produces the existing 120-second phase delta', () => {
@@ -82,7 +82,7 @@ test('user pause then resume has no catch-up jump and continues from the held ph
   assert.ok(Math.abs(clock.phase - (2.41 + computePhaseDelta(16, 2))) < 1e-9);
 });
 
-test('background pan and orbit rate operate independently at every rate from PAUSE through 64×', () => {
+test('background pan and orbit rate operate independently at every rate from PAUSE through 512×', () => {
   const panningState = { ...idlePauseState, isCanvasPanning: true };
   assert.equal(isOrbitPauseConditionActive(panningState), false, 'panning alone must not become a system pause');
 
@@ -178,23 +178,35 @@ test('desktop non-compact TopologyCanvas renders accessible orbit controls with 
   assert.ok(controlsIndex > bottomLeftIndex, 'orbit-rate-controls must occur AFTER the Bottom-Left Controls & Status marker');
 
   const controls = source.substring(
-    source.indexOf('Desktop autonomous-orbit rate console'),
+    source.indexOf('Desktop dual-orbit console'),
     source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
   assert.ok(controls.includes('id="orbit-rate-controls"'));
   assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'Runtime availability authorities must gate the control markup');
-  assert.ok(controls.includes("orbitRateMultiplier === 0 ? 'ORBIT // PAUSED'"), 'User pause must be textually explicit');
-  assert.ok(controls.includes('`ORBIT RATE // ${orbitRateMultiplier}×`'), 'Active running rate must be textually explicit');
-  assert.ok(controls.includes('aria-label="Autonomous orbit rate"'));
-  assert.ok(controls.includes('aria-pressed={isActive}'));
-  assert.ok(controls.includes("const label = rate === 0 ? 'PAUSE' : `${rate}×`"));
+  assert.ok(controls.includes('ORBIT CONTROL'));
+  assert.ok(controls.includes('R02 SYSTEMS') && controls.includes('CW'));
+  assert.ok(controls.includes('R01 REACTOR') && controls.includes('CCW'));
+  for (const label of [
+    'Decrease deployed systems orbit speed',
+    'Increase deployed systems orbit speed',
+    'Pause deployed systems orbit',
+    'Resume deployed systems orbit',
+    'Decrease capability reactor speed',
+    'Increase capability reactor speed',
+    'Pause capability reactor orbit',
+    'Resume capability reactor orbit',
+  ]) {
+    assert.ok(controls.includes(label), `missing accessible control label: ${label}`);
+  }
+  assert.ok(controls.includes("isProjectOrbitPaused ? 'RESUME' : 'PAUSE'"));
+  assert.ok(controls.includes("isReactorOrbitPaused ? 'RESUME' : 'PAUSE'"));
 });
 
 test('orbit controls do not render when the actual canvas container is compact', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
-    source.indexOf('Desktop autonomous-orbit rate console'),
+    source.indexOf('Desktop dual-orbit console'),
     source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
@@ -205,49 +217,52 @@ test('orbit controls do not render when the actual canvas container is compact',
 test('orbit controls do not render under reduced motion', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
-    source.indexOf('Desktop autonomous-orbit rate console'),
+    source.indexOf('Desktop dual-orbit console'),
     source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
   assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'prefersReducedMotion must prevent control creation');
 });
 
-test('TopologyCanvas owns one shared default-1× rate and rate changes re-baseline the existing RAF effect', () => {
+test('TopologyCanvas owns independent default rates and one shared dual-clock RAF effect', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
-  const rateStateMatches = source.match(/useState<OrbitRateMultiplier>\(1\)/g) ?? [];
-  const effectStart = source.indexOf('const orbitClockRef = useRef<OrbitClockState>');
-  const effectEnd = source.indexOf('}, [isOrbitRunning, orbitRateMultiplier]);', effectStart);
+  const effectStart = source.indexOf('const dualOrbitClockRef = useRef<DualOrbitClockState>');
+  const effectEnd = source.indexOf('const projectsById', effectStart);
   const orbitEffect = source.substring(effectStart, effectEnd);
 
-  assert.equal(rateStateMatches.length, 1, 'There must be one shared rate value, not per-project rate state');
-  assert.ok(source.includes('const isOrbitRunning = orbitRateMultiplier > 0 && !isPauseConditionActive && isResumeReady;'));
-  assert.ok(orbitEffect.includes('rebaselineOrbitClock(orbitClockRef.current)'), 'Rate-boundary effect must clear elapsed-time baseline without clearing phase');
-  assert.ok(orbitEffect.includes('stepOrbitClock(orbitClockRef.current, timestamp, true, orbitRateMultiplier)'));
-  assert.equal((orbitEffect.match(/requestAnimationFrame\(/g) ?? []).length, 2, 'Rate controls must reuse exactly one autonomous RAF chain');
+  assert.ok(source.includes('useState<ActiveOrbitRateMultiplier>(1)'), 'project default must be 1×');
+  assert.ok(source.includes('useState<ActiveOrbitRateMultiplier>(0.5)'), 'reactor default must be 0.5×');
+  assert.ok(source.includes('const isDualOrbitMachineRunning = isProjectOrbitRunning || isReactorOrbitRunning;'));
+  assert.ok(orbitEffect.includes('rebaselineDualOrbitClock(dualOrbitClockRef.current)'));
+  assert.ok(orbitEffect.includes('stepDualOrbitClock('));
+  assert.equal((orbitEffect.match(/requestAnimationFrame\(/g) ?? []).length, 2, 'Both phases must reuse exactly one autonomous RAF chain');
   assert.ok(!source.includes('localStorage') && !source.includes('sessionStorage'), 'Orbit rate must not persist across refreshes');
 });
 
-test('TopologyCanvas maintains one current-phase mirror and synchronizes tick and canonical reset writes', () => {
+test('TopologyCanvas mirrors only the project phase for docking and resets both phases canonically', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   assert.equal(
-    (source.match(/const orbitPhaseRef = useRef\(0\);/g) ?? []).length,
+    (source.match(/const projectOrbitPhaseRef = useRef\(0\);/g) ?? []).length,
     1,
-    'There must be exactly one imperative mirror of the reactive orbit phase'
+    'There must be exactly one imperative mirror of the project orbit phase'
   );
+  assert.ok(!source.includes('reactorOrbitPhaseRef'), 'reactor phase must never gain a project-geometry ref');
 
   const tickStart = source.indexOf('const tick = (timestamp: number) => {');
   const tickEnd = source.indexOf('rafId = requestAnimationFrame(tick);', tickStart);
   const tick = source.substring(tickStart, tickEnd);
-  assert.ok(tick.includes('orbitClockRef.current = next;'));
-  assert.ok(tick.includes('orbitPhaseRef.current = next.phase;'));
-  assert.ok(tick.includes('setOrbitPhase(next.phase);'));
+  assert.ok(tick.includes('dualOrbitClockRef.current = next;'));
+  assert.ok(tick.includes('projectOrbitPhaseRef.current = next.projectPhase;'));
+  assert.ok(tick.includes('setProjectOrbitPhase(next.projectPhase);'));
+  assert.ok(tick.includes('setReactorOrbitPhase(next.reactorPhase);'));
 
-  const resetStart = source.indexOf('const resetOrbitPhaseToCanonical = useCallback(() => {');
+  const resetStart = source.indexOf('const resetOrbitPhasesToCanonical = useCallback(() => {');
   const resetEnd = source.indexOf('}, []);', resetStart);
   const reset = source.substring(resetStart, resetEnd);
-  assert.ok(reset.includes('orbitClockRef.current = { phase: 0, lastTimestamp: null };'));
-  assert.ok(reset.includes('orbitPhaseRef.current = 0;'));
-  assert.ok(reset.includes('setOrbitPhase(0);'));
+  assert.ok(reset.includes('dualOrbitClockRef.current = { projectPhase: 0, reactorPhase: 0, lastTimestamp: null };'));
+  assert.ok(reset.includes('projectOrbitPhaseRef.current = 0;'));
+  assert.ok(reset.includes('setProjectOrbitPhase(0);'));
+  assert.ok(reset.includes('setReactorOrbitPhase(0);'));
 });
 
 test('reflow commit never snapshots phase (PR24 moving-frame reflow); detached insertion still snapshots release phase for its one-time insertion-index decision', () => {
@@ -266,7 +281,7 @@ test('reflow commit never snapshots phase (PR24 moving-frame reflow); detached i
   const releaseStart = source.indexOf("} else if (releaseAction === 'insert-detached-project')");
   const releaseEnd = source.indexOf("setSnapNotice({ message: 'DOCK TARGET ACQUIRED", releaseStart);
   const release = source.substring(releaseStart, releaseEnd);
-  assert.ok(release.includes('const phaseAtRelease = orbitPhaseRef.current;'), 'the one-time insertion-INDEX decision still reads the live phase at release');
+  assert.ok(release.includes('const phaseAtRelease = projectOrbitPhaseRef.current;'), 'the one-time insertion-INDEX decision still reads the live project phase at release');
   assert.match(release, /theta,\s*phaseAtRelease,/);
   assert.ok(!release.includes('resolveOrbitInsertionIndex(theta, orbitPhase'));
 });
@@ -278,7 +293,7 @@ test('global window drag listeners have one stable subscription lifecycle while 
   const effect = source.substring(effectStart, effectEnd);
 
   assert.ok(effect.includes('const draggingNode = draggingNodeRef.current;'));
-  assert.ok(effect.includes('const phaseAtRelease = orbitPhaseRef.current;'));
+  assert.ok(effect.includes('const phaseAtRelease = projectOrbitPhaseRef.current;'));
   assert.ok(effect.includes('}, [isGlobalDragActive]);'));
   const dependencies = effect.substring(effect.lastIndexOf('}, ['));
   assert.equal(dependencies.trim(), '}, [isGlobalDragActive]);');
@@ -293,16 +308,17 @@ test('background panning cannot change pause readiness, clock baseline, or selec
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const pauseStateStart = source.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
   const pauseState = source.substring(pauseStateStart, source.indexOf('const isPauseConditionActive', pauseStateStart));
-  const clockStart = source.indexOf('const orbitClockRef = useRef<OrbitClockState>');
-  const clockEffect = source.substring(clockStart, source.indexOf('}, [isOrbitRunning, orbitRateMultiplier]);', clockStart));
+  const clockStart = source.indexOf('const dualOrbitClockRef = useRef<DualOrbitClockState>');
+  const clockEffect = source.substring(clockStart, source.indexOf('const projectsById', clockStart));
   const panStart = source.indexOf('// Handle Pan & Drag on canvas surface');
   const panHandlers = source.substring(panStart, source.indexOf('// Center coordinate offset', panStart));
 
   assert.ok(pauseState.includes('isCanvasPanning: isDragging'), 'Pan state remains explicitly modeled');
   assert.ok(!clockEffect.includes('isDragging'), 'Pan start/end must not restart or re-baseline the orbit clock');
-  assert.ok(!panHandlers.includes('setOrbitRateMultiplier'), 'Pan must not alter the selected rate');
+  assert.ok(!panHandlers.includes('setProjectOrbitRateMultiplier'), 'Pan must not alter the project rate');
+  assert.ok(!panHandlers.includes('setReactorOrbitRateMultiplier'), 'Pan must not alter the reactor rate');
   assert.ok(!panHandlers.includes('setIsResumeReady'), 'Pan must not trigger the resume-delay state');
-  assert.ok(!panHandlers.includes('orbitClockRef'), 'Pan must not reset the orbit timestamp baseline');
+  assert.ok(!panHandlers.includes('dualOrbitClockRef'), 'Pan must not reset the shared orbit timestamp baseline');
 });
 
 test('ASSEMBLE and RESET restore phase/membership without resetting the selected rate', () => {
@@ -311,6 +327,9 @@ test('ASSEMBLE and RESET restore phase/membership without resetting the selected
   const restoreEnd = source.indexOf('const hasCustomLayout', restoreStart);
   const restoreBlock = source.substring(restoreStart, restoreEnd);
 
-  assert.ok(restoreBlock.includes('resetOrbitPhaseToCanonical();'), 'Canonical restore must retain existing phase-reset behavior');
-  assert.ok(!restoreBlock.includes('setOrbitRateMultiplier'), 'Canonical restore must preserve the user-selected runtime rate');
+  assert.ok(restoreBlock.includes('resetOrbitPhasesToCanonical();'), 'Canonical restore must reset both phases');
+  assert.ok(!restoreBlock.includes('setProjectOrbitRateMultiplier'), 'Canonical restore must preserve the project rate');
+  assert.ok(!restoreBlock.includes('setReactorOrbitRateMultiplier'), 'Canonical restore must preserve the reactor rate');
+  assert.ok(!restoreBlock.includes('setIsProjectOrbitPaused'), 'Canonical restore must preserve project pause state');
+  assert.ok(!restoreBlock.includes('setIsReactorOrbitPaused'), 'Canonical restore must preserve reactor pause state');
 });

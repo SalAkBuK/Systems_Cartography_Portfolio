@@ -347,8 +347,8 @@ test('TopologyCanvas.tsx: position precedence is drag > shared reflow > custom/d
     'Custom positions must be layered on top of (spread after) the dynamic docked orbit'
   );
   assert.ok(
-    content.includes('{ ...staticOrbitalLattice.skillPositions, ...customSkillPositions }'),
-    'Custom skill positions must be layered on top of (spread after) the canonical lattice (capabilities do not orbit)'
+    content.includes('getEffectiveCapabilityPositions(mountedCapabilityOrbitPositions, customSkillPositions)'),
+    'Effective skill positions must resolve mounted reactor positions with custom overrides'
   );
 });
 

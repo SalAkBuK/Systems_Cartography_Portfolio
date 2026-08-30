@@ -67,9 +67,9 @@ test('1. a docked project drag (below or beyond the detach threshold) keeps phas
 });
 
 test('2. a valid detach release keeps phase advancing — the orbit clock effect is not keyed on isOrbitReflowActive', () => {
-  const effectStart = canvasSource.indexOf('useEffect(() => {', canvasSource.indexOf('const orbitClockRef = useRef<OrbitClockState>'));
-  const effectEnd = canvasSource.indexOf('}, [isOrbitRunning, orbitRateMultiplier]);', effectStart);
-  const orbitClockEffect = canvasSource.substring(effectStart, effectEnd + '}, [isOrbitRunning, orbitRateMultiplier]);'.length);
+  const effectStart = canvasSource.indexOf('useEffect(() => {', canvasSource.indexOf('const dualOrbitClockRef = useRef<DualOrbitClockState>'));
+  const effectEnd = canvasSource.indexOf('const projectsById', effectStart);
+  const orbitClockEffect = canvasSource.substring(effectStart, effectEnd);
   assert.ok(!orbitClockEffect.includes('isOrbitReflowActive'), 'the autonomous orbit RAF effect must not depend on reflow state in any way');
 
   const pauseStateStart = canvasSource.indexOf('const orbitPauseState: OrbitPauseState = useMemo(');
@@ -144,7 +144,8 @@ test('7. PAUSE (rate 0) still freezes everything, and nothing in the reflow path
   const commitStart = canvasSource.indexOf('const commitOrbitReflow = useCallback((');
   const commitEnd = canvasSource.indexOf('// The ONE short-lived orbital reflow RAF loop', commitStart);
   const commit = canvasSource.substring(commitStart, commitEnd);
-  assert.ok(!commit.includes('setOrbitRateMultiplier'), 'reflow commit must never change the user-selected rate');
+  assert.ok(!commit.includes('setProjectOrbitRateMultiplier'), 'reflow commit must never change the project rate');
+  assert.ok(!commit.includes('setReactorOrbitRateMultiplier'), 'reflow commit must never change the reactor rate');
   assert.ok(!commit.includes('setIsResumeReady'), 'reflow commit must never touch the resume-delay state');
 });
 
@@ -154,6 +155,6 @@ test('sanity: reduced motion / compact / hidden document remain authoritative pa
   assert.equal(isOrbitPauseConditionActive({ ...idlePauseState, isDocumentHidden: true }), true);
 });
 
-test('sanity: ORBIT_RATE_MULTIPLIERS still exposes 64x as the ceiling', () => {
-  assert.equal(ORBIT_RATE_MULTIPLIERS[ORBIT_RATE_MULTIPLIERS.length - 1], 64);
+test('sanity: ORBIT_RATE_MULTIPLIERS exposes 512x as the hard ceiling', () => {
+  assert.equal(ORBIT_RATE_MULTIPLIERS[ORBIT_RATE_MULTIPLIERS.length - 1], 512);
 });
