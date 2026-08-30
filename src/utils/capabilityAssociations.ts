@@ -1,6 +1,7 @@
 import { ExperienceNode, InfrastructureSkill, ProjectData, SystemCategory } from '../types';
 import { getRepositoryEvidence } from '../data/repositoryEvidence';
 import { formatIsoYearMonth, isProjectLinkedToExperience } from './portfolioUtils';
+import { getGithubOwnerIdentity } from './ownerScope';
 
 /**
  * Explicit canonical normalization dictionary.
@@ -257,9 +258,12 @@ export function getProjectTechnologyEvidence(project: Partial<ProjectData>): str
     });
   });
 
-  // 3. Fallback to reviewed repositoryEvidence if subsystems were not yet populated
+  // 3. Fallback to reviewed repositoryEvidence if subsystems were not yet populated.
+  // Owner-scoped via the project's own GitHub link so a foreign project never
+  // inherits this owner's curated evidence merely by sharing a repo name.
   if ((!project.subsystems || project.subsystems.length === 0) && project.title) {
-    const curated = getRepositoryEvidence(project.title);
+    const ownerIdentity = getGithubOwnerIdentity(project.links?.github);
+    const curated = getRepositoryEvidence(project.title, ownerIdentity);
     if (curated?.subsystems) {
       curated.subsystems.forEach(sub => {
         (sub.tech || []).forEach(t => {

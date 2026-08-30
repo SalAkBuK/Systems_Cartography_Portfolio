@@ -107,6 +107,48 @@ test('Test B: evidenceByRepository keyed to live names and aliases map to canoni
 });
 
 // ---------------------------------------------------------------------------
+// PR28: Repository Evidence Owner Scope (Foreign-Owner Collision Protection)
+// ---------------------------------------------------------------------------
+test('PR28: getRepositoryEvidence/getCanonicalRepositoryKey are owner-scoped -- current owner target still resolves, foreign owner target does not', () => {
+  const OWN_TARGET = 'https://github.com/SalAkBuK';
+  const FOREIGN_TARGET = 'https://github.com/example-owner';
+
+  // Explicit matching owner target: identical to the default (self) behavior.
+  assert.ok(getRepositoryEvidence('towerdesk-backend', OWN_TARGET));
+  assert.ok(getRepositoryEvidence('worthy-crm', OWN_TARGET));
+  assert.equal(getCanonicalRepositoryKey('towerdesk-backend-clean', OWN_TARGET), 'towerdesk-backend');
+
+  // Foreign owner target: repository-name collision protection.
+  assert.equal(getRepositoryEvidence('towerdesk-backend', FOREIGN_TARGET), null, 'Foreign towerdesk-backend must not receive curated evidence');
+  assert.equal(getRepositoryEvidence('worthy-crm', FOREIGN_TARGET), null, 'Foreign worthy-crm must not receive curated evidence');
+  assert.equal(getRepositoryEvidence('remapp-scraper', FOREIGN_TARGET), null, 'Foreign remapp-scraper must not receive curated evidence');
+
+  // Foreign owner target: canonical cluster aliases must not apply.
+  assert.equal(
+    getCanonicalRepositoryKey('towerdesk-backend-clean', FOREIGN_TARGET),
+    'towerdesk-backend-clean',
+    'Foreign owner must not inherit the towerdesk-backend-clean -> towerdesk-backend alias'
+  );
+  assert.equal(
+    getCanonicalRepositoryKey('towerdesk-mobile-showcase', FOREIGN_TARGET),
+    'towerdesk-mobile-showcase',
+    'Foreign owner must not inherit the mobile-showcase cluster alias'
+  );
+});
+
+test('PR28: Repository-name collision -- a foreign example-owner/towerdesk-backend repo never resolves SalAkBuK TowerDesk evidence', () => {
+  const evidence = getRepositoryEvidence('towerdesk-backend', 'https://github.com/example-owner');
+  assert.equal(evidence, null);
+});
+
+test('PR28: Worthy CRM and remapp-scraper name collisions are also owner-scoped', () => {
+  assert.equal(getRepositoryEvidence('worthy-crm', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('remapp-scraper', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('formcrash', 'https://github.com/another-owner'), null);
+  assert.equal(getRepositoryEvidence('pillcheck-public', 'https://github.com/another-owner'), null);
+});
+
+// ---------------------------------------------------------------------------
 // TEST C: resolveProjectFromEvidenceKey resolves worthy-crm to live runtime ID
 // ---------------------------------------------------------------------------
 test('Test C: resolveProjectFromEvidenceKey resolves worthy-crm to live runtime ID', () => {

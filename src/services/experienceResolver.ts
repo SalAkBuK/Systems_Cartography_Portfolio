@@ -4,7 +4,7 @@ import {
   OwnerExperienceEvidence
 } from '../types';
 import { OWNER_PROFILE } from '../data/ownerProfile.generated';
-import { OWNER_EXPERIENCE_EVIDENCE, getOwnerExperienceEvidence } from '../data/ownerExperienceEvidence';
+import { getOwnerExperienceEvidenceCollection, getOwnerExperienceEvidence } from '../data/ownerExperienceEvidence';
 import { getDefaultAdditionalOwnerExperience } from '../data/ownerAdditionalExperience';
 
 export interface ResolveProfessionalExperienceOptions {
@@ -140,7 +140,12 @@ export function resolveProfessionalExperience(
     options.additionalExperience !== undefined
       ? options.additionalExperience
       : getDefaultAdditionalOwnerExperience(ownerGithubTarget);
-  const curatedEvidence = options.curatedEvidence ?? OWNER_EXPERIENCE_EVIDENCE;
+  // Owner-scoped: the default curated evidence bundle is only ever the
+  // configured owner's own evidence. A caller may still explicitly pass
+  // `curatedEvidence` to override (e.g. tests exercising this owner's data
+  // directly), but the DEFAULT resolution path never assumes this owner's
+  // evidence applies to a differently-configured fork.
+  const curatedEvidence = options.curatedEvidence ?? getOwnerExperienceEvidenceCollection(ownerGithubTarget);
 
   const combinedExperience = mergeExperienceSources(importedExperience, additionalExperience);
 
@@ -186,7 +191,7 @@ export function resolveProfessionalExperience(
           target === node.organization.toLowerCase().trim() ||
           (nameTarget && nameTarget === node.organization.toLowerCase().trim())
         );
-      }) || getOwnerExperienceEvidence(groupKey);
+      }) || getOwnerExperienceEvidence(groupKey, ownerGithubTarget);
 
     // Only attach deep platform / architecture evidence to the primary node in a progression group,
     // or to standalone organization nodes (to prevent duplicate platform listings)

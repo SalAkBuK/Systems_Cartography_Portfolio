@@ -1,4 +1,5 @@
 import { ExperienceNode } from '../types';
+import { isSameGithubOwner } from '../utils/ownerScope';
 
 /**
  * Expected owner GitHub target for this curated additional experience source.
@@ -41,27 +42,15 @@ export const ADDITIONAL_OWNER_EXPERIENCE: ExperienceNode[] = [
   }
 ];
 
-function normalizeGithubTarget(url?: string): string {
-  if (!url) return '';
-  return url
-    .trim()
-    .toLowerCase()
-    .replace(/\/+$/, '')
-    .replace(/^https?:\/\/(www\.)?/, '');
-}
-
 /**
  * Pure helper returning default additional owner experience only when the configured owner
  * GitHub target matches the curated source owner target.
  */
 export function getDefaultAdditionalOwnerExperience(githubTarget?: string): ExperienceNode[] {
-  const normalizedTarget = normalizeGithubTarget(githubTarget);
-  const normalizedOwner = normalizeGithubTarget(ADDITIONAL_OWNER_EXPERIENCE_OWNER_GITHUB_TARGET);
-
-  if (normalizedTarget && normalizedOwner && normalizedTarget === normalizedOwner) {
-    return ADDITIONAL_OWNER_EXPERIENCE;
+  if (!isSameGithubOwner(githubTarget, ADDITIONAL_OWNER_EXPERIENCE_OWNER_GITHUB_TARGET)) {
+    return [];
   }
 
-  return [];
+  return ADDITIONAL_OWNER_EXPERIENCE;
 }
 

@@ -1042,12 +1042,16 @@ export function filterEligibleRepositories(repos: GitHubRepoRaw[]): GitHubRepoRa
 }
 
 /**
- * Stage 3: Deduplicate repositories belonging to the same canonical cluster BEFORE deep inspection
+ * Stage 3: Deduplicate repositories belonging to the same canonical cluster BEFORE deep inspection.
+ * Canonical clustering is owner-curated data, so each repository is resolved
+ * against its OWN `owner.login` -- a foreign owner's distinct repositories
+ * are never merged together merely because their names coincidentally match
+ * this owner's cluster aliases.
  */
 export function canonicalizeRepositories(repos: GitHubRepoRaw[]): GitHubRepoRaw[] {
   const seenClusters = new Map<string, GitHubRepoRaw>();
   for (const repo of repos) {
-    const clusterKey = getCanonicalRepositoryKey(repo.name);
+    const clusterKey = getCanonicalRepositoryKey(repo.name, repo.owner?.login);
     if (!seenClusters.has(clusterKey)) {
       seenClusters.set(clusterKey, repo);
     } else {

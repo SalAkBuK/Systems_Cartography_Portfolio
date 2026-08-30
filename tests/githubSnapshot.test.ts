@@ -473,15 +473,21 @@ test('fetchRepoInspection throws in strict mode when tree-listed manifest return
 // ---------------------------------------------------------------------------
 // 6. Staged Pipeline & Canonical Deduplication Before Inspection
 // ---------------------------------------------------------------------------
+const salakbukOwner = {
+  login: 'SalAkBuK',
+  avatar_url: 'https://example.com/avatar.png',
+  html_url: 'https://github.com/SalAkBuK'
+};
+
 test('canonicalizeRepositories dedupes clusters before deep inspection and discarded aliases receive 0 requests', async () => {
   const clusterRepos: GitHubRepoRaw[] = [
-    { ...sampleRepo, id: 1, name: 'towerdesk-backend-clean', full_name: 'test-user/towerdesk-backend-clean' },
-    { ...sampleRepo, id: 2, name: 'towerdesk-backend', full_name: 'test-user/towerdesk-backend' },
-    { ...sampleRepo, id: 3, name: 'svc-alpha', full_name: 'test-user/svc-alpha' },
-    { ...sampleRepo, id: 4, name: 'svc-beta', full_name: 'test-user/svc-beta' },
-    { ...sampleRepo, id: 5, name: 'svc-gamma', full_name: 'test-user/svc-gamma' },
-    { ...sampleRepo, id: 6, name: 'svc-delta', full_name: 'test-user/svc-delta' },
-    { ...sampleRepo, id: 7, name: 'svc-epsilon', full_name: 'test-user/svc-epsilon' }
+    { ...sampleRepo, id: 1, name: 'towerdesk-backend-clean', full_name: 'SalAkBuK/towerdesk-backend-clean', owner: salakbukOwner },
+    { ...sampleRepo, id: 2, name: 'towerdesk-backend', full_name: 'SalAkBuK/towerdesk-backend', owner: salakbukOwner },
+    { ...sampleRepo, id: 3, name: 'svc-alpha', full_name: 'SalAkBuK/svc-alpha', owner: salakbukOwner },
+    { ...sampleRepo, id: 4, name: 'svc-beta', full_name: 'SalAkBuK/svc-beta', owner: salakbukOwner },
+    { ...sampleRepo, id: 5, name: 'svc-gamma', full_name: 'SalAkBuK/svc-gamma', owner: salakbukOwner },
+    { ...sampleRepo, id: 6, name: 'svc-delta', full_name: 'SalAkBuK/svc-delta', owner: salakbukOwner },
+    { ...sampleRepo, id: 7, name: 'svc-epsilon', full_name: 'SalAkBuK/svc-epsilon', owner: salakbukOwner }
   ];
 
   const canonical = canonicalizeRepositories(clusterRepos);
@@ -491,7 +497,7 @@ test('canonicalizeRepositories dedupes clusters before deep inspection and disca
   const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/git/trees/')) {
-      const match = url.match(/\/repos\/test-user\/([^\/]+)\/git\/trees/);
+      const match = url.match(/\/repos\/SalAkBuK\/([^\/]+)\/git\/trees/);
       if (match) requestedInspectionRepos.push(match[1]);
       return { ok: true, status: 200, json: async () => ({ tree: [] }) } as Response;
     }
@@ -508,6 +514,19 @@ test('canonicalizeRepositories dedupes clusters before deep inspection and disca
   assert.equal(inspections.length, 6);
   assert.ok(requestedInspectionRepos.includes('towerdesk-backend'), 'Canonical repo must be inspected');
   assert.ok(!requestedInspectionRepos.includes('towerdesk-backend-clean'), 'Discarded alias must receive 0 inspection requests');
+});
+
+test('PR28: canonicalizeRepositories does NOT apply SalAkBuK clustering to a foreign owner\'s repositories (cluster-alias isolation)', () => {
+  const foreignClusterRepos: GitHubRepoRaw[] = [
+    { ...sampleRepo, id: 1, name: 'towerdesk-backend-clean', full_name: 'example-owner/towerdesk-backend-clean' },
+    { ...sampleRepo, id: 2, name: 'towerdesk-backend', full_name: 'example-owner/towerdesk-backend' }
+  ];
+
+  const canonical = canonicalizeRepositories(foreignClusterRepos);
+  // A foreign owner's two distinctly-named repositories must NOT be
+  // collapsed into one just because SalAkBuK's alias table maps
+  // "towerdesk-backend-clean" -> "towerdesk-backend". Both survive.
+  assert.equal(canonical.length, 2, 'Foreign owner repositories must not be deduped via SalAkBuK cluster aliases');
 });
 
 // ---------------------------------------------------------------------------
@@ -624,7 +643,12 @@ test('analyzeRepository gives reviewed repository evidence precedence over gener
     id: 101,
     name: 'towerdesk-backend-clean',
     full_name: 'SalAkBuK/towerdesk-backend-clean',
-    html_url: 'https://github.com/SalAkBuK/towerdesk-backend-clean'
+    html_url: 'https://github.com/SalAkBuK/towerdesk-backend-clean',
+    owner: {
+      login: 'SalAkBuK',
+      avatar_url: 'https://example.com/avatar.png',
+      html_url: 'https://github.com/SalAkBuK'
+    }
   };
 
   const project = analyzeRepository({
