@@ -13,9 +13,9 @@ export const ORBIT_PERIOD_MS = 120_000;
 export const ORBIT_RESUME_DELAY_MS = 800;
 
 /** Shared rate vocabulary. Zero remains the legacy explicit-pause value. */
-export const ORBIT_RATE_MULTIPLIERS = [0, 0.5, 1, 2, 4, 8, 16, 32, 64] as const;
+export const ORBIT_RATE_MULTIPLIERS = [0, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512] as const;
 export type OrbitRateMultiplier = (typeof ORBIT_RATE_MULTIPLIERS)[number];
-export const ACTIVE_ORBIT_RATE_MULTIPLIERS = [0.5, 1, 2, 4, 8, 16, 32, 64] as const;
+export const ACTIVE_ORBIT_RATE_MULTIPLIERS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512] as const;
 export type ActiveOrbitRateMultiplier = (typeof ACTIVE_ORBIT_RATE_MULTIPLIERS)[number];
 
 const TWO_PI = Math.PI * 2;

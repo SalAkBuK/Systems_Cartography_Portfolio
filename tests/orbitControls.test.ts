@@ -28,9 +28,9 @@ const idlePauseState: OrbitPauseState = {
   isExperienceSelected: false,
 };
 
-test('orbit rate architecture exposes PAUSE through 64×', () => {
-  assert.deepEqual(ORBIT_RATE_MULTIPLIERS, [0, 0.5, 1, 2, 4, 8, 16, 32, 64]);
-  assert.ok(!ORBIT_RATE_MULTIPLIERS.some(rate => rate > 64), 'PR24 must not expose a rate faster than 64×');
+test('orbit rate architecture exposes PAUSE through 512×', () => {
+  assert.deepEqual(ORBIT_RATE_MULTIPLIERS, [0, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512]);
+  assert.ok(!ORBIT_RATE_MULTIPLIERS.some(rate => rate > 512), 'PR27 must not expose a rate faster than 512×');
 });
 
 test('1× produces the existing 120-second phase delta', () => {
@@ -82,7 +82,7 @@ test('user pause then resume has no catch-up jump and continues from the held ph
   assert.ok(Math.abs(clock.phase - (2.41 + computePhaseDelta(16, 2))) < 1e-9);
 });
 
-test('background pan and orbit rate operate independently at every rate from PAUSE through 64×', () => {
+test('background pan and orbit rate operate independently at every rate from PAUSE through 512×', () => {
   const panningState = { ...idlePauseState, isCanvasPanning: true };
   assert.equal(isOrbitPauseConditionActive(panningState), false, 'panning alone must not become a system pause');
 
