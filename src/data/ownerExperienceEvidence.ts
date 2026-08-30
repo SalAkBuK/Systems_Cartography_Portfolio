@@ -24,6 +24,11 @@ import { isSameGithubOwner } from '../utils/ownerScope';
  * / getOwnerExperienceEvidence() with the configured owner's GitHub target so
  * a fork owner whose employer happens to share a name (e.g. another
  * "CodeFier") never inherits this owner's engineering evidence.
+ *
+ * Both accessors REQUIRE an explicit `githubTarget` argument -- there is
+ * intentionally no default that silently substitutes this owner's own
+ * target. Current-owner callers (tests, fixtures) must explicitly pass
+ * `OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET` themselves.
  */
 export const OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET = 'https://github.com/SalAkBuK';
 export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
@@ -338,13 +343,13 @@ export const OWNER_EXPERIENCE_EVIDENCE: OwnerExperienceEvidence[] = [
 /**
  * Owner-scoped accessor for the full curated evidence bundle. Returns an
  * empty array unless `githubTarget` matches OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET.
- * Defaults to this evidence source's own declared owner when omitted, so
- * calling this module directly (e.g. from a test exercising this owner's own
- * data) behaves as before; every real resolver call site always passes the
- * actual configured/observed owner explicitly.
+ * `githubTarget` is REQUIRED -- there is no default that silently
+ * substitutes this owner's own declared target. Callers that want this
+ * owner's own data (e.g. tests exercising it directly) must explicitly pass
+ * `OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET`.
  */
 export function getOwnerExperienceEvidenceCollection(
-  githubTarget: string = OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET
+  githubTarget: string
 ): OwnerExperienceEvidence[] {
   if (!isSameGithubOwner(githubTarget, OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET)) {
     return [];
@@ -362,7 +367,7 @@ export function getOwnerExperienceEvidenceCollection(
  */
 export function getOwnerExperienceEvidence(
   identifier: string,
-  githubTarget: string = OWNER_EXPERIENCE_EVIDENCE_GITHUB_TARGET
+  githubTarget: string
 ): OwnerExperienceEvidence | null {
   const target = (identifier || '').toLowerCase().trim();
   const collection = getOwnerExperienceEvidenceCollection(githubTarget);

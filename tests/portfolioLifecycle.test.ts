@@ -189,13 +189,33 @@ test('isProjectLinkedToExperience links projects generically via evidenceLinks a
     ]
   };
 
-  // Direct ID / title match
+  // Direct ID / title match (exact matching never depends on owner)
   assert.equal(isProjectLinkedToExperience({ id: 'gh-1', title: 'towerdesk-backend-clean' }, mockExperience), true);
   assert.equal(isProjectLinkedToExperience({ id: 'gh-2', title: 'worthy-crm' }, mockExperience), true);
 
-  // Canonical cluster alias match (e.g. original repository resolves to clean showcase)
-  assert.equal(isProjectLinkedToExperience({ id: 'gh-3', title: 'towerdesk-backend' }, mockExperience), true);
-  assert.equal(isProjectLinkedToExperience({ id: 'gh-4', title: 'binghatti-concierge-app-rn-expo' }, mockExperience), true);
+  // Canonical cluster alias match (e.g. original repository resolves to clean showcase).
+  // Owner-scoped: only applies when the project's OWN GitHub owner (from
+  // links.github) matches the curated source owner (SalAkBuK).
+  assert.equal(
+    isProjectLinkedToExperience({ id: 'gh-3', title: 'towerdesk-backend', links: { github: 'https://github.com/SalAkBuK/towerdesk-backend' } }, mockExperience),
+    true
+  );
+  assert.equal(
+    isProjectLinkedToExperience({ id: 'gh-4', title: 'binghatti-concierge-app-rn-expo', links: { github: 'https://github.com/SalAkBuK/binghatti-concierge-app-rn-expo' } }, mockExperience),
+    true
+  );
+
+  // Same alias match WITHOUT a known project owner must fail closed (no
+  // current-owner assumption).
+  assert.equal(isProjectLinkedToExperience({ id: 'gh-3-unknown-owner', title: 'towerdesk-backend' }, mockExperience), false);
+
+  // Same alias match for a FOREIGN owner must also fail closed -- a
+  // different developer's repository sharing this exact name must not
+  // inherit SalAkBuK's canonical clustering.
+  assert.equal(
+    isProjectLinkedToExperience({ id: 'gh-3-foreign', title: 'towerdesk-backend', links: { github: 'https://github.com/example-owner/towerdesk-backend' } }, mockExperience),
+    false
+  );
 
   // Unlinked project
   assert.equal(isProjectLinkedToExperience({ id: 'gh-5', title: 'unrelated-project' }, mockExperience), false);
