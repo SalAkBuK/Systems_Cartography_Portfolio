@@ -17,6 +17,14 @@ import {
   RECOGNIZED_CAPABILITY_TAXONOMY 
 } from '../utils/capabilityAssociations';
 import { parseGitHubTarget } from '../utils/portfolioUtils';
+import {
+  GitHubRequestScheduler,
+  GitHubPrimaryRateLimitError,
+  type GitHubRequestSchedulerOptions
+} from './githubRequestScheduler';
+
+export { GitHubRequestScheduler, GitHubPrimaryRateLimitError, GitHubQuotaInsufficientError, parseGitHubRateLimitHeaders } from './githubRequestScheduler';
+export type { GitHubRateLimitSnapshot, GitHubRequestSchedulerOptions } from './githubRequestScheduler';
 
 export const DEFAULT_INSPECTION_CONCURRENCY = 3;
 export const MAX_MANIFEST_DEPTH = 4;
@@ -135,6 +143,23 @@ export interface GitHubFetchOptions {
   fetchImpl?: typeof fetch;
   /** Public raw-content transport. Defaults to fetchImpl when injected, otherwise global fetch. */
   rawFetchImpl?: typeof fetch;
+  /**
+   * Shared centralized scheduler for GitHub REST (api.github.com) requests:
+   * bounded concurrency, minimum pacing between request starts, rate-limit
+   * tracking, and bounded transient retry. When omitted, one is created
+   * automatically; top-level entry points (`fetchGitHubUserData`,
+   * `fetchGitHubRepoData`) create a single instance and thread it through
+   * every stage so the whole operation shares one concurrency/pacing/quota
+   * view. Inject a pre-configured instance in tests to control pacing,
+   * concurrency, retries, or the sleep/clock implementation.
+   */
+  scheduler?: GitHubRequestScheduler;
+  /** Constructor options for the scheduler this call creates when `scheduler` is not provided. */
+  schedulerOptions?: GitHubRequestSchedulerOptions;
+}
+
+function resolveGitHubScheduler(options?: GitHubFetchOptions): GitHubRequestScheduler {
+  return options?.scheduler || new GitHubRequestScheduler(options?.schedulerOptions);
 }
 
 /**
@@ -301,8 +326,9 @@ async function fetchPublicRawText(
   };
 }
 
-export function handleGitHubHttpError(res: Response, contextMessage: string): never {
+export function handleGitHubHttpError(res: Response, contextMessage: string, meta?: { repository?: string }): never {
   const status = res.status;
+  const limit = res?.headers?.get ? res.headers.get('x-ratelimit-limit') : null;
   const remaining = res?.headers?.get ? res.headers.get('x-ratelimit-remaining') : null;
   const reset = res?.headers?.get ? res.headers.get('x-ratelimit-reset') : null;
   const retryAfter = res?.headers?.get ? res.headers.get('retry-after') : null;
@@ -322,7 +348,13 @@ export function handleGitHubHttpError(res: Response, contextMessage: string): ne
 
   // 2. Primary rate-limit exhaustion (403 + x-ratelimit-remaining === "0")
   if (status === 403 && remaining === '0') {
-    throw new Error(`GitHub API primary rate limit exhausted while ${contextMessage}${resetInfo}. Provide GITHUB_TOKEN or retry later.`);
+    throw new GitHubPrimaryRateLimitError({
+      limit: limit ? parseInt(limit, 10) : 0,
+      remaining: 0,
+      reset: reset ? parseInt(reset, 10) : 0,
+      operation: contextMessage,
+      repository: meta?.repository
+    });
   }
 
   // 3. Secondary rate-limit (403 + Retry-After)
@@ -818,6 +850,7 @@ export async function fetchRepoInspection(
   options?: GitHubFetchOptions
 ): Promise<RawRepositoryInspection> {
   const fetchImpl = options?.fetchImpl || globalThis.fetch;
+  const scheduler = resolveGitHubScheduler(options);
   const cleanOwner = owner.trim();
   const cleanRepo = repo.trim();
 
@@ -834,9 +867,12 @@ export async function fetchRepoInspection(
   };
 
   // 1. Fetch the recursive Git tree. It remains authoritative for all discovery.
-  const treeRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
-    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
-  });
+  const treeRes = await scheduler.request(
+    fetchImpl,
+    `https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
+    { headers: getGitHubHeaders(options, 'application/vnd.github.v3+json') },
+    { operation: `fetching git tree for "${cleanOwner}/${cleanRepo}"`, repository: `${cleanOwner}/${cleanRepo}` }
+  );
 
   if (!treeRes.ok) {
     handleGitHubHttpError(treeRes, `fetching git tree for "${cleanOwner}/${cleanRepo}"`);
@@ -1133,12 +1169,16 @@ export async function discoverGitHubInventory(
   options?: GitHubFetchOptions
 ): Promise<{ user: GitHubUser; repos: GitHubRepoRaw[]; rawCount: number }> {
   const fetchImpl = options?.fetchImpl || globalThis.fetch;
+  const scheduler = resolveGitHubScheduler(options);
   const cleanUser = username.trim().replace(/^@/, '');
 
   // 1. Fetch User Profile
-  const userRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanUser)}`, {
-    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
-  });
+  const userRes = await scheduler.request(
+    fetchImpl,
+    `https://api.github.com/users/${encodeURIComponent(cleanUser)}`,
+    { headers: getGitHubHeaders(options, 'application/vnd.github.v3+json') },
+    { operation: `fetching GitHub profile for "@${cleanUser}"` }
+  );
 
   if (!userRes.ok) {
     if (userRes.status === 404) {
@@ -1155,9 +1195,12 @@ export async function discoverGitHubInventory(
   let page = 1;
 
   while (true) {
-    const reposRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`, {
-      headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
-    });
+    const reposRes = await scheduler.request(
+      fetchImpl,
+      `https://api.github.com/users/${encodeURIComponent(cleanUser)}/repos?sort=updated&per_page=100&page=${page}`,
+      { headers: getGitHubHeaders(options, 'application/vnd.github.v3+json') },
+      { operation: `fetching repositories for "${cleanUser}"` }
+    );
 
     if (!reposRes.ok) {
       if (page === 1) {
@@ -1227,13 +1270,26 @@ export async function inspectCanonicalRepositories(
   options?: GitHubFetchOptions
 ): Promise<{ inspections: (RawRepositoryInspection | undefined)[]; summary: RepositoryInspectionSummary }> {
   const concurrency = options?.inspectionConcurrency ?? DEFAULT_INSPECTION_CONCURRENCY;
+  const scheduler = resolveGitHubScheduler(options);
+  const effectiveOptions: GitHubFetchOptions = { ...options, scheduler };
+
+  // Early budget detection: we know exactly how many more REST requests this
+  // stage requires (exactly one git-tree request per canonical repository).
+  // If the scheduler's last known remaining quota (from the discovery stage
+  // that already ran) is provably insufficient, stop before issuing any of
+  // them rather than failing partway through a doomed batch. When quota is
+  // unknown, this is a no-op -- we never guess.
+  if (canonicalRepos.length > 0) {
+    scheduler.assertSufficientQuotaFor(canonicalRepos.length, `inspecting ${canonicalRepos.length} remaining repositories`);
+  }
+
   let successfulInspections = 0;
 
   const inspections = await runWithConcurrency(
     canonicalRepos,
     concurrency,
     async (repo) => {
-      const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, options);
+      const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, effectiveOptions);
       successfulInspections++;
       return insp;
     }
@@ -1279,14 +1335,18 @@ export function analyzeGitHubSnapshot(
  * Fetch GitHub user or organization repositories and deep inspect ALL canonical repositories
  */
 export async function fetchGitHubUserData(
-  username: string, 
+  username: string,
   options?: GitHubFetchOptions
 ): Promise<GitHubSyncResult> {
-  const { user, repos, rawCount } = await discoverGitHubInventory(username, options);
+  // One scheduler shared across discovery + every repository inspection so
+  // concurrency, pacing, and rate-limit knowledge apply to the whole
+  // operation rather than resetting per stage.
+  const effectiveOptions: GitHubFetchOptions = { ...options, scheduler: resolveGitHubScheduler(options) };
+  const { user, repos, rawCount } = await discoverGitHubInventory(username, effectiveOptions);
   const eligibleRepos = filterEligibleRepositories(repos);
   const canonicalRepos = canonicalizeRepositories(eligibleRepos);
-  const { inspections, summary } = await inspectCanonicalRepositories(canonicalRepos, options);
-  const result = analyzeGitHubSnapshot(user, canonicalRepos, inspections, user.login || username, options);
+  const { inspections, summary } = await inspectCanonicalRepositories(canonicalRepos, effectiveOptions);
+  const result = analyzeGitHubSnapshot(user, canonicalRepos, inspections, user.login || username, effectiveOptions);
   result.rawCount = rawCount;
   result.inspectionSummary = summary;
   return result;
@@ -1296,17 +1356,22 @@ export async function fetchGitHubUserData(
  * Fetch a single GitHub repository with inspection data
  */
 export async function fetchGitHubRepoData(
-  owner: string, 
-  repoName: string, 
+  owner: string,
+  repoName: string,
   options?: GitHubFetchOptions
 ): Promise<GitHubSyncResult> {
   const fetchImpl = options?.fetchImpl || globalThis.fetch;
+  const effectiveOptions: GitHubFetchOptions = { ...options, scheduler: resolveGitHubScheduler(options) };
+  const scheduler = effectiveOptions.scheduler!;
   const cleanOwner = owner.trim();
   const cleanRepo = repoName.trim();
 
-  const repoRes = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}`, {
-    headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
-  });
+  const repoRes = await scheduler.request(
+    fetchImpl,
+    `https://api.github.com/repos/${encodeURIComponent(cleanOwner)}/${encodeURIComponent(cleanRepo)}`,
+    { headers: getGitHubHeaders(options, 'application/vnd.github.v3+json') },
+    { operation: `fetching repository "${cleanOwner}/${cleanRepo}"`, repository: `${cleanOwner}/${cleanRepo}` }
+  );
 
   if (!repoRes.ok) {
     if (repoRes.status === 404) {
@@ -1320,9 +1385,12 @@ export async function fetchGitHubRepoData(
   // Try fetching user profile of repo owner
   let user: GitHubUser | null = null;
   try {
-    const userRes = await fetchImpl(`https://api.github.com/users/${encodeURIComponent(cleanOwner)}`, {
-      headers: getGitHubHeaders(options, 'application/vnd.github.v3+json')
-    });
+    const userRes = await scheduler.request(
+      fetchImpl,
+      `https://api.github.com/users/${encodeURIComponent(cleanOwner)}`,
+      { headers: getGitHubHeaders(options, 'application/vnd.github.v3+json') },
+      { operation: `fetching GitHub profile for "@${cleanOwner}"` }
+    );
     if (userRes.ok) {
       user = sanitizeGitHubUser(await userRes.json());
     }
@@ -1330,7 +1398,7 @@ export async function fetchGitHubRepoData(
     // Non-fatal
   }
 
-  const inspection = await fetchRepoInspection(cleanOwner, cleanRepo, rawRepo.default_branch, options);
+  const inspection = await fetchRepoInspection(cleanOwner, cleanRepo, rawRepo.default_branch, effectiveOptions);
   const summary: RepositoryInspectionSummary = {
     canonicalRepositoryCount: 1,
     inspectedRepositoryCount: inspection ? 1 : 0,
