@@ -936,14 +936,17 @@ test('real committed snapshot: ASSEMBLE/RESET restore interactiveOrbitOrder to n
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const restoreIdx = content.indexOf('const restoreCanonicalDockMembership = useCallback(() => {');
   assert.ok(restoreIdx !== -1);
-  const restoreBlock = content.slice(restoreIdx, content.indexOf('}, [cancelOrbitReflow, resetOrbitPhaseToCanonical]);', restoreIdx));
+  const restoreBlock = content.slice(restoreIdx, content.indexOf('const resetAllPositions = useCallback', restoreIdx));
   assert.ok(restoreBlock.includes('setProjectDockState({});'), 'must clear the ENTIRE dock-runtime map at once');
-  assert.ok(restoreBlock.includes('setInteractiveOrbitOrder(null);'), 'must restore canonical order authority — null means the static lattice slot order is used again');
+  assert.ok(
+    restoreBlock.includes('setInteractiveOrbitOrderByRing({});'),
+    'must restore canonical order authority for EVERY ring at once — an empty record means every ring falls back to its own static lattice slot order'
+  );
   assert.ok(restoreBlock.includes('setCustomProjectPositions({});'), 'must clear every custom/detached position override');
 
-  // Once interactiveOrbitOrder is null again, re-deriving canonical order from
-  // the (unchanged) static lattice must byte-for-byte reproduce the original
-  // sequence — the lattice's own slot order never mutates.
+  // Once interactiveOrbitOrderByRing is empty again, re-deriving canonical
+  // order from the (unchanged) static lattice must byte-for-byte reproduce
+  // the original sequence — the lattice's own slot order never mutates.
   const { orbitGeometry } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
   const before = orbitGeometry.slots.map(s => s.projectId);
   const { orbitGeometry: orbitGeometryAfter } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
@@ -995,8 +998,8 @@ test('TopologyCanvas.tsx: same-gesture docked capture returns existing membershi
   const insertBlock = releaseBlock.slice(insertIdx, releaseBlock.indexOf('} else {', insertIdx));
 
   assert.ok(actionIdx !== -1 && returnIdx !== -1 && insertIdx !== -1);
-  assert.ok(returnBlock.includes('commitOrbitReflow(dockedOrbitOrder'), 'same-gesture capture must return to unchanged order');
-  assert.ok(!returnBlock.includes('setInteractiveOrbitOrder('));
+  assert.ok(returnBlock.includes('commitOrbitReflow(ring, dockedOrbitOrder'), 'same-gesture capture must return to unchanged order, scoped to the project\'s own canonical ring');
+  assert.ok(!returnBlock.includes('setInteractiveOrbitOrderByRing('));
   assert.ok(!returnBlock.includes('setCustomProjectPositions('));
   assert.ok(!returnBlock.includes('setProjectDockState('));
   assert.ok(insertBlock.includes('insertProjectIntoOrbitOrder('), 'eligible reinsertion must use the checked insertion transition');

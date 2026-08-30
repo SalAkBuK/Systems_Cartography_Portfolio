@@ -188,7 +188,10 @@ test('desktop non-compact TopologyCanvas renders accessible orbit controls with 
   );
 
   assert.ok(controls.includes('id="orbit-rate-controls"'));
-  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'Runtime availability authorities must gate the control markup');
+  assert.ok(
+    controls.includes('{!prefersReducedMotion && (isCompactViewport ? ('),
+    'Reduced-motion is the runtime availability authority gating control markup; isCompactViewport only selects presentation, never availability'
+  );
   assert.ok(controls.includes('ORBIT CONTROL'));
   assert.ok(controls.includes('R02 SYSTEMS') && controls.includes('CW'));
   assert.ok(controls.includes('R01 REACTOR') && controls.includes('CCW'));
@@ -208,7 +211,7 @@ test('desktop non-compact TopologyCanvas renders accessible orbit controls with 
   assert.ok(controls.includes("isReactorOrbitPaused ? 'RESUME' : 'PAUSE'"));
 });
 
-test('orbit controls do not render when the actual canvas container is compact', () => {
+test('a narrow (isCompactViewport) canvas container renders the compact orbit console, not the full one, and never stops motion', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
     source.indexOf('Desktop dual-orbit console'),
@@ -216,17 +219,46 @@ test('orbit controls do not render when the actual canvas container is compact',
   );
 
   assert.ok(source.includes('const isCompactViewport = containerDimensions.width < 1024;'));
-  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'isCompactViewport must prevent control creation even when the browser matches Tailwind lg');
+  // isCompactViewport must select PRESENTATION only (compact vs full console)
+  // -- it must never gate control AVAILABILITY, and it is not read anywhere
+  // in orbitMotion.ts's pause-authority logic (verified separately in
+  // orbitMotion.test.ts/orbitContinuousMachine.test.ts).
+  assert.ok(
+    controls.includes('{!prefersReducedMotion && (isCompactViewport ? ('),
+    'compact width must switch presentation via a ternary, never a blanket && that removes controls entirely'
+  );
+  assert.ok(controls.includes('id="orbit-rate-controls-compact"'), 'a compact console must exist for narrow desktop layouts');
+
+  const compactStart = controls.indexOf('id="orbit-rate-controls-compact"');
+  const compactEnd = controls.indexOf(') : (', compactStart);
+  const compact = controls.substring(compactStart, compactEnd);
+  assert.ok(compact.includes('SYS') && compact.includes('RCT'), 'compact console must still expose SYSTEMS and REACTOR control groups');
+  for (const label of [
+    'Decrease deployed systems orbit speed',
+    'Increase deployed systems orbit speed',
+    'Pause deployed systems orbit',
+    'Resume deployed systems orbit',
+    'Decrease capability reactor speed',
+    'Increase capability reactor speed',
+    'Pause capability reactor orbit',
+    'Resume capability reactor orbit',
+  ]) {
+    assert.ok(compact.includes(label), `compact console missing accessible control label: ${label}`);
+  }
+  assert.ok(compact.includes('<button'), 'compact controls must be real buttons, not icon-only mystery divs');
 });
 
-test('orbit controls do not render under reduced motion', () => {
+test('orbit controls (both presentations) do not render under reduced motion', () => {
   const source = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const controls = source.substring(
     source.indexOf('Desktop dual-orbit console'),
     source.indexOf('Top-Right Viewport & Dragging Telemetry')
   );
 
-  assert.ok(controls.includes('{!isCompactViewport && !prefersReducedMotion && ('), 'prefersReducedMotion must prevent control creation');
+  assert.ok(
+    controls.includes('{!prefersReducedMotion && (isCompactViewport ? ('),
+    'prefersReducedMotion must prevent creation of either console presentation'
+  );
 });
 
 test('TopologyCanvas owns independent default rates and one shared dual-clock RAF effect', () => {
@@ -286,7 +318,7 @@ test('reflow commit never snapshots phase (PR24 moving-frame reflow); detached i
   const releaseStart = source.indexOf("} else if (releaseAction === 'insert-detached-project')");
   const releaseEnd = source.indexOf("setSnapNotice({ message: 'DOCK TARGET ACQUIRED", releaseStart);
   const release = source.substring(releaseStart, releaseEnd);
-  assert.ok(release.includes('const phaseAtRelease = projectOrbitPhaseRef.current;'), 'the one-time insertion-INDEX decision still reads the live project phase at release');
+  assert.ok(release.includes('const phaseAtRelease = getRingPhaseFromRefs(ring);'), 'the one-time insertion-INDEX decision still reads the dragged project\'s own ring live phase at release');
   assert.match(release, /theta,\s*phaseAtRelease,/);
   assert.ok(!release.includes('resolveOrbitInsertionIndex(theta, orbitPhase'));
 });
@@ -298,7 +330,7 @@ test('global window drag listeners have one stable subscription lifecycle while 
   const effect = source.substring(effectStart, effectEnd);
 
   assert.ok(effect.includes('const draggingNode = draggingNodeRef.current;'));
-  assert.ok(effect.includes('const phaseAtRelease = projectOrbitPhaseRef.current;'));
+  assert.ok(effect.includes('const phaseAtRelease = getRingPhaseFromRefs(ring);'));
   assert.ok(effect.includes('}, [isGlobalDragActive]);'));
   const dependencies = effect.substring(effect.lastIndexOf('}, ['));
   assert.equal(dependencies.trim(), '}, [isGlobalDragActive]);');

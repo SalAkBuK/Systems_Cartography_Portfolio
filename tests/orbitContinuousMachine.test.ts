@@ -127,7 +127,7 @@ test('5. a reinsertion (17->18) reflow also occurs while phase advances, and bot
   const insertBlockStart = release.indexOf("} else if (releaseAction === 'insert-detached-project')");
   const insertBlockEnd = release.indexOf('} else {', insertBlockStart);
   const insertBlock = release.substring(insertBlockStart, insertBlockEnd);
-  assert.match(insertBlock, /commitOrbitReflow\(\s*dockedOrbitOrder,\s*newOrder,/, 'reinsertion must pass the OLD (pre-insert) docked order as previousOrder');
+  assert.match(insertBlock, /commitOrbitReflow\(\s*ring,\s*dockedOrbitOrder,\s*newOrder,/, 'reinsertion must pass the OLD (pre-insert) docked order as previousOrder, scoped to the project\'s own canonical ring');
 });
 
 test('6. 64x keeps advancing continuously through a full reflow window with no special-casing', () => {

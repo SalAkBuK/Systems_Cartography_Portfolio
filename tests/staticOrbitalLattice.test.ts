@@ -85,16 +85,23 @@ test('staticOrbitalLattice: shuffled input array order does not change slot assi
   assert.deepEqual(standard.orbitGeometry, shuffled.orbitGeometry, 'Shuffling input order must not change orbit geometry');
 });
 
-test('staticOrbitalLattice: N projects produce exactly N unique slots', () => {
+test('staticOrbitalLattice: N projects produce exactly N unique slots across all project rings', () => {
   for (const n of [1, 5, 18, 40]) {
     const projects = generateMockProjects(n);
     const skills = generateMockSkills(6);
-    const { orbitGeometry } = assembleTopologyLayout(projects, skills);
-    assert.equal(orbitGeometry.slots.length, n, `Expected ${n} slots`);
-    const uniqueProjectIds = new Set(orbitGeometry.slots.map(s => s.projectId));
+    const { orbitGeometry, projectRings } = assembleTopologyLayout(projects, skills);
+    const allSlots = projectRings.flatMap(ring => ring.geometry.slots);
+    assert.equal(allSlots.length, n, `Expected ${n} slots total across every ring`);
+    const uniqueProjectIds = new Set(allSlots.map(s => s.projectId));
     assert.equal(uniqueProjectIds.size, n, 'Every slot must reference a unique project');
-    const uniqueSlotIndexes = new Set(orbitGeometry.slots.map(s => s.slotIndex));
-    assert.equal(uniqueSlotIndexes.size, n, 'slotIndex values must be unique');
+    // slotIndex is only unique WITHIN a ring (each ring restarts at 0), so
+    // uniqueness is checked per ring rather than across the whole topology.
+    for (const ring of projectRings) {
+      const uniqueSlotIndexes = new Set(ring.geometry.slots.map(s => s.slotIndex));
+      assert.equal(uniqueSlotIndexes.size, ring.geometry.slots.length, `slotIndex values must be unique within ${ring.id}`);
+    }
+    // orbitGeometry stays a genuine view of ring 0, never synthesized/divergent.
+    assert.deepEqual(orbitGeometry, projectRings[0].geometry);
   }
 });
 
@@ -200,12 +207,14 @@ test('staticOrbitalLattice: slots are evenly distributed at ~2π/N angular spaci
 // tests/staticOrbitalLatticeSnapshot.test.ts for the actual committed-data test.
 // ---------------------------------------------------------------------------
 
-test('staticOrbitalLattice: pathological wide-width dataset resolves on one ellipse with zero VISUAL envelope overlap', () => {
+test('staticOrbitalLattice: pathological wide-width dataset resolves across its project rings with zero VISUAL envelope overlap', () => {
   const projects = generateMockProjects(30, [100, 250, 180, 320, 140]);
   const skills = generateMockSkills(12);
-  const { projectPositions, skillPositions, orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const { projectPositions, skillPositions, projectRings } = assembleTopologyLayout(projects, skills);
 
-  assert.equal(orbitGeometry.slots.length, 30);
+  // 30 projects -> 2 concentric rings (18-per-ring capacity), not one ellipse
+  // -- but zero-overlap must still hold across the whole topology.
+  assert.equal(projectRings.reduce((sum, ring) => sum + ring.geometry.slots.length, 0), 30);
 
   const skillIsoBoxes = skills.map(s => {
     const bounds = getNodeBounds('skill', skillPositions[s.id], 48, 48);
@@ -412,12 +421,16 @@ test('TopologyCanvas.tsx & topologyLayout.ts & projectTopologyGeometry.ts & orbi
   }
 });
 
-test('TopologyCanvas.tsx: renders exactly one static orbit ellipse track element', () => {
+test('TopologyCanvas.tsx: renders exactly one static orbit ellipse track template, looped once per adaptive project ring', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const ellipseMatches = content.match(/<ellipse/g) || [];
-  assert.equal(ellipseMatches.length, 1, 'Exactly one <ellipse> element (the static orbit track) must be rendered');
-  assert.ok(content.includes('staticOrbitalLattice.orbitGeometry.radiusX'), 'Orbit track must use canonical radiusX');
-  assert.ok(content.includes('staticOrbitalLattice.orbitGeometry.radiusY'), 'Orbit track must use canonical radiusY');
+  // Adaptive rings render N tracks at runtime (one per ring), but from
+  // exactly ONE <ellipse> JSX template in source, looped over projectRings —
+  // never a duplicated/hand-copied element per ring count.
+  assert.equal(ellipseMatches.length, 1, 'Exactly one <ellipse> JSX template (looped per ring) must exist in source');
+  assert.ok(content.includes('projectRings.map(ring =>'), 'The single ellipse template must be looped once per adaptive project ring');
+  assert.ok(content.includes('ring.geometry.radiusX'), 'Orbit track must use each ring\'s own canonical radiusX');
+  assert.ok(content.includes('ring.geometry.radiusY'), 'Orbit track must use each ring\'s own canonical radiusY');
 });
 
 test('ASSEMBLE restores canonical lattice by clearing overrides rather than copying coordinates into custom state', () => {

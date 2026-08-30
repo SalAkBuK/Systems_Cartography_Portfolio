@@ -58,7 +58,8 @@ import {
   getConduitPresentationState,
   getTopologyNodeEmphasis,
   getNodeEmphasisClassName,
-  computeFitViewport
+  computeFitViewport,
+  type ProjectOrbitRing
 } from '../utils/topologyLayout';
 import {
   ISO_COS,
@@ -77,13 +78,16 @@ import {
 import {
   ACTIVE_ORBIT_RATE_MULTIPLIERS,
   getDynamicOrbitalPosition,
+  getRingEffectivePhase,
   isOrbitPauseConditionActive,
   rebaselineDualOrbitClock,
   stepDualOrbitClock,
   stepOrbitRate,
+  stepUnwrappedOrbitClock,
   ORBIT_RESUME_DELAY_MS,
   type ActiveOrbitRateMultiplier,
   type DualOrbitClockState,
+  type OrbitClockState,
   type OrbitPauseState
 } from '../utils/orbitMotion';
 import {
@@ -259,14 +263,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [projectDockState, setProjectDockState] = useState<ProjectDockRuntimeMap>({});
 
   // PR23 product pivot — dynamic interactive orbit: a detached project no
-  // longer needs to find its own original canonical slot. `interactiveOrbitOrder`
-  // (null = canonical order from staticOrbitalLattice is authoritative; a
-  // concrete array = the visitor has changed docked membership/order) holds
-  // ONLY the currently-DOCKED identities, in their current relative order —
-  // detached identities are simply absent from it. Identity/order only, never
-  // coordinates; never written outside component runtime state — a refresh
-  // always restores the canonical constellation.
-  const [interactiveOrbitOrder, setInteractiveOrbitOrder] = useState<string[] | null>(null);
+  // longer needs to find its own original canonical slot. Adaptive rings
+  // (this PR) generalize this to ONE interactive order PER project ring,
+  // keyed by ring id: an absent/null entry means canonical order for that
+  // ring (ring.projectIds) is authoritative; a concrete array means the
+  // visitor has changed docked membership/order WITHIN that ring only —
+  // rings never share or migrate membership between each other. Identity/
+  // order only, never coordinates; never written outside component runtime
+  // state — a refresh always restores every ring's canonical constellation.
+  const [interactiveOrbitOrderByRing, setInteractiveOrbitOrderByRing] = useState<Record<string, string[] | null>>({});
 
   // PR23: the single shared orbital reflow transition — ONE elapsed-time-based
   // eased progress value interpolating every affected project's position at
@@ -282,6 +287,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const orbitReflowRef = useRef<OrbitReflowTransition | null>(null);
   const [isOrbitReflowActive, setIsOrbitReflowActive] = useState(false);
   const [orbitReflowRenderPositions, setOrbitReflowRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
+  /** Which ring the in-flight reflow belongs to — reflow is scoped to exactly one ring at a time (a new drag cannot start while a reflow is active, so rings never need concurrent reflow slots). */
+  const activeReflowRingRef = useRef<ProjectOrbitRing | null>(null);
 
   // ---------------------------------------------------------------------------
   // PR27 dual orbital motion. ONE requestAnimationFrame loop and ONE shared
@@ -401,6 +408,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     lastTimestamp: null,
   });
 
+  // Adaptive rings: ring 0 keeps using projectOrbitPhase/projectOrbitPhaseRef
+  // above completely unchanged (byte-identical to the original single-ring
+  // system). Every additional ring's effective phase is derived from this
+  // UNWRAPPED reference (never itself wrapped into [0, 2π) in storage) via
+  // getRingEffectivePhase — see orbitMotion.ts for why an unwrapped reference
+  // is required to avoid a once-per-revolution discontinuity. It advances in
+  // the exact same requestAnimationFrame tick, from the same timestamp and
+  // the same isProjectOrbitRunning/projectOrbitRateMultiplier inputs as the
+  // clock above, so the two can never drift relative to one another.
+  const projectPhaseUnwrappedRef = useRef<OrbitClockState>({ phase: 0, lastTimestamp: null });
+  const [projectPhaseUnwrapped, setProjectPhaseUnwrapped] = useState(0);
+
   // The autonomous RAF loop is only ALIVE while either orbit is running — one
   // active chain, and genuinely zero scheduled repeating callbacks while
   // paused (user pause, compact, reduced motion, hidden tab), rather than a
@@ -438,6 +457,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       setProjectOrbitPhase(next.projectPhase);
       setReactorOrbitPhase(next.reactorPhase);
 
+      const nextUnwrapped = stepUnwrappedOrbitClock(
+        projectPhaseUnwrappedRef.current,
+        timestamp,
+        isProjectOrbitRunning,
+        projectOrbitRateMultiplier
+      );
+      projectPhaseUnwrappedRef.current = nextUnwrapped;
+      setProjectPhaseUnwrapped(nextUnwrapped.phase);
+
       if (capabilitySettlingRef.current) {
         const result = stepCapabilitySettling(
           capabilitySettlingRef.current,
@@ -471,47 +499,70 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
-  // PR23 product pivot: canonical order comes straight from the static
-  // lattice's own deterministic slot order and never changes at runtime.
-  // `interactiveOrbitOrder` (null = canonical authoritative) holds only the
-  // currently-docked identities once the visitor has changed membership.
-  const canonicalOrbitOrder = useMemo(
-    () => staticOrbitalLattice.orbitGeometry.slots.map(slot => slot.projectId),
-    [staticOrbitalLattice]
+  /** Ring 0 reuses projectOrbitPhase directly (exact, unchanged formula); every other ring derives its phase from the shared unwrapped reference. */
+  const getRingPhase = useCallback((ring: ProjectOrbitRing): number => {
+    return ring.index === 0 ? projectOrbitPhase : getRingEffectivePhase(projectPhaseUnwrapped, ring.baseRateMultiplier);
+  }, [projectOrbitPhase, projectPhaseUnwrapped]);
+
+  /** Ref-based equivalent of getRingPhase for use inside drag-gesture window listeners, which read live refs rather than memoized render state. Stable identity — safe to capture once via closure. */
+  const getRingPhaseFromRefs = useCallback((ring: ProjectOrbitRing): number => {
+    return ring.index === 0
+      ? projectOrbitPhaseRef.current
+      : getRingEffectivePhase(projectPhaseUnwrappedRef.current.phase, ring.baseRateMultiplier);
+  }, []);
+
+  // Adaptive rings are a first-class topology primitive (see
+  // topologyLayout.ts/projectRingAllocation.ts): every project has stable
+  // canonical ring ownership derived ONLY from the full ordered project
+  // collection, never from search/selection/view-mode/drag/viewport state.
+  const projectRings = staticOrbitalLattice.projectRings;
+
+  /** The single canonical answer to "which project ring owns project X". */
+  const projectRingByProjectId = useMemo(() => {
+    const map = new Map<string, ProjectOrbitRing>();
+    for (const ring of projectRings) {
+      for (const id of ring.projectIds) map.set(id, ring);
+    }
+    return map;
+  }, [projectRings]);
+
+  // Per-ring base order (canonical ring.projectIds, or the visitor-modified
+  // order for that ring) filtered to currently docked identities only — a
+  // project that has become detached is excluded immediately from its OWN
+  // ring, with every other ring left untouched.
+  const dockedOrbitOrderByRing = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    for (const ring of projectRings) {
+      const base = interactiveOrbitOrderByRing[ring.id] ?? ring.projectIds;
+      result[ring.id] = base.filter(id => resolveProjectDockState(projectDockState, id) === 'docked');
+    }
+    return result;
+  }, [projectRings, interactiveOrbitOrderByRing, projectDockState]);
+
+  const totalDockedProjectCount = useMemo(
+    () => Object.values(dockedOrbitOrderByRing).reduce((sum: number, ids: string[]) => sum + ids.length, 0),
+    [dockedOrbitOrderByRing]
   );
 
-  // The base order (canonical or visitor-modified) filtered to currently
-  // docked identities only — a project that has become detached is excluded
-  // immediately, with every other project's relative order left untouched.
-  const dockedOrbitOrder = useMemo(() => {
-    const base = interactiveOrbitOrder ?? canonicalOrbitOrder;
-    return base.filter(id => resolveProjectDockState(projectDockState, id) === 'docked');
-  }, [interactiveOrbitOrder, canonicalOrbitOrder, projectDockState]);
-
-  const dockedProjectsInOrder = useMemo(
-    () => dockedOrbitOrder.map(id => projectsById.get(id)).filter((p): p is ProjectData => Boolean(p)),
-    [dockedOrbitOrder, projectsById]
-  );
-
-  // Pure derivation from projectOrbitPhase + dockedProjectsInOrder — index/N based,
-  // so canonical (full membership) and visitor-modified membership share ONE
-  // formula (getDynamicOrbitalPosition) rather than two parallel systems. No
-  // per-frame allocation beyond this one small map rebuild.
+  // Pure derivation from each ring's own live phase + its own docked order —
+  // index/N based, so canonical (full membership) and visitor-modified
+  // membership share ONE formula (getDynamicOrbitalPosition) per ring rather
+  // than two parallel systems. No per-frame allocation beyond one map per
+  // ring, merged once.
   const dockedProjectPositions = useMemo(() => {
     const positions: Record<string, { x: number; y: number }> = {};
-    const count = dockedProjectsInOrder.length;
-    for (let i = 0; i < count; i++) {
-      const project = dockedProjectsInOrder[i];
-      positions[project.id] = getDynamicOrbitalPosition(
-        project,
-        i,
-        count,
-        staticOrbitalLattice.orbitGeometry,
-        projectOrbitPhase
-      );
+    for (const ring of projectRings) {
+      const dockedIds = dockedOrbitOrderByRing[ring.id] || [];
+      const ringPhase = getRingPhase(ring);
+      const count = dockedIds.length;
+      for (let i = 0; i < count; i++) {
+        const project = projectsById.get(dockedIds[i]);
+        if (!project) continue;
+        positions[project.id] = getDynamicOrbitalPosition(project, i, count, ring.geometry, ringPhase);
+      }
     }
     return positions;
-  }, [dockedProjectsInOrder, staticOrbitalLattice, projectOrbitPhase]);
+  }, [projectRings, dockedOrbitOrderByRing, projectsById, getRingPhase]);
 
   // Effective position maps: the animated docked orbit as the base layer,
   // with any manually dragged/detached positions layered on top. Passed to
@@ -557,6 +608,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // canonical docked membership through their own explicit state clearing.
   const cancelOrbitReflow = useCallback(() => {
     orbitReflowRef.current = null;
+    activeReflowRingRef.current = null;
     setIsOrbitReflowActive(false);
     setOrbitReflowRenderPositions(null);
   }, []);
@@ -581,15 +633,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // continuously-advancing ring share one moving frame and can never
   // produce a jump when the reflow hands off to the normal dynamic formula.
   const commitOrbitReflow = useCallback((
+    ring: ProjectOrbitRing,
     previousOrder: string[],
     newOrder: string[],
     fromOverrides: Record<string, { x: number; y: number }> = {},
     durationMs: number = ORBIT_REFLOW_DURATION_MS
   ) => {
     const plan = buildOrbitReflowPlan(previousOrder, newOrder, fromOverrides);
+    activeReflowRingRef.current = ring;
 
     if (prefersReducedMotion) {
       orbitReflowRef.current = null;
+      activeReflowRingRef.current = null;
       setIsOrbitReflowActive(false);
       setOrbitReflowRenderPositions(null);
       return;
@@ -598,15 +653,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const initialPositions = resolveOrbitReflowPositions(
       plan,
       0,
-      projectOrbitPhaseRef.current,
-      staticOrbitalLattice.orbitGeometry,
+      getRingPhaseFromRefs(ring),
+      ring.geometry,
       (id) => projectsById.get(id)
     );
 
     orbitReflowRef.current = { plan, durationMs, startTimestamp: null };
     setOrbitReflowRenderPositions(initialPositions);
     setIsOrbitReflowActive(true);
-  }, [projectsById, staticOrbitalLattice, prefersReducedMotion]);
+  }, [projectsById, prefersReducedMotion, getRingPhaseFromRefs]);
 
   // The ONE short-lived orbital reflow RAF loop — alive only while an actual
   // transition is in progress (never a persistent per-project loop), gated
@@ -622,13 +677,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     let rafId: number;
     const tick = (timestamp: number) => {
       const transition = orbitReflowRef.current;
-      if (!transition) return;
+      const ring = activeReflowRingRef.current;
+      if (!transition || !ring) return;
 
       const result = stepOrbitReflow(
         transition,
         timestamp,
-        projectOrbitPhaseRef.current,
-        staticOrbitalLattice.orbitGeometry,
+        getRingPhaseFromRefs(ring),
+        ring.geometry,
         (id) => projectsById.get(id)
       );
       if (transition.startTimestamp === null) {
@@ -638,6 +694,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       if (result.isComplete) {
         orbitReflowRef.current = null;
+        activeReflowRingRef.current = null;
         setIsOrbitReflowActive(false);
         setOrbitReflowRenderPositions(null);
         return;
@@ -678,6 +735,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (!draggingNode || draggingNode.type !== 'project') return null;
     const project = projectsById.get(draggingNode.id);
     if (!project) return null;
+    // No cross-ring migration: capture/insertion is always evaluated against
+    // the dragged project's OWN canonical ring, never whichever ring's
+    // ellipse the pointer happens to be spatially nearest.
+    const ring = projectRingByProjectId.get(draggingNode.id);
+    if (!ring) return null;
 
     const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
     const crossed = draggingNode.crossedDetachThreshold ?? false;
@@ -687,7 +749,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     let projection: OrbitEllipseProjection | null = null;
     if (crossed || persisted === 'detached') {
       const rawCenter = getProjectVisualCenterIso(project, rawPos);
-      projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+      projection = projectPointOntoOrbitEllipse(rawCenter, ring.geometry);
       attraction = computeCaptureAttraction(projection.distanceIso);
     }
 
@@ -698,8 +760,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       isWithinCaptureRadius: attraction.isWithinCaptureRadius,
     });
 
-    return { project, projection, dockState, attraction, rawPos };
-  }, [draggingNode, projectsById, projectDockState, staticOrbitalLattice]);
+    return { project, ring, projection, dockState, attraction, rawPos };
+  }, [draggingNode, projectsById, projectDockState, projectRingByProjectId]);
 
   // PR28: Derives actively-dragged capability's projection and magnetic capture
   // state relative to the Capability Reactor ellipse.
@@ -775,6 +837,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projectOrbitPhaseRef.current = 0;
     setProjectOrbitPhase(0);
     setReactorOrbitPhase(0);
+    projectPhaseUnwrappedRef.current = { phase: 0, lastTimestamp: null };
+    setProjectPhaseUnwrapped(0);
   }, []);
 
   // PR23: ASSEMBLE/RESET both mean "restore complete canonical orbital
@@ -789,7 +853,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setCustomProjectPositions({});
     setCustomSkillPositions({});
     setProjectDockState({});
-    setInteractiveOrbitOrder(null);
+    setInteractiveOrbitOrderByRing({});
     resetOrbitPhasesToCanonical();
   }, [cancelOrbitReflow, cancelCapabilitySettling, resetOrbitPhasesToCanonical]);
 
@@ -814,8 +878,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     return Object.keys(customProjectPositions).length > 0 ||
       Object.keys(customSkillPositions).length > 0 ||
       Object.keys(projectDockState).length > 0 ||
-      interactiveOrbitOrder !== null;
-  }, [customProjectPositions, customSkillPositions, projectDockState, interactiveOrbitOrder]);
+      Object.values(interactiveOrbitOrderByRing).some(order => order !== null);
+  }, [customProjectPositions, customSkillPositions, projectDockState, interactiveOrbitOrderByRing]);
 
   // Real-time preview calculation of snapped & collision-free landing spot
   const dragResolution = useMemo(() => {
@@ -825,16 +889,26 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       if (activeDockingPreview?.dockState !== 'detached') return null;
       const project = projectsById.get(draggingNode.id);
       if (!project) return null;
+      const ownRing = activeDockingPreview.ring;
 
       const wasDocked = resolveProjectDockState(projectDockState, draggingNode.id) === 'docked';
-      const futureOrder = wasDocked
-        ? dockedOrbitOrder.filter(id => id !== draggingNode.id)
-        : dockedOrbitOrder;
-      const dockedProjectsForSweep = futureOrder
-        .map(id => projectsById.get(id))
-        .filter((p): p is ProjectData => Boolean(p));
-      const isCandidateValid = (pos: { x: number; y: number }) =>
-        isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, dockedProjectsForSweep);
+      const ownRingDockedOrder = dockedOrbitOrderByRing[ownRing.id] || [];
+      const futureOwnRingOrder = wasDocked
+        ? ownRingDockedOrder.filter(id => id !== draggingNode.id)
+        : ownRingDockedOrder;
+      // A stationary detached candidate must clear every ring's future
+      // motion, not only its own canonical ring — it could visually sit
+      // anywhere on the canvas.
+      const isCandidateValid = (pos: { x: number; y: number }) => {
+        for (const ring of projectRings) {
+          const idsForSweep = ring.id === ownRing.id ? futureOwnRingOrder : (dockedOrbitOrderByRing[ring.id] || []);
+          const projectsForSweep = idsForSweep
+            .map(id => projectsById.get(id))
+            .filter((p): p is ProjectData => Boolean(p));
+          if (!isDetachedPlacementMotionSafe(project, pos, ring.geometry, projectsForSweep)) return false;
+        }
+        return true;
+      };
 
       const resolved = findNearestValidGridPosition(
         'project',
@@ -866,7 +940,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     );
   }, [
     draggingNode, activeDockingPreview, activeCapabilityDockingPreview, projectsById, projectDockState,
-    dockedOrbitOrder, staticOrbitalLattice, effectiveProjectPositions,
+    dockedOrbitOrderByRing, projectRings, effectiveProjectPositions,
     effectiveSkillPositions, projects, activeSkills, gridSnapEnabled
   ]);
 
@@ -919,9 +993,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const w = containerRef.current.clientWidth || 800;
     const h = containerRef.current.clientHeight || 600;
     const isCompact = w < 1024;
-    const bounds = isCompact
-      ? staticOrbitalLattice.orbitGeometry.visualBounds
-      : staticOrbitalLattice.orbitGeometry.motionVisualBounds;
+    const boundsKey = isCompact ? 'visualBounds' : 'motionVisualBounds';
+    // Union every project ring's own bounds (never assume the outermost ring
+    // alone dominates every other ring in every direction) so FIT ALL always
+    // frames the whole adaptive-ring topology, not just its innermost ring.
+    const rings = staticOrbitalLattice.projectRings;
+    const allBounds = rings.length > 0
+      ? rings.map(ring => ring.geometry[boundsKey])
+      : [staticOrbitalLattice.orbitGeometry[boundsKey]];
+    const bounds = {
+      minX: Math.min(...allBounds.map(b => b.minX)),
+      maxX: Math.max(...allBounds.map(b => b.maxX)),
+      minY: Math.min(...allBounds.map(b => b.minY)),
+      maxY: Math.max(...allBounds.map(b => b.maxY)),
+    };
     const { zoom, x, y } = computeFitViewport(bounds, w, h, {
       paddingFactor: isCompact ? 0.92 : 0.95,
       minZoom: isCompact ? 0.15 : 0.20,
@@ -993,11 +1078,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projects,
     activeSkills,
     projectsById,
-    canonicalOrbitOrder,
-    dockedOrbitOrder,
+    projectRings,
+    projectRingByProjectId,
+    dockedOrbitOrderByRing,
     projectDockState,
     commitOrbitReflow,
-    staticOrbitalLattice,
     capabilityReactorGeometry,
     canonicalCapabilityOrder,
     commitCapabilitySettling,
@@ -1012,11 +1097,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     projects,
     activeSkills,
     projectsById,
-    canonicalOrbitOrder,
-    dockedOrbitOrder,
+    projectRings,
+    projectRingByProjectId,
+    dockedOrbitOrderByRing,
     projectDockState,
     commitOrbitReflow,
-    staticOrbitalLattice,
     capabilityReactorGeometry,
     canonicalCapabilityOrder,
     commitCapabilitySettling,
@@ -1033,7 +1118,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const processMove = (clientX: number, clientY: number) => {
       const draggingNode = draggingNodeRef.current;
       if (!draggingNode) return;
-      const { viewport, projectsById, staticOrbitalLattice, capabilityReactorGeometry } = dragRuntimeRef.current;
+      const { viewport, projectsById, projectRingByProjectId, capabilityReactorGeometry } = dragRuntimeRef.current;
       const deltaScreenX = (clientX - draggingNode.startClientX) / viewport.zoom;
       const deltaScreenY = (clientY - draggingNode.startClientY) / viewport.zoom;
       const moved = Math.hypot(deltaScreenX, deltaScreenY) > 3;
@@ -1098,9 +1183,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         let renderedPos = rawPos;
         if (crossedDetachThreshold) {
           const project = projectsById.get(prev.id);
-          if (project) {
+          const ring = projectRingByProjectId.get(prev.id);
+          if (project && ring) {
             const rawCenter = getProjectVisualCenterIso(project, rawPos);
-            const projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+            const projection = projectPointOntoOrbitEllipse(rawCenter, ring.geometry);
             const attraction = computeCaptureAttraction(projection.distanceIso);
             if (attraction.isWithinCaptureRadius) {
               const projectedOrbitWorldOrigin = getWorldOriginForIsoCenter(project, projection.projectedPoint);
@@ -1132,11 +1218,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         projects,
         activeSkills,
         projectsById,
-        canonicalOrbitOrder,
-        dockedOrbitOrder,
+        projectRings,
+        projectRingByProjectId,
+        dockedOrbitOrderByRing,
         projectDockState,
         commitOrbitReflow,
-        staticOrbitalLattice,
         capabilityReactorGeometry,
         canonicalCapabilityOrder,
         commitCapabilitySettling,
@@ -1201,10 +1287,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       }
 
       const project = projectsById.get(draggingNode.id);
-      if (!project) {
+      // No cross-ring migration: every dock/detach/reinsert decision below
+      // resolves against the dragged project's OWN canonical ring only.
+      const ring = projectRingByProjectId.get(draggingNode.id);
+      if (!project || !ring) {
         setDraggingNode(null);
         return;
       }
+      const canonicalOrbitOrder = ring.projectIds;
+      const dockedOrbitOrder = dockedOrbitOrderByRing[ring.id] || [];
 
       const persisted = resolveProjectDockState(projectDockState, draggingNode.id);
       const crossed = draggingNode.crossedDetachThreshold ?? false;
@@ -1214,7 +1305,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       let projection: OrbitEllipseProjection | null = null;
       if (crossed || persisted === 'detached') {
         const rawCenter = getProjectVisualCenterIso(project, rawPos);
-        projection = projectPointOntoOrbitEllipse(rawCenter, staticOrbitalLattice.orbitGeometry);
+        projection = projectPointOntoOrbitEllipse(rawCenter, ring.geometry);
         attraction = computeCaptureAttraction(projection.distanceIso);
       }
 
@@ -1232,7 +1323,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // breakaway/capture cancel return to the EXISTING membership/order.
         // Whole-ellipse insertion is reserved for a later gesture that starts
         // from persisted detached state, so this path can never duplicate ID.
-        commitOrbitReflow(dockedOrbitOrder, dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
+        commitOrbitReflow(ring, dockedOrbitOrder, dockedOrbitOrder, { [draggingNode.id]: draggingNode.currentPos }, ABORTED_PULL_RETURN_MS);
         setSnapNotice({
           message: dockStateAtRelease === 'detaching'
             ? 'MAGNETIC RELEASE // RETURNING TO SLOT'
@@ -1245,7 +1336,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // be inserted at a new angular gap. Read the live phase at mouseup;
         // the orbit has continued to advance throughout the drag.
         const theta = projection!.theta;
-        const phaseAtRelease = projectOrbitPhaseRef.current;
+        const phaseAtRelease = getRingPhaseFromRefs(ring);
         const insertionIndex = resolveOrbitInsertionIndex(
           theta,
           phaseAtRelease,
@@ -1258,7 +1349,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           canonicalOrbitOrder
         );
 
-        setInteractiveOrbitOrder(newOrder);
+        setInteractiveOrbitOrderByRing(prev => ({ ...prev, [ring.id]: newOrder }));
         setCustomProjectPositions(prev => {
           if (!(draggingNode.id in prev)) return prev;
           const next = { ...prev };
@@ -1271,31 +1362,35 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           delete next[draggingNode.id];
           return next;
         });
-        commitOrbitReflow(dockedOrbitOrder, newOrder, { [draggingNode.id]: draggingNode.currentPos });
+        commitOrbitReflow(ring, dockedOrbitOrder, newOrder, { [draggingNode.id]: draggingNode.currentPos });
 
         setSnapNotice({ message: 'DOCK TARGET ACQUIRED // ORBIT REALIGNED', type: 'snap' });
         setTimeout(() => setSnapNotice(null), 1800);
       } else {
         // Ordinary free placement: existing grid-snap/collision resolution,
         // persisted as a detached custom position. ADDITIONALLY validated
-        // against the future orbital sweep — every project that will still be
-        // docked (using the CURRENT interactive docked order/count, so this
-        // stays correct for any membership size or visitor-reordered
-        // sequence, not just the original full 18-project ring) keeps
-        // orbiting the full ellipse, so a spot that's clear right now can
-        // still be swept through later. isCandidateValid is an ADDITIONAL
-        // gate on top of the existing expanding grid search — never a second
-        // search algorithm.
+        // against the future orbital sweep of EVERY ring (using each ring's
+        // CURRENT interactive docked order/count, so this stays correct for
+        // any membership size or visitor-reordered sequence, not just the
+        // original full ring) — a stationary detached project could visually
+        // sit anywhere on the canvas, not only near its own canonical ring.
+        // isCandidateValid is an ADDITIONAL gate on top of the existing
+        // expanding grid search — never a second search algorithm.
         const wasDocked = persisted === 'docked';
         const newOrder = wasDocked
           ? removeProjectFromOrbitOrder(dockedOrbitOrder, draggingNode.id, canonicalOrbitOrder)
           : dockedOrbitOrder;
-        const dockedProjectsForSweep = newOrder
-          .map(id => projectsById.get(id))
-          .filter((p): p is ProjectData => Boolean(p));
 
-        const isCandidateValid = (pos: { x: number; y: number }) =>
-          isDetachedPlacementMotionSafe(project, pos, staticOrbitalLattice.orbitGeometry, dockedProjectsForSweep);
+        const isCandidateValid = (pos: { x: number; y: number }) => {
+          for (const r of projectRings) {
+            const idsForSweep = r.id === ring.id ? newOrder : (dockedOrbitOrderByRing[r.id] || []);
+            const projectsForSweep = idsForSweep
+              .map(id => projectsById.get(id))
+              .filter((p): p is ProjectData => Boolean(p));
+            if (!isDetachedPlacementMotionSafe(project, pos, r.geometry, projectsForSweep)) return false;
+          }
+          return true;
+        };
 
         const resolved = findNearestValidGridPosition(
           'project', draggingNode.id, rawPos,
@@ -1310,6 +1405,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             // location. Membership stays unchanged and the dragged project
             // returns to its authoritative docked position.
             commitOrbitReflow(
+              ring,
               dockedOrbitOrder,
               dockedOrbitOrder,
               { [draggingNode.id]: draggingNode.currentPos },
@@ -1332,8 +1428,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         setProjectDockState(prev => ({ ...prev, [draggingNode.id]: { state: 'detached' } }));
 
         if (wasDocked) {
-          setInteractiveOrbitOrder(newOrder);
-          commitOrbitReflow(dockedOrbitOrder, newOrder);
+          setInteractiveOrbitOrderByRing(prev => ({ ...prev, [ring.id]: newOrder }));
+          commitOrbitReflow(ring, dockedOrbitOrder, newOrder);
         }
 
         if (resolved.wasAdjustedForValidatorOnly) {
@@ -1715,8 +1811,120 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       {/* Bottom-Left Controls & Status */}
       <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[10px] font-mono text-[#15150F] z-10">
-        {/* Desktop dual-orbit console; hidden when autonomous motion is unavailable. */}
-        {!isCompactViewport && !prefersReducedMotion && (
+        {/* Desktop dual-orbit console: hidden ONLY when autonomous motion
+            itself is unavailable (reduced-motion). A narrow center topology
+            panel (routine on an ordinary desktop once the nav rail and
+            inspector panel are laid out) no longer hides controls -- it
+            switches to a compact presentation that keeps every control
+            accessible. */}
+        {!prefersReducedMotion && (isCompactViewport ? (
+          <div
+            id="orbit-rate-controls-compact"
+            className="pointer-events-auto flex flex-col border border-[#15150F] bg-[#D4CDA4] font-mono shadow-[2px_2px_0px_#15150F]"
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+          >
+            <span className="bg-[#15150F] px-2 py-1 text-[10px] font-bold tracking-[0.12em] text-[#C3E54E]">
+              ORBIT
+            </span>
+            <div
+              role="group"
+              aria-label="Deployed systems orbit controls"
+              className="grid grid-cols-[32px_22px_34px_22px_50px] items-stretch border-b border-[#15150F]"
+            >
+              <span className="flex items-center px-1 text-[10px] font-bold">SYS</span>
+              <button
+                type="button"
+                aria-label="Decrease deployed systems orbit speed"
+                disabled={projectOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[0]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setProjectOrbitRateMultiplier(rate => stepOrbitRate(rate, 'decrease'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                −
+              </button>
+              <output className="flex items-center justify-center border-l border-[#15150F] bg-[#E2DCB9] text-[10px] font-bold">
+                {projectOrbitRateMultiplier}×
+              </output>
+              <button
+                type="button"
+                aria-label="Increase deployed systems orbit speed"
+                disabled={projectOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[ACTIVE_ORBIT_RATE_MULTIPLIERS.length - 1]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setProjectOrbitRateMultiplier(rate => stepOrbitRate(rate, 'increase'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label={isProjectOrbitPaused ? 'Resume deployed systems orbit' : 'Pause deployed systems orbit'}
+                aria-pressed={isProjectOrbitPaused}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsProjectOrbitPaused(paused => !paused);
+                }}
+                className={`border-l border-[#15150F] px-1 py-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                  isProjectOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
+                }`}
+              >
+                {isProjectOrbitPaused ? 'RESUME' : 'PAUSE'}
+              </button>
+            </div>
+            <div
+              role="group"
+              aria-label="Capability reactor orbit controls"
+              className="grid grid-cols-[32px_22px_34px_22px_50px] items-stretch"
+            >
+              <span className="flex items-center px-1 text-[10px] font-bold">RCT</span>
+              <button
+                type="button"
+                aria-label="Decrease capability reactor speed"
+                disabled={reactorOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[0]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactorOrbitRateMultiplier(rate => stepOrbitRate(rate, 'decrease'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                −
+              </button>
+              <output className="flex items-center justify-center border-l border-[#15150F] bg-[#E2DCB9] text-[10px] font-bold">
+                {reactorOrbitRateMultiplier}×
+              </output>
+              <button
+                type="button"
+                aria-label="Increase capability reactor speed"
+                disabled={reactorOrbitRateMultiplier === ACTIVE_ORBIT_RATE_MULTIPLIERS[ACTIVE_ORBIT_RATE_MULTIPLIERS.length - 1]}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReactorOrbitRateMultiplier(rate => stepOrbitRate(rate, 'increase'));
+                }}
+                className="border-l border-[#15150F] text-[13px] font-bold hover:bg-[#E2DCB9] disabled:cursor-not-allowed disabled:text-[#8A856C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E]"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label={isReactorOrbitPaused ? 'Resume capability reactor orbit' : 'Pause capability reactor orbit'}
+                aria-pressed={isReactorOrbitPaused}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsReactorOrbitPaused(paused => !paused);
+                }}
+                className={`border-l border-[#15150F] px-1 py-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#C3E54E] ${
+                  isReactorOrbitPaused ? 'bg-[#C3E54E]' : 'hover:bg-[#E2DCB9]'
+                }`}
+              >
+                {isReactorOrbitPaused ? 'RESUME' : 'PAUSE'}
+              </button>
+            </div>
+          </div>
+        ) : (
           <div
             id="orbit-rate-controls"
             className="pointer-events-auto flex flex-col border border-[#15150F] bg-[#D4CDA4] font-mono shadow-[2px_2px_0px_#15150F]"
@@ -1825,7 +2033,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               </button>
             </div>
           </div>
-        )}
+        ))}
 
         {/* System backbone, grid snap & custom layout status row */}
         <div className="flex items-center gap-2">
@@ -1994,43 +2202,53 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         {/* Regional Zone Boundaries Layer */}
         <g id="zones" className={`transition-opacity duration-200 ${isHoverFocus ? 'opacity-25' : 'opacity-100'}`} />
 
-        {/* Orbital Field Guides: subtle drafting-style guide ellipse and registration ticks */}
+        {/* Orbital Field Guides: subtle drafting-style guide ellipse and
+            registration ticks — one per adaptive project ring, inner to
+            outer. Subtle hierarchy only (opacity/weight taper outward): no
+            per-ring color, matching the existing visual language. */}
         <g id="orbital-field-guides" pointerEvents="none" className="pointer-events-none" opacity={0.25}>
-          <ellipse
-            cx={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            cy={staticOrbitalLattice.orbitGeometry.centerIso.y}
-            rx={staticOrbitalLattice.orbitGeometry.radiusX}
-            ry={staticOrbitalLattice.orbitGeometry.radiusY}
-            fill="none"
-            stroke="#15150F"
-            strokeWidth="0.8"
-            strokeDasharray="6 6"
-          />
-          {Array.from({ length: 24 }, (_, i) => {
-            const angle = (i / 24) * 2 * Math.PI;
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
-            const cx = staticOrbitalLattice.orbitGeometry.centerIso.x;
-            const cy = staticOrbitalLattice.orbitGeometry.centerIso.y;
-            const rx = staticOrbitalLattice.orbitGeometry.radiusX;
-            const ry = staticOrbitalLattice.orbitGeometry.radiusY;
-            const px = cx + rx * cos;
-            const py = cy + ry * sin;
-            const normalX = ry * cos;
-            const normalY = rx * sin;
-            const len = Math.hypot(normalX, normalY) || 1;
-            const nx = normalX / len;
-            const ny = normalY / len;
+          {projectRings.map(ring => {
+            const cx = ring.geometry.centerIso.x;
+            const cy = ring.geometry.centerIso.y;
+            const rx = ring.geometry.radiusX;
+            const ry = ring.geometry.radiusY;
+            const ringOpacity = Math.max(0.55, 1 - ring.index * 0.12);
             return (
-              <line
-                key={`orbit-tick-${i}`}
-                x1={px - 3 * nx}
-                y1={py - 3 * ny}
-                x2={px + 3 * nx}
-                y2={py + 3 * ny}
-                stroke="#15150F"
-                strokeWidth="0.8"
-              />
+              <g key={ring.id} opacity={ringOpacity}>
+                <ellipse
+                  cx={cx}
+                  cy={cy}
+                  rx={rx}
+                  ry={ry}
+                  fill="none"
+                  stroke="#15150F"
+                  strokeWidth="0.8"
+                  strokeDasharray="6 6"
+                />
+                {Array.from({ length: 24 }, (_, i) => {
+                  const angle = (i / 24) * 2 * Math.PI;
+                  const cos = Math.cos(angle);
+                  const sin = Math.sin(angle);
+                  const px = cx + rx * cos;
+                  const py = cy + ry * sin;
+                  const normalX = ry * cos;
+                  const normalY = rx * sin;
+                  const len = Math.hypot(normalX, normalY) || 1;
+                  const nx = normalX / len;
+                  const ny = normalY / len;
+                  return (
+                    <line
+                      key={`orbit-tick-${ring.id}-${i}`}
+                      x1={px - 3 * nx}
+                      y1={py - 3 * ny}
+                      x2={px + 3 * nx}
+                      y2={py + 3 * ny}
+                      stroke="#15150F"
+                      strokeWidth="0.8"
+                    />
+                  );
+                })}
+              </g>
             );
           })}
         </g>
@@ -2149,30 +2367,54 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           >
             RING 01 // CAPABILITY REACTOR
           </text>
-          <text
-            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 34}
-            fontSize="18"
-            fontWeight="bold"
-            fill="#5C5946"
-            fontFamily="monospace"
-            letterSpacing="1.2"
-            textAnchor="middle"
-          >
-            RING 02 // DEPLOYED SYSTEMS
-          </text>
-          <text
-            x={staticOrbitalLattice.orbitGeometry.centerIso.x}
-            y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 12}
-            fontSize="16"
-            fontWeight="bold"
-            fill="#5C5946"
-            fontFamily="monospace"
-            letterSpacing="1"
-            textAnchor="middle"
-          >
-            ORBITAL LOAD // {dockedOrbitOrder.length} SYSTEMS
-          </text>
+          {/* One project ring (<=18 projects): preserve the original two-line
+              label/telemetry text and position exactly. Multiple rings:
+              one label per ring, each carrying its own live system count —
+              the aggregate ORBITAL LOAD line is superseded by these. */}
+          {projectRings.length <= 1 ? (
+            <>
+              <text
+                x={staticOrbitalLattice.orbitGeometry.centerIso.x}
+                y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 34}
+                fontSize="18"
+                fontWeight="bold"
+                fill="#5C5946"
+                fontFamily="monospace"
+                letterSpacing="1.2"
+                textAnchor="middle"
+              >
+                RING 02 // DEPLOYED SYSTEMS
+              </text>
+              <text
+                x={staticOrbitalLattice.orbitGeometry.centerIso.x}
+                y={staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY - 12}
+                fontSize="16"
+                fontWeight="bold"
+                fill="#5C5946"
+                fontFamily="monospace"
+                letterSpacing="1"
+                textAnchor="middle"
+              >
+                ORBITAL LOAD // {totalDockedProjectCount} SYSTEMS
+              </text>
+            </>
+          ) : (
+            projectRings.map(ring => (
+              <text
+                key={ring.id}
+                x={ring.geometry.centerIso.x}
+                y={ring.geometry.motionVisualBounds.minY - 20}
+                fontSize="16"
+                fontWeight="bold"
+                fill="#5C5946"
+                fontFamily="monospace"
+                letterSpacing="1"
+                textAnchor="middle"
+              >
+                RING {String(ring.index + 2).padStart(2, '0')} // DEPLOYED SYSTEMS // {(dockedOrbitOrderByRing[ring.id] || []).length} SYSTEMS
+              </text>
+            ))
+          )}
         </g>
 
         {/* Cable / Routing Connections Layer */}

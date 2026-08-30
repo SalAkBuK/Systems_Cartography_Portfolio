@@ -169,7 +169,7 @@ test('project docking and moving-frame reflow read only the live project phase',
   for (const marker of [
     'resolveOrbitReflowPositions(',
     'stepOrbitReflow(',
-    'const phaseAtRelease = projectOrbitPhaseRef.current;',
+    'const phaseAtRelease = getRingPhaseFromRefs(ring);',
   ]) {
     assert.ok(canvasSource.includes(marker));
   }
@@ -177,7 +177,11 @@ test('project docking and moving-frame reflow read only the live project phase',
     canvasSource.indexOf('const commitOrbitReflow = useCallback(('),
     canvasSource.indexOf('// Handle Pan & Drag on canvas surface')
   );
-  assert.ok(dockingBlock.includes('projectOrbitPhaseRef.current'));
+  // Adaptive rings: commitOrbitReflow reads each ring's own live phase via
+  // getRingPhaseFromRefs (ring 0 == projectOrbitPhaseRef.current exactly;
+  // every other ring derives from the shared unwrapped reference) rather
+  // than a single global projectOrbitPhaseRef read.
+  assert.ok(dockingBlock.includes('getRingPhaseFromRefs'));
   assert.ok(!dockingBlock.includes('reactorOrbitPhase'), 'reactor phase must never enter project docking/reflow math');
 });
 

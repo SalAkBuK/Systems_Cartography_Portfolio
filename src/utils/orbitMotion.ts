@@ -273,3 +273,69 @@ export function isOrbitPauseConditionActive(state: OrbitPauseState): boolean {
     state.prefersReducedMotion
   );
 }
+
+/**
+ * Advances a phase by elapsed time WITHOUT wrapping into [0, 2π). Exists
+ * solely to derive multiple project rings' effective phases from one shared
+ * reference without discontinuity: naively multiplying an already-wrapped
+ * phase by a ring's rate multiplier produces a visible backward jump once
+ * per revolution of the reference clock, for any multiplier other than 1.
+ * Keeping the reference unwrapped and normalizing only at each ring's own
+ * read site avoids that entirely, and is safe indefinitely — the phase
+ * values involved stay far below the range where float64 accumulation error
+ * becomes visually meaningful.
+ */
+export function advanceUnwrappedOrbitPhase(
+  currentPhase: number,
+  deltaMs: number,
+  rateMultiplier: OrbitRateMultiplier = 1,
+  periodMs: number = ORBIT_PERIOD_MS
+): number {
+  if (!Number.isFinite(currentPhase)) return 0;
+  return currentPhase + computePhaseDelta(deltaMs, rateMultiplier, periodMs);
+}
+
+/**
+ * Same pause/resume/no-catch-up-jump contract as `stepOrbitClock`, but the
+ * stored phase is never wrapped. Intended to be advanced in the SAME
+ * requestAnimationFrame tick (same timestamp, same running/rate inputs) as
+ * the shared project clock, so it can never drift independently — it is a
+ * derivation aid, not a second independent clock.
+ */
+export function stepUnwrappedOrbitClock(
+  state: OrbitClockState,
+  timestamp: number,
+  isRunning: boolean,
+  rateMultiplier: OrbitRateMultiplier = 1,
+  periodMs: number = ORBIT_PERIOD_MS
+): OrbitClockState {
+  const safePhase = Number.isFinite(state.phase) ? state.phase : 0;
+  if (!isRunning || rateMultiplier === 0) {
+    return { phase: safePhase, lastTimestamp: null };
+  }
+  if (!Number.isFinite(timestamp)) {
+    return { phase: safePhase, lastTimestamp: null };
+  }
+  if (state.lastTimestamp === null || !Number.isFinite(state.lastTimestamp)) {
+    return { phase: safePhase, lastTimestamp: timestamp };
+  }
+  const deltaMs = timestamp - state.lastTimestamp;
+  return {
+    phase: advanceUnwrappedOrbitPhase(safePhase, deltaMs, rateMultiplier, periodMs),
+    lastTimestamp: timestamp,
+  };
+}
+
+/**
+ * Derives one project ring's effective (wrapped) phase from the shared
+ * unwrapped project-system reference phase and that ring's base rate
+ * multiplier. Continuous and smooth at every ring's own wrap point,
+ * regardless of when the reference itself would have wrapped.
+ */
+export function getRingEffectivePhase(
+  unwrappedProjectPhase: number,
+  ringBaseRateMultiplier: number
+): number {
+  if (!Number.isFinite(unwrappedProjectPhase) || !Number.isFinite(ringBaseRateMultiplier)) return 0;
+  return normalizeOrbitPhase(unwrappedProjectPhase * ringBaseRateMultiplier);
+}

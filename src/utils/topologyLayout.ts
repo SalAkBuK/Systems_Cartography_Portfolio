@@ -5,9 +5,15 @@ import {
   getTopologyProjectDimensions,
   getTopologyProjectVisualBounds,
   wrapCalloutTitle,
+  PROJECT_CALLOUT_WIDTH,
   type TopologyVisualBounds,
   type TopologyProjectDimensions
 } from './projectTopologyGeometry';
+import {
+  allocateProjectRings,
+  getProjectRingBaseRateMultiplier,
+  getProjectRingId,
+} from './projectRingAllocation';
 
 // Re-exported for backward compatibility: TopologyCanvas and existing tests
 // import wrapCalloutTitle from this module. The canonical implementation now
@@ -264,10 +270,38 @@ export interface StaticOrbitGeometry {
   motionVisualBounds: { minX: number; maxX: number; minY: number; maxY: number };
 }
 
+/**
+ * One concentric project ring: a first-class topology primitive. Every
+ * project belongs to exactly one ring (see `projectRingAllocation.ts`), and
+ * a ring's own `geometry` is the same `StaticOrbitGeometry` shape the
+ * original single-ring topology always used -- scoped to just this ring's
+ * projects. Rings are concentric (shared `centerIso` via the geometry) with
+ * strictly increasing radius outward from the Capability Reactor.
+ */
+export interface ProjectOrbitRing {
+  id: string;
+  index: number;
+  /** Canonical project ids assigned to this ring, in canonical order. */
+  projectIds: string[];
+  geometry: StaticOrbitGeometry;
+  /** Multiplied by the global user-selected SYSTEMS rate to get this ring's effective rate. */
+  baseRateMultiplier: number;
+  direction: 'clockwise';
+}
+
 export interface AssembledTopologyPositions {
   projectPositions: Record<string, { x: number; y: number }>;
   skillPositions: Record<string, { x: number; y: number }>;
+  /**
+   * Ring 0's own geometry (or a reactor-clearance-only empty ellipse when
+   * there are zero projects). Kept for backward compatibility with the
+   * original single-ring topology -- always genuinely equal to
+   * `projectRings[0]?.geometry`, never synthesized/divergent data. Prefer
+   * `projectRings` for anything that needs to be ring-count-aware.
+   */
   orbitGeometry: StaticOrbitGeometry;
+  /** Every concentric project ring, inner (index 0) to outer. */
+  projectRings: ProjectOrbitRing[];
 }
 
 export interface PlacedNodeBounds {
@@ -350,6 +384,31 @@ const ORBIT_RADIUS_GROWTH_STEP = 24;
 const ORBIT_MAX_GROWTH_ITERATIONS = 400;
 const FIT_VIEWPORT_PADDING = 40; // modest final padding around the union of everything actually rendered
 
+/**
+ * Fixed radial allowance (iso units) added between two neighboring project
+ * rings, on top of both rings' own worst-case project-block footprint
+ * half-extents (computed at the call site from what is actually being
+ * rendered — never a bare "+50"). `ORBIT_SLOT_MARGIN` mirrors the same
+ * breathing room already trusted within a single ring; `PROJECT_CALLOUT_WIDTH`
+ * covers a project's rendered title callout, which can extend well beyond
+ * its structural block and is not included in the block-footprint
+ * calculation this spacing is added to.
+ */
+const PROJECT_RING_SPACING_ISO = ORBIT_SLOT_MARGIN + PROJECT_CALLOUT_WIDTH;
+
+/** Worst-case iso-space footprint half-extent across a set of projects (0 for an empty set). */
+function computeMaxProjectFootprintIsoHalfExtent(projects: ProjectData[]): { x: number; y: number } {
+  if (projects.length === 0) return { x: 0, y: 0 };
+  const extents = projects.map(p => {
+    const dims = getTopologyProjectDimensions(p);
+    return isoFootprintHalfExtent(dims.width, dims.depth);
+  });
+  return {
+    x: Math.max(...extents.map(e => e.x)),
+    y: Math.max(...extents.map(e => e.y)),
+  };
+}
+
 function unionVisualBounds(boxes: TopologyVisualBounds[]): TopologyVisualBounds {
   return {
     minX: Math.min(...boxes.map(b => b.minX)),
@@ -369,10 +428,18 @@ function unionVisualBounds(boxes: TopologyVisualBounds[]): TopologyVisualBounds 
  * Canonical orbit positions are intentionally NOT grid-snapped: they are exact
  * continuous coordinates so the rendered project center lies precisely on the
  * ellipse track. Manual dragging remains governed by GRID_SNAP_STEP elsewhere.
+ *
+ * `radiusFloor` (optional) is used only by the multi-ring builder below to
+ * push an outer ring's starting radius past its inner neighbor's outer edge
+ * before this function's own base-radius heuristic and full-revolution
+ * validation take over exactly as they do for a single ring. Omitted (the
+ * single-ring / ring-0 case), behavior is byte-identical to before this
+ * parameter existed.
  */
 function buildStaticProjectOrbit(
   sortedProjects: ProjectData[],
-  capabilityBoxes: PlacedNodeBounds[]
+  capabilityBoxes: PlacedNodeBounds[],
+  radiusFloor?: { minRadiusX: number; minRadiusY: number }
 ): { projectPositions: Record<string, { x: number; y: number }>; orbitGeometry: StaticOrbitGeometry } {
   // 1. Project the capability core into isometric/visual space to find the true visual nucleus.
   let coreMinIsoX = 0, coreMaxIsoX = 0, coreMinIsoY = 0, coreMaxIsoY = 0;
@@ -434,8 +501,14 @@ function buildStaticProjectOrbit(
   const maxFootprintIsoHalfX = Math.max(...footprintHalfExtents.map(e => e.x));
   const maxFootprintIsoHalfY = Math.max(...footprintHalfExtents.map(e => e.y));
 
-  let radiusX = coreHalfWidthIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfX;
-  let radiusY = coreHalfHeightIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfY;
+  let radiusX = Math.max(
+    coreHalfWidthIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfX,
+    radiusFloor?.minRadiusX ?? 0
+  );
+  let radiusY = Math.max(
+    coreHalfHeightIso + ORBIT_CORE_CLEARANCE_ISO + maxFootprintIsoHalfY,
+    radiusFloor?.minRadiusY ?? 0
+  );
 
   // 3. Grow the single ellipse until its perimeter can comfortably host every project slot.
   const totalSlotRequirement = projectDims.reduce(
@@ -597,6 +670,82 @@ function buildStaticProjectOrbit(
       motionVisualBounds,
     },
   };
+}
+
+/**
+ * Splits the full canonical project collection into one or more concentric
+ * rings (see `projectRingAllocation.ts` for the capacity/assignment rule)
+ * and builds each ring's own `StaticOrbitGeometry` outward from the
+ * Capability Reactor.
+ *
+ * Each ring's radius floor is derived directly from rendered envelopes: the
+ * previous ring's own outer radius, plus both rings' worst-case project
+ * footprint half-extents, plus the fixed callout/breathing allowance
+ * (`PROJECT_RING_SPACING_ISO`). Because `buildStaticProjectOrbit` never
+ * shrinks below a supplied floor — its own within-ring growth loop only
+ * ever grows radiusX/radiusY further to satisfy its OWN collision-safety
+ * sweep — clearance from the ring immediately inside can only improve, never
+ * regress, once the floor guarantees it at the starting radius. (A
+ * bounding-box overlap check between rings was deliberately NOT used here:
+ * every ring's motion envelope is a box centered on the shared topology
+ * center, so any two such boxes always overlap near that shared center
+ * regardless of radius — the radial floor above is the correct authority.)
+ *
+ * At 1 ring (<=18 projects) this reproduces the original single-ring
+ * geometry exactly: ring 0 receives no radius floor, so its base-radius
+ * heuristic and full-revolution validation run byte-identical to before
+ * multi-ring support existed.
+ */
+function buildProjectOrbitRings(
+  sortedProjects: ProjectData[],
+  capabilityBoxes: PlacedNodeBounds[]
+): { rings: ProjectOrbitRing[]; projectPositions: Record<string, { x: number; y: number }> } {
+  const projectIds = sortedProjects.map(p => p.id);
+  const allocation = allocateProjectRings(projectIds);
+  const projectPositions: Record<string, { x: number; y: number }> = {};
+  if (allocation.ringCount === 0) return { rings: [], projectPositions };
+
+  const projectsById = new Map(sortedProjects.map(p => [p.id, p]));
+  const rings: ProjectOrbitRing[] = [];
+
+  let previousOuterRadiusX = 0;
+  let previousOuterRadiusY = 0;
+  let previousMaxFootprint = { x: 0, y: 0 };
+
+  for (let ringIndex = 0; ringIndex < allocation.ringCount; ringIndex++) {
+    const ringProjectIds = allocation.ringProjectIds[ringIndex];
+    const ringProjects = ringProjectIds.map(id => projectsById.get(id)!);
+    const thisMaxFootprint = computeMaxProjectFootprintIsoHalfExtent(ringProjects);
+
+    const minRadiusX = ringIndex === 0
+      ? 0
+      : previousOuterRadiusX + previousMaxFootprint.x + thisMaxFootprint.x + PROJECT_RING_SPACING_ISO;
+    const minRadiusY = ringIndex === 0
+      ? 0
+      : previousOuterRadiusY + previousMaxFootprint.y + thisMaxFootprint.y + PROJECT_RING_SPACING_ISO;
+
+    const { projectPositions: ringPositions, orbitGeometry } = buildStaticProjectOrbit(
+      ringProjects,
+      capabilityBoxes,
+      { minRadiusX, minRadiusY }
+    );
+    Object.assign(projectPositions, ringPositions);
+
+    rings.push({
+      id: getProjectRingId(ringIndex),
+      index: ringIndex,
+      projectIds: ringProjectIds,
+      geometry: orbitGeometry,
+      baseRateMultiplier: getProjectRingBaseRateMultiplier(ringIndex),
+      direction: 'clockwise',
+    });
+
+    previousOuterRadiusX = orbitGeometry.radiusX;
+    previousOuterRadiusY = orbitGeometry.radiusY;
+    previousMaxFootprint = thisMaxFootprint;
+  }
+
+  return { rings, projectPositions };
 }
 
 export interface FitViewportOptions {
@@ -767,13 +916,19 @@ export function assembleTopologyLayout(
     }
   }
 
-  // 4. Layout Projects: ONE static elliptical orbit surrounding the capability nucleus.
+  // 4. Layout Projects: one or more concentric elliptical project rings
+  // surrounding the capability nucleus, adaptively sized to project count.
   // `placedBoxes` at this point contains only capability (skill) boxes.
-  const { projectPositions: orbitProjectPositions, orbitGeometry } = buildStaticProjectOrbit(
+  const { rings: projectRings, projectPositions: ringProjectPositions } = buildProjectOrbitRings(
     sortedProjects,
     placedBoxes
   );
-  Object.assign(projectPositions, orbitProjectPositions);
+  Object.assign(projectPositions, ringProjectPositions);
 
-  return { projectPositions, skillPositions, orbitGeometry };
+  // `orbitGeometry` is kept as a genuine (never synthesized) view of ring 0
+  // for callers that predate multi-ring support; the zero-project case still
+  // reuses buildStaticProjectOrbit's own reactor-clearance-only ellipse.
+  const orbitGeometry = projectRings[0]?.geometry ?? buildStaticProjectOrbit([], placedBoxes).orbitGeometry;
+
+  return { projectPositions, skillPositions, orbitGeometry, projectRings };
 }
