@@ -168,7 +168,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   experience,
 }) => {
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
-  const activeExperience = useMemo(() => experience && experience.length > 0 ? experience : EXPERIENCE_HISTORY, [experience]);
+  const activeExperience = useMemo(() => experience ?? EXPERIENCE_HISTORY, [experience]);
   const selectedFocusLabel = useMemo(() => {
     if (selectedProjectId) {
       const project = projects.find(item => item.id === selectedProjectId);

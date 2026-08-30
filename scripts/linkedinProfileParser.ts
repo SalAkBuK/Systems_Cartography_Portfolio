@@ -24,6 +24,9 @@ export interface ParsedLinkedInProfile {
   warnings: string[];
 }
 
+export const NO_EXPERIENCE_WARNING =
+  'No Experience section was found in this LinkedIn profile. You can continue setup and add professional experience later.';
+
 const MONTH_NAMES: Array<{ name: string; index: number; patterns: string[] }> = [
   { name: 'January', index: 1, patterns: ['january', 'jan'] },
   { name: 'February', index: 2, patterns: ['february', 'feb'] },
@@ -160,6 +163,26 @@ export function partitionSections(lines: string[]): { preamble: string[]; sectio
   }
 
   return { preamble, sections };
+}
+
+function hasRecognizableLinkedInProfileStructure(
+  mainPartition: ReturnType<typeof partitionSections>,
+  sidebarPartition: ReturnType<typeof partitionSections>,
+  linkedin: string
+): boolean {
+  const recognizedSections = new Set([
+    ...mainPartition.sections.keys(),
+    ...sidebarPartition.sections.keys()
+  ]);
+  const nonExperienceSectionCount = [...recognizedSections]
+    .filter(section => section !== 'experience')
+    .length;
+
+  return Boolean(
+    linkedin
+    && recognizedSections.has('contact')
+    && nonExperienceSectionCount >= 3
+  );
 }
 
 function normalizeUrl(url: string): string {
@@ -439,21 +462,6 @@ export function parseLinkedInProfileText(mainInput: string[], sidebarInput: stri
 
   const summary = mainPartition.sections.get('summary')?.join(' ') || sidebarPartition.sections.get('summary')?.join(' ') || '';
 
-  const hasExperienceSection = mainPartition.sections.has('experience') || sidebarPartition.sections.has('experience');
-  if (!hasExperienceSection) {
-    throw new Error('LinkedIn Experience section was not detected in the PDF. Ensure the file was generated via LinkedIn "Save to PDF".');
-  }
-
-  const experienceLines = [
-    ...(mainPartition.sections.get('experience') || []),
-    ...(sidebarPartition.sections.get('experience') || [])
-  ];
-
-  const parsedExperience = parseExperience(experienceLines);
-  if (parsedExperience.length === 0) {
-    throw new Error('LinkedIn Experience section was found, but no valid role or date records could be parsed.');
-  }
-
   const education = [
     ...(mainPartition.sections.get('education') || []),
     ...(sidebarPartition.sections.get('education') || [])
@@ -479,6 +487,24 @@ export function parseLinkedInProfileText(mainInput: string[], sidebarInput: stri
     ...(mainPartition.sections.get('certifications') || [])
   ];
   const certifications = parseCertifications(certLines, warnings);
+
+  const hasExperienceSection = mainPartition.sections.has('experience') || sidebarPartition.sections.has('experience');
+  const experienceLines = [
+    ...(mainPartition.sections.get('experience') || []),
+    ...(sidebarPartition.sections.get('experience') || [])
+  ];
+  const parsedExperience = parseExperience(experienceLines);
+
+  if (hasExperienceSection && parsedExperience.length === 0) {
+    throw new Error('LinkedIn Experience section was found, but no valid role or date records could be parsed.');
+  }
+
+  if (!hasExperienceSection) {
+    if (!hasRecognizableLinkedInProfileStructure(mainPartition, sidebarPartition, contact.linkedin)) {
+      throw new Error('PDF does not contain enough recognizable LinkedIn profile structure to import safely.');
+    }
+    warnings.push(NO_EXPERIENCE_WARNING);
+  }
 
   return {
     name,

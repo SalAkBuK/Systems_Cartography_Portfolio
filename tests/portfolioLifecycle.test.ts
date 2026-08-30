@@ -71,10 +71,16 @@ test('configured experience completely takes precedence over synthetic GitHub de
 });
 
 test('GitHub-derived experience is used as fallback when configured experience is absent', () => {
-  const merged = resolveExperience([], sampleGitHubDerivedExperience);
+  const merged = resolveExperience(undefined, sampleGitHubDerivedExperience);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].id, 'exp-gh-01');
   assert.equal(merged[0].provenance, 'DERIVED');
+});
+
+test('an explicit zero-experience profile does not gain synthetic GitHub employment', () => {
+  const merged = resolveExperience([], sampleGitHubDerivedExperience);
+
+  assert.deepEqual(merged, []);
 });
 
 test('current configured career with synthetic GitHub snapshot resolves to 4 roles, 3 orgs, 3 progression cards', () => {

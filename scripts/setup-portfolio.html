@@ -594,6 +594,7 @@
         document.getElementById('reviewRole').innerText = parsedProfile.operator.role;
         document.getElementById('reviewLocation').innerText = parsedProfile.operator.location;
         document.getElementById('reviewExpCount').innerText = parsedProfile.experience.length + ' roles';
+        document.getElementById('reviewWarnings').innerText = (parsedProfile.source?.warnings || []).join(' ');
 
         if (parsedProfile.githubTarget && !document.getElementById('githubTargetInput').value) {
           document.getElementById('githubTargetInput').value = parsedProfile.githubTarget;
