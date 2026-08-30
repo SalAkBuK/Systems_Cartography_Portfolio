@@ -7,16 +7,19 @@ const canvasSource = readFileSync(resolve(process.cwd(), 'src/components/Topolog
 
 test('orbital field guides and annotations render noninteractive background geometry and hierarchy labels', () => {
   const guideGroupIndex = canvasSource.indexOf('id="orbital-field-guides"');
+  const reactorGroupIndex = canvasSource.indexOf('id="capability-reactor"');
   const annotGroupIndex = canvasSource.indexOf('id="orbital-field-annotations"');
   const conduitsIndex = canvasSource.indexOf('id="wiring-conduits"');
   const zonesIndex = canvasSource.indexOf('id="zones"');
 
   assert.ok(guideGroupIndex !== -1, 'orbital-field-guides element must exist');
   assert.ok(annotGroupIndex !== -1, 'orbital-field-annotations element must exist');
+  assert.ok(reactorGroupIndex !== -1, 'capability-reactor element must exist');
 
   // Layering order: after zones, before wiring-conduits
   assert.ok(zonesIndex < guideGroupIndex, 'orbital-field-guides must render after zones');
-  assert.ok(guideGroupIndex < annotGroupIndex, 'orbital-field-annotations must render after orbital-field-guides');
+  assert.ok(guideGroupIndex < reactorGroupIndex, 'capability reactor must render after orbital-field-guides');
+  assert.ok(reactorGroupIndex < annotGroupIndex, 'orbital-field-annotations must render after capability reactor');
   assert.ok(annotGroupIndex < conduitsIndex, 'orbital-field-annotations must render before wiring conduits');
 
   const guideGroupBlock = canvasSource.substring(
@@ -42,7 +45,7 @@ test('orbital field guides and annotations render noninteractive background geom
   assert.ok(guideGroupBlock.includes('24'), 'Must render 24 registration ticks');
 
   // Static hierarchy annotations
-  assert.ok(annotGroupBlock.includes('RING 01 // CAPABILITY NUCLEUS'), 'Must render Ring 01 capability nucleus annotation');
+  assert.ok(annotGroupBlock.includes('RING 01 // CAPABILITY REACTOR'), 'Must render Ring 01 capability reactor annotation');
   assert.ok(annotGroupBlock.includes('RING 02 // DEPLOYED SYSTEMS'), 'Must render Ring 02 deployed systems annotation');
   assert.ok(annotGroupBlock.includes('staticOrbitalLattice.orbitGeometry.motionVisualBounds.minY'), 'Ring 02 must anchor to motionVisualBounds.minY');
 
