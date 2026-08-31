@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ActiveView, 
   ViewportState, 
@@ -28,6 +28,20 @@ import { Menu, X } from 'lucide-react';
 
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
+
+  // Runtime-only App-session authority for the production topology startup.
+  // App remains mounted while Contact replaces TopologyCanvas, so claiming
+  // here prevents a later canvas instance from replaying the ceremony. A full
+  // page reload creates a fresh App instance (and therefore a fresh ref).
+  const hasPlayedTopologyStartupRef = useRef(false);
+  const claimTopologyStartup = useCallback(() => {
+    if (hasPlayedTopologyStartupRef.current) {
+      return false;
+    }
+
+    hasPlayedTopologyStartupRef.current = true;
+    return true;
+  }, []);
 
   useEffect(() => {
     document.title = PORTFOLIO_CONFIG.pageTitle;
@@ -358,6 +372,7 @@ export default function App() {
                   projects={projects}
                   skills={skills}
                   experience={experience}
+                  claimTopologyStartup={claimTopologyStartup}
                 />
               </div>
               {drilledProject && (
