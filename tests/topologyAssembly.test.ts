@@ -714,18 +714,24 @@ test('phase2/3 (extended by Phase 4C2-B): startup and SKIP reuse the same nullab
   const mountEffectStart = canvasSource.indexOf('const initializedRef = useRef(false);');
   const mountEffectEnd = canvasSource.indexOf('// Keyboard controls for zoom, fit, snap toggle, and reset', mountEffectStart);
   const mountEffect = canvasSource.substring(mountEffectStart, mountEffectEnd);
-  assert.ok(mountEffect.includes('startTopologyAssembly();'));
+  assert.ok(mountEffect.includes("startTopologyAssembly('redesign');"), 'promotion: production startup now activates the approved redesign choreography directly');
 });
 
-test('Redesign Step 1: production startup remains the sole automatic caller; the only manual caller is the DEV redesign prototype', () => {
-  const callSites = canvasSource.match(/startTopologyAssembly\(\);/g) ?? [];
-  assert.equal(callSites.length, 1, 'automatic startup must be the sole caller');
+test('Promotion: production startup is the sole caller of startTopologyAssembly, and it explicitly activates the approved redesign choreography', () => {
+  // Old invariant (pre-promotion): the bare `startTopologyAssembly();`
+  // (implicit 'production' mode) was the one automatic caller, and a
+  // DEV-only manual control was the only caller of 'redesign' mode. New
+  // invariant: the redesign choreography IS production's startup now, so
+  // the bare no-arg call site no longer exists anywhere, and the sole
+  // surviving call site explicitly passes 'redesign'.
+  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 0, 'no bare no-arg call site should remain — production now explicitly requests redesign mode');
+  assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1, 'exactly one caller: the production mount effect');
   assert.ok(!canvasSource.includes('TEST ASSEMBLY'));
-  assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1);
-  const devControlStart = canvasSource.indexOf('{import.meta.env.DEV && (');
-  const devControlEnd = canvasSource.indexOf('{isRedesignPrototypeVisible && (', devControlStart);
-  assert.ok(devControlStart !== -1 && devControlEnd > devControlStart);
-  assert.ok(canvasSource.substring(devControlStart, devControlEnd).includes('BLACK CORE TEST'));
+  assert.ok(!canvasSource.includes('BLACK CORE TEST'), 'the temporary manual-testing button is removed now that production uses this path automatically');
+  assert.ok(!canvasSource.includes('import.meta.env.DEV'), 'no DEV-only gating remains for this feature — it is real production behavior now');
+
+  const startupEffect = extractInitialStartupEffect(canvasSource);
+  assert.ok(startupEffect.includes("startTopologyAssembly('redesign');"), 'the one surviving call site must be the production mount effect');
 
   // No URL query parameters, localStorage flags, console globals, window
   // debug APIs, or keyboard shortcuts were used to activate it instead.
@@ -1794,7 +1800,7 @@ test('4C1/5: project ring guide reveal is per-ring, staggered by ring index, opa
   // Geometry itself (ellipse cx/cy/rx/ry) must be computed exactly as before
   // the reveal was added — still straight from ring.geometry, no new offset.
   const guidesStart = canvasSource.indexOf('id="orbital-field-guides"');
-  const guidesEnd = canvasSource.indexOf('{import.meta.env.DEV && isRedesignPrototypeActive', guidesStart);
+  const guidesEnd = canvasSource.indexOf('{isRedesignPrototypeActive && redesignPresentationElapsedMs !== null', guidesStart);
   const guidesBlock = canvasSource.substring(guidesStart, guidesEnd);
   assert.ok(guidesBlock.includes('cx={cx}') && guidesBlock.includes('cy={cy}') && guidesBlock.includes('rx={rx}') && guidesBlock.includes('ry={ry}'), 'ellipse geometry props must remain exactly the pre-existing ring.geometry-derived values');
   assert.ok(!guidesBlock.includes('transform='), 'ring guide reveal must be opacity-only — no transform');
@@ -1983,25 +1989,29 @@ test('4C2-A/8,17-19,27,28: TopologyCanvas receives the App claim; drill-in prese
   assert.ok(appSource.indexOf('const hasPlayedTopologyStartupRef') < appSource.indexOf("{activeView === 'contact' ? ("));
 });
 
-test('4C2-A/9,10,29-31 + Redesign Step 1: automatic production startup remains isolated from the one DEV prototype caller', () => {
+test('4C2-A/9,10,29-31 + Promotion: automatic production startup is the sole caller, and it activates the approved redesign choreography directly', () => {
   assert.equal((canvasSource.match(/const startTopologyAssembly = useCallback\(/g) ?? []).length, 1);
   assert.equal((canvasSource.match(/assemblyClockRef\.current = createAssemblyClockState\(\);/g) ?? []).length, 2);
-  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 1);
+  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 0, 'no bare no-arg call site remains');
 
   const startupEffect = extractInitialStartupEffect(canvasSource);
-  assert.ok(startupEffect.includes('startTopologyAssembly();'));
+  assert.ok(startupEffect.includes("startTopologyAssembly('redesign');"));
   assert.ok(!startupEffect.includes('import.meta.env.DEV'));
 
-  assert.equal((canvasSource.match(/import\.meta\.env\.DEV/g) ?? []).length, 2, 'DEV gating is limited to the manual control and its environmental trace layer');
+  // Promotion: the DEV-only manual-testing button is removed and the
+  // field-trace layer's DEV gate is removed (it must reach production now)
+  // — no import.meta.env.DEV usage remains anywhere for this feature.
+  assert.equal((canvasSource.match(/import\.meta\.env\.DEV/g) ?? []).length, 0, 'no DEV-only gating remains — this is real production behavior now');
   assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1);
   assert.ok(!canvasSource.includes('TEST ASSEMBLY'));
+  assert.ok(!canvasSource.includes('BLACK CORE TEST'));
 });
 
 test('4C2-A/11-16: startup waits for measured dimensions, batches after initial Fit All, and cannot replay on effect reruns or StrictMode', () => {
   const effect = extractInitialStartupEffect(canvasSource);
   const fitIndex = effect.indexOf('fitAll();');
   const claimIndex = effect.indexOf('if (!claimTopologyStartup()) return;');
-  const startIndex = effect.indexOf('startTopologyAssembly();');
+  const startIndex = effect.indexOf("startTopologyAssembly('redesign');");
   assert.ok(effect.includes('if (initializedRef.current) return;'));
   assert.ok(effect.includes('useLayoutEffect(() => {'), 'fit/start must flush before paint to avoid a default-camera frame');
   assert.ok(effect.includes('containerRef.current?.clientWidth ?? 0'));
@@ -2019,7 +2029,7 @@ test('4C2-A/21-25: reduced motion consumes the claim and leaves every assembly r
   const effect = extractInitialStartupEffect(canvasSource);
   const claimIndex = effect.indexOf('if (!claimTopologyStartup()) return;');
   const reducedIndex = effect.indexOf('if (prefersReducedMotion) return;');
-  const startIndex = effect.indexOf('startTopologyAssembly();');
+  const startIndex = effect.indexOf("startTopologyAssembly('redesign');");
   assert.ok(claimIndex !== -1 && reducedIndex > claimIndex && startIndex > reducedIndex);
 
   const beforeStart = effect.substring(0, startIndex);
@@ -2108,12 +2118,20 @@ test('4C2-B/22-24: fast completion is centralized at 200ms with deterministic bo
   }
 });
 
-test('4C2-B/7-12 + Redesign Step 1: legacy TEST ASSEMBLY stays gone and production SKIP remains accessible and scoped', () => {
+test('4C2-B/7-12 + Promotion: legacy TEST ASSEMBLY and the temporary BLACK CORE TEST button both stay gone; production SKIP remains accessible and scoped for the now-production redesign choreography', () => {
   assert.ok(!canvasSource.includes('TEST ASSEMBLY'));
   assert.ok(!canvasSource.includes('Sparkles'));
-  assert.equal((canvasSource.match(/import\.meta\.env\.DEV/g) ?? []).length, 2, 'only the redesign control and environmental trace layer may be DEV-gated');
-  assert.ok(canvasSource.includes('BLACK CORE TEST'));
-  assert.equal((canvasSource.match(/handleSkipTopologyAssembly\(\);/g) ?? []).length, 1, 'only the visible button calls SKIP');
+  // Promotion: the manual-testing button and the field-trace DEV gate are
+  // both removed -- no import.meta.env.DEV usage remains for this feature.
+  assert.equal((canvasSource.match(/import\.meta\.env\.DEV/g) ?? []).length, 0);
+  assert.ok(!canvasSource.includes('BLACK CORE TEST'), 'the temporary manual-testing button is removed now that production activates this path automatically');
+  // Two mutually-exclusive presentation contexts (the redesign minimal
+  // status text, now shown during production startup, and the older
+  // non-redesign status card) each render their own SKIP button so the
+  // affordance is reachable regardless of which one is currently visible --
+  // both call the identical shared handler.
+  assert.equal((canvasSource.match(/handleSkipTopologyAssembly\(\);/g) ?? []).length, 2, 'both presentation contexts call the same SKIP handler');
+  assert.equal((canvasSource.match(/const canSkipTopologyAssembly =/g) ?? []).length, 1, 'one shared eligibility condition, not duplicated logic');
   assert.ok(!canvasSource.includes("key === 'Escape'"), 'ESC support was deliberately not added');
   for (const forbidden of ['URLSearchParams', 'window.location.search', 'localStorage', 'sessionStorage']) {
     assert.ok(!canvasSource.includes(forbidden), `no alternate replay/skip mechanism via ${forbidden}`);
@@ -2122,11 +2140,21 @@ test('4C2-B/7-12 + Redesign Step 1: legacy TEST ASSEMBLY stays gone and producti
   const statusStart = canvasSource.indexOf('{!isRedesignPrototypeVisible && assemblyElapsedMs !== null && assemblyStatusPhase !== null && (');
   const statusEnd = canvasSource.indexOf('{/* Bottom-Left Controls & Status */}', statusStart);
   const status = canvasSource.substring(statusStart, statusEnd);
-  assert.ok(status.includes("isTopologyAssemblyActive && !isAssemblyFastCompleting && assemblyStatusPhase !== 'online'"));
+  assert.ok(status.includes('canSkipTopologyAssembly'));
   assert.match(status, /<button\s+type="button"\s+aria-label="Skip topology initialization"/);
   assert.match(status, />\s*SKIP\s*<\/button>/);
   assert.ok(status.includes('pointer-events-auto'));
   assert.ok(!status.includes('autoFocus'));
+
+  // The redesign minimal status text (production's actual startup
+  // presentation) must ALSO carry a working SKIP button, not just the
+  // legacy non-redesign card above.
+  const redesignStatusStart = canvasSource.indexOf('{isRedesignPrototypeVisible && (');
+  const redesignStatusEnd = canvasSource.indexOf('{/* System initialization status', redesignStatusStart);
+  const redesignStatus = canvasSource.substring(redesignStatusStart, redesignStatusEnd);
+  assert.ok(redesignStatus.includes('canSkipTopologyAssembly'));
+  assert.match(redesignStatus, /<button\s+type="button"\s+aria-label="Skip topology initialization"/);
+  assert.match(redesignStatus, />\s*SKIP\s*<\/button>/);
 });
 
 test('4C2-B/13-15,51: skip captures current visible maps, not original deterministic starts, and App owns no skip state', () => {
@@ -2277,7 +2305,7 @@ test('4C2-B/1-6,17,52-56: startup lifecycle, reduced motion, App latch, and prot
   const startup = extractInitialStartupEffect(canvasSource);
   assert.ok(startup.includes('if (!claimTopologyStartup()) return;'));
   assert.ok(startup.includes('if (prefersReducedMotion) return;'));
-  assert.ok(startup.includes('startTopologyAssembly();'));
+  assert.ok(startup.includes("startTopologyAssembly('redesign');"));
   assert.ok(appSource.includes('const hasPlayedTopologyStartupRef = useRef(false);'));
   assert.ok(appSource.includes('claimTopologyStartup={claimTopologyStartup}'));
   assert.ok(appSource.includes("{activeView === 'contact' ? ("));
@@ -2299,19 +2327,24 @@ test('4C2-B/1-6,17,52-56: startup lifecycle, reduced motion, App latch, and prot
 // REDESIGN STEP 1 — DEV-only black-core field-assembly visual prototype.
 // ===========================================================================
 
-test('Redesign Step 1/1,2,17: BLACK CORE TEST is DEV-only, manual-only, and does not alter the App production lifecycle', () => {
-  const devStart = canvasSource.indexOf('{import.meta.env.DEV && (');
-  const devEnd = canvasSource.indexOf('{isRedesignPrototypeVisible && (', devStart);
-  const devControl = canvasSource.substring(devStart, devEnd);
-  assert.ok(devStart !== -1 && devEnd > devStart);
-  assert.match(devControl, /<button[\s\S]*?type="button"[\s\S]*?BLACK CORE TEST[\s\S]*?<\/button>/);
-  assert.ok(devControl.includes("startTopologyAssembly('redesign');"));
+test('Promotion: the former DEV-only BLACK CORE TEST button is gone; production startup is the one caller and App lifecycle is unaware of the mode name', () => {
+  // Old invariant: a manual DEV-only <button> was the sole 'redesign' caller
+  // and production called the bare no-arg default. New invariant: that
+  // button is removed entirely (visually approved, promotion complete —
+  // there is no remaining debugging value in a manual re-trigger button
+  // since every fresh App session already plays this choreography), and the
+  // one production mount effect is the sole 'redesign' caller.
+  assert.ok(!canvasSource.includes('BLACK CORE TEST'));
+  assert.ok(!canvasSource.includes('Run black core field assembly prototype'));
   assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1);
   const startup = extractInitialStartupEffect(canvasSource);
-  assert.ok(startup.includes('startTopologyAssembly();'));
-  assert.ok(!startup.includes("'redesign'"));
+  assert.ok(startup.includes("startTopologyAssembly('redesign');"));
+  // App.tsx owns only the generic once-per-session claim primitive; it has
+  // no knowledge of 'redesign' as a concept, matching "use the existing
+  // production startup lifecycle, do not create a second lifecycle."
   assert.ok(!appSource.includes('redesignPrototype'));
   assert.ok(!appSource.includes('BLACK CORE'));
+  assert.ok(!appSource.includes("'redesign'"));
 });
 
 test('Redesign Step 1/3-5: the alternate path reuses one assembly clock and the existing shared RAF without timers', () => {
@@ -2397,7 +2430,11 @@ test('Redesign Step 1/15: prototype status copy stays terse, secondary, and sepa
   assert.ok(status.includes("'EQUILIBRIUM // STABLE'"));
   assert.ok(status.includes('text-[9px]'));
   assert.ok(status.includes('text-[#15150F]/55'));
-  assert.ok(!status.includes('bg-[#15150F]'));
+  // Scoped to the container's OWN opening tag (before its children, which
+  // now legitimately include the promoted SKIP button and its hover state)
+  // — the container itself must not carry the dark telemetry-card background.
+  const containerTag = status.substring(0, status.indexOf('>') + 1);
+  assert.ok(!containerTag.includes('bg-[#15150F]'));
 });
 
 test('Redesign Step 1/16,18: interaction lock and reduced-motion eligibility remain the accepted shared architecture', () => {
@@ -2431,23 +2468,29 @@ test('Redesign Step 1/19-22: redesign stays generic and protected mechanics rema
 // ===========================================================================
 
 function extractRedesignFieldTraceLayer(source: string): string {
-  const start = source.indexOf('{import.meta.env.DEV && isRedesignPrototypeActive && redesignPresentationElapsedMs !== null && (');
+  // Promotion: this layer is no longer DEV-gated -- it must be reachable in
+  // a production build, since production startup now activates redesign
+  // mode directly. The boundary text reflects that (no import.meta.env.DEV).
+  const start = source.indexOf('{isRedesignPrototypeActive && redesignPresentationElapsedMs !== null && (');
   const end = source.indexOf('{isRedesignPrototypeVisible && (', start);
-  assert.ok(start !== -1 && end > start, 'expected a DEV-redesign-only field-trace layer immediately before the core');
+  assert.ok(start !== -1 && end > start, 'expected the field-trace layer immediately before the core');
   return source.substring(start, end);
 }
 
-test('Redesign Step 1.5/1-3,23: traces are scoped to the DEV/manual BLACK CORE redesign and production startup remains untouched', () => {
+test('Promotion Step: field traces are reachable from production startup (no DEV gating), and the mount effect is the sole activation path', () => {
   const layer = extractRedesignFieldTraceLayer(canvasSource);
   assert.ok(layer.includes('id="redesign-field-traces"'));
   assert.ok(layer.includes('isRedesignPrototypeActive'));
-  assert.ok(layer.includes('import.meta.env.DEV'));
+  // Old invariant: this layer was DEV-only. New invariant: it must be
+  // reachable in a production build, since production startup now drives
+  // redesign mode directly -- see the production bundle verification suite
+  // further below, which rebuilds and greps dist/ for these exact ids.
+  assert.ok(!layer.includes('import.meta.env.DEV'), 'field traces must no longer be stripped from production builds');
   assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1);
-  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 1);
+  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 0, 'no bare no-arg call site remains');
   const startup = extractInitialStartupEffect(canvasSource);
-  assert.ok(startup.includes('startTopologyAssembly();'));
-  assert.ok(!startup.includes('redesign-field-traces'));
-  assert.ok(!startup.includes("'redesign'"));
+  assert.ok(startup.includes("startTopologyAssembly('redesign');"), 'the mount effect is the one caller, and it explicitly requests redesign mode');
+  assert.ok(!startup.includes('redesign-field-traces'), 'sanity: the mount effect calls the activation primitive, it does not inline field-trace rendering');
 });
 
 test('Redesign Step 1.5/4-7,9,10: geometry is deterministic, bounded to 12 traces, random-free, and relative to the existing core center', () => {
@@ -2749,7 +2792,7 @@ test('Redesign Step 1.5/18-20,24: node constants, live-target formulas, and ring
   assert.ok(tick.includes('getDynamicOrbitalPosition(project, indexWithinRing, dockedCount, ring.geometry, ringPhase)'));
   assert.match(tick, /getMountedCapabilityPosition\(\s*indexWithinReactor,\s*capabilityCount,\s*capabilityReactorGeometry,\s*next\.reactorPhase\s*\)/);
   const guidesStart = canvasSource.indexOf('id="orbital-field-guides"');
-  const guidesEnd = canvasSource.indexOf('{import.meta.env.DEV && isRedesignPrototypeActive', guidesStart);
+  const guidesEnd = canvasSource.indexOf('{isRedesignPrototypeActive && redesignPresentationElapsedMs !== null', guidesStart);
   const guides = canvasSource.substring(guidesStart, guidesEnd);
   assert.ok(guides.includes('0.05 + 0.65 * getRingAssemblyProgress('));
   assert.ok(!guides.includes('FieldTrace'));
@@ -2850,5 +2893,5 @@ test('Field-trace contrast tuning: approved color/width/peak-opacity remain froz
   assert.ok(helperSource.includes('function smoothstep01('), 'the shared smoothstep helper backing both spawn and absorption edges must exist');
   assert.equal((canvasSource.match(/requestAnimationFrame\(/g) ?? []).length, 4);
   assert.equal((canvasSource.match(/setInterval\(/g) ?? []).length, 0);
-  assert.equal((canvasSource.match(/startTopologyAssembly\(\);/g) ?? []).length, 1);
+  assert.equal((canvasSource.match(/startTopologyAssembly\('redesign'\);/g) ?? []).length, 1, 'promotion: production startup is the sole caller and explicitly requests redesign mode');
 });

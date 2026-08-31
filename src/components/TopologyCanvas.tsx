@@ -191,7 +191,7 @@ interface ActiveAssemblyFastCompletionPlan {
 }
 
 type TopologyAssemblyMode = 'production' | 'redesign';
-type RedesignPrototypeState = 'idle' | 'active' | 'settled';
+type RedesignPrototypeState = 'idle' | 'active';
 
 interface TopologyCanvasProps {
   selectedProjectId: string | null;
@@ -538,9 +538,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     : DEFAULT_TOPOLOGY_ASSEMBLY_TIMING;
   const redesignPresentationElapsedMs = isRedesignPrototypeActive
     ? (assemblyElapsedMs ?? 0)
-    : redesignPrototypeState === 'settled'
-      ? REDESIGN_FIELD_ASSEMBLY_TIMING.totalDurationMs
-      : null;
+    : null;
   const assemblyStatusPhase = useMemo(
     () => (assemblyElapsedMs === null ? null : getTopologyAssemblyPhase(assemblyElapsedMs, activePresentationTiming)),
     [assemblyElapsedMs, activePresentationTiming]
@@ -747,6 +745,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           // The ordinary render positions use the same phases committed at the
           // top of this tick, so clearing temporary authority is an exact live-
           // target handoff. Interaction unlocks only in this completed render.
+          const completedMode = assemblyModeRef.current;
           assemblyFastCompletionPlanRef.current = null;
           assemblyModeRef.current = null;
           assemblyProjectPlanRef.current = null;
@@ -757,6 +756,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           setIsAssemblyFastCompleting(false);
           setIsTopologyAssemblyActive(false);
           setAssemblyElapsedMs(null);
+          // SKIP must hand off to genuinely ordinary topology just like the
+          // normal completion path above -- without this, skipping a
+          // 'redesign' ceremony would leave redesignPrototypeState stuck at
+          // 'active' forever (isTopologyAssemblyActive already clears above,
+          // but that reactive flag is independent of this one).
+          if (completedMode === 'redesign') {
+            setRedesignPrototypeState('idle');
+          }
         } else {
           const presentationElapsedMs = fastPlan.startPresentationElapsedMs +
             (DEFAULT_TOPOLOGY_ASSEMBLY_TIMING.presentationCompleteMs - fastPlan.startPresentationElapsedMs) *
@@ -947,8 +954,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           assemblyClockRef.current = null;
           setIsTopologyAssemblyActive(false);
           setAssemblyElapsedMs(null);
+          // Now that this is the production startup path (not only a
+          // manually-reviewed DEV prototype), completion must hand off to
+          // genuinely ordinary topology -- clearing back to 'idle' rather
+          // than lingering in a permanent post-ceremony visual state.
           if (completedMode === 'redesign') {
-            setRedesignPrototypeState('settled');
+            setRedesignPrototypeState('idle');
           }
         }
         }
@@ -1442,9 +1453,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     isTopologyAssemblyActive,
   ]);
 
-  // Single assembly activation primitive. Production remains the default;
-  // the explicit redesign mode is called only by the DEV-only manual control.
-  // Computes every
+  // Single assembly activation primitive. The approved 'redesign' choreography
+  // (black core, gravitational field traces) is now the actual production
+  // first-load startup mode — see the mount effect below, which calls
+  // startTopologyAssembly('redesign') directly. The 'production' mode/default
+  // is kept as existing, tested, generic architecture (not removed), simply
+  // no longer the automatic caller. Computes every
   // currently docked project's AND every capability's fixed,
   // deterministically-bounded displaced start position ONCE (relative to
   // each node's activation-time live target), creates BOTH plans and the
@@ -1591,6 +1605,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     assemblyCapabilityRenderPositions,
   ]);
 
+  // Shared SKIP eligibility for BOTH presentation cards below (the redesign
+  // choreography's minimal status text, now production's actual startup
+  // presentation, and the older non-redesign status card) -- one condition,
+  // one handler, so the affordance and its behavior can never drift between
+  // the two containers it is rendered in.
+  const canSkipTopologyAssembly = isTopologyAssemblyActive && !isAssemblyFastCompleting && assemblyStatusPhase !== 'online';
+
   // Real-time preview calculation of snapped & collision-free landing spot
   const dragResolution = useMemo(() => {
     if (!draggingNode || !draggingNode.hasMoved) return null;
@@ -1731,6 +1752,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   // flushes both states before paint, without an intermediate camera snap. The
   // synchronous App-owned claim is consumed before reduced-motion or dirty-
   // state fallback, preventing retries on rerender and Contact remount.
+  //
+  // Promotion: the approved black-core/field-trace redesign choreography
+  // (visually reviewed via the former DEV-only manual control) is now the
+  // real production first-load startup — hence 'redesign' here instead of
+  // the previous bare call (which defaulted to 'production'). Nothing else
+  // about this lifecycle changed: same once-per-session claim, same
+  // reduced-motion early return, same initializedRef guard.
   const initializedRef = useRef(false);
   useLayoutEffect(() => {
     if (initializedRef.current) return;
@@ -1745,7 +1773,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (!claimTopologyStartup()) return;
     if (prefersReducedMotion) return;
 
-    startTopologyAssembly();
+    startTopologyAssembly('redesign');
   }, [containerDimensions, fitAll, claimTopologyStartup, prefersReducedMotion, startTopologyAssembly]);
 
   // Keyboard controls for zoom, fit, snap toggle, and reset
@@ -2547,27 +2575,25 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </div>
       )}
 
-      {import.meta.env.DEV && (
-        <button
-          type="button"
-          aria-label="Run black core field assembly prototype"
-          disabled={!canStartTopologyAssembly}
-          onClick={(event) => {
-            event.stopPropagation();
-            startTopologyAssembly('redesign');
-          }}
-          className="absolute top-3 right-3 z-30 px-2.5 py-1.5 border border-[#15150F] bg-[#D4CDA4] text-[#15150F] font-mono text-[9px] font-bold tracking-[0.1em] shadow-[2px_2px_0px_#15150F] hover:bg-[#C3E54E] disabled:opacity-35 disabled:cursor-not-allowed transition-colors"
-        >
-          BLACK CORE TEST
-        </button>
-      )}
-
       {isRedesignPrototypeVisible && (
         <div
           data-redesign-prototype-status={redesignPrototypeState}
-          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none font-mono text-[9px] tracking-[0.16em] text-[#15150F]/55"
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none font-mono text-[9px] tracking-[0.16em] text-[#15150F]/55 flex flex-col items-center gap-1"
         >
-          {isRedesignPrototypeActive ? 'TOPOLOGY // INITIALIZING' : 'EQUILIBRIUM // STABLE'}
+          <span>{isRedesignPrototypeActive ? 'TOPOLOGY // INITIALIZING' : 'EQUILIBRIUM // STABLE'}</span>
+          {canSkipTopologyAssembly && (
+            <button
+              type="button"
+              aria-label="Skip topology initialization"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleSkipTopologyAssembly();
+              }}
+              className="pointer-events-auto px-2 py-0.5 border border-[#15150F]/55 bg-transparent text-[#15150F]/70 text-[9px] tracking-[0.12em] hover:bg-[#15150F] hover:text-[#D4CDA4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] transition-colors"
+            >
+              SKIP
+            </button>
+          )}
         </div>
       )}
 
@@ -2579,7 +2605,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           presentation-complete, so it never lingers as a permanent
           telemetry duplicate. Absolutely positioned so it never participates
           in layout; only the small real SKIP button opts back into pointer
-          events while the normal startup is still in flight. */}
+          events while the normal startup is still in flight. This is the
+          non-redesign presentation card -- the redesign choreography (now
+          production's actual startup mode) shows its own minimal status text
+          above instead, sharing the same canSkipTopologyAssembly eligibility
+          and handleSkipTopologyAssembly handler (styled separately per
+          container, since this card is dark and the redesign status text
+          above sits directly on the canvas). */}
       {!isRedesignPrototypeVisible && assemblyElapsedMs !== null && assemblyStatusPhase !== null && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center gap-0.5 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[11px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in duration-150">
           {assemblyStatusPhase === 'online' ? (
@@ -2599,7 +2631,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               )}
             </>
           )}
-          {isTopologyAssemblyActive && !isAssemblyFastCompleting && assemblyStatusPhase !== 'online' && (
+          {canSkipTopologyAssembly && (
             <button
               type="button"
               aria-label="Skip topology initialization"
@@ -3073,7 +3105,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
-        {import.meta.env.DEV && isRedesignPrototypeActive && redesignPresentationElapsedMs !== null && (
+        {isRedesignPrototypeActive && redesignPresentationElapsedMs !== null && (
           <g
             id="redesign-field-traces"
             data-field-trace-count={REDESIGN_FIELD_TRACE_COUNT}
