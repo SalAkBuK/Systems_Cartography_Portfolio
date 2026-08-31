@@ -420,7 +420,14 @@ test('TopologyCanvas.tsx: the paused branch returns before scheduling any reques
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
 
-  const pausedBranchIdx = block.indexOf('if (!isDualOrbitMachineRunning) {');
+  // Phase 4A authorized change: the gate condition became
+  // `shouldRunAnimationMachine` (= isDualOrbitMachineRunning ||
+  // isProjectAssemblyActive) so the persistent RAF chain also stays alive
+  // while a project-assembly test is active, even with both SYSTEMS and
+  // REACTOR explicitly paused. isDualOrbitMachineRunning itself, and every
+  // pause/resume/no-catch-up-jump semantic this test protects, are
+  // unchanged — only what ELSE can also keep the effect running changed.
+  const pausedBranchIdx = block.indexOf('if (!shouldRunAnimationMachine) {');
   const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
   const firstRafIdx = block.indexOf('requestAnimationFrame(');
   assert.ok(pausedBranchIdx !== -1 && pausedReturnIdx !== -1 && firstRafIdx !== -1);
@@ -433,7 +440,14 @@ test('TopologyCanvas.tsx: the paused branch returns before scheduling any reques
 test('TopologyCanvas.tsx: pausing clears the timestamp baseline but preserves the phase (no reset, no catch-up)', () => {
   const content = fs.readFileSync(path.resolve('src/components/TopologyCanvas.tsx'), 'utf8');
   const block = extractOrbitClockEffect(content);
-  const pausedBranchIdx = block.indexOf('if (!isDualOrbitMachineRunning) {');
+  // Phase 4A authorized change: the gate condition became
+  // `shouldRunAnimationMachine` (= isDualOrbitMachineRunning ||
+  // isProjectAssemblyActive) so the persistent RAF chain also stays alive
+  // while a project-assembly test is active, even with both SYSTEMS and
+  // REACTOR explicitly paused. isDualOrbitMachineRunning itself, and every
+  // pause/resume/no-catch-up-jump semantic this test protects, are
+  // unchanged — only what ELSE can also keep the effect running changed.
+  const pausedBranchIdx = block.indexOf('if (!shouldRunAnimationMachine) {');
   const pausedReturnIdx = block.indexOf('return;', pausedBranchIdx);
   const baselineBlock = block.slice(block.indexOf('useEffect(() => {'), pausedReturnIdx);
 

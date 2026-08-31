@@ -966,7 +966,14 @@ test('TopologyCanvas.tsx: all four node drag-start handlers (skill mouse/touch, 
   let guardedHandlerCount = 0;
   for (const match of starts) {
     const idx = match.index!;
-    const window = content.slice(idx, idx + 700);
+    // Window widened 700 -> 1000 in Phase 4A: the two PROJECT handlers now
+    // also check/clear an active project-assembly test before reaching this
+    // guard (see assemblyClockRef in TopologyCanvas.tsx), pushing
+    // setDraggingNode further into the handler body. This is a scan-window
+    // implementation constant only, not the invariant itself — the actual
+    // guard-before-setDraggingNode ordering below is unchanged and still
+    // enforced for all four handlers.
+    const window = content.slice(idx, idx + 1000);
     const setDraggingIdx = window.indexOf('setDraggingNode(');
     if (setDraggingIdx === -1) continue;
     const guardIdx = window.indexOf('if (isOrbitReflowActive) return;');

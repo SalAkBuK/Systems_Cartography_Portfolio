@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -20,7 +20,6 @@ import {
   Magnet,
   ShieldAlert,
   CheckCircle2,
-  Sparkles,
   GitBranch
 } from 'lucide-react';
 import { 
@@ -132,11 +131,67 @@ import {
   type OrbitReflowTransition,
   type OrbitEllipseProjection
 } from '../utils/projectDocking';
+import {
+  createAssemblyClockState,
+  stepAssemblyClock,
+  isAssemblyComplete,
+  getProjectAssemblyProgress,
+  getAssemblyCaptureEasing,
+  getCapabilityAssemblyProgress,
+  getCapabilityAssemblyCaptureEasing,
+  getTopologyAssemblyPhase,
+  getRingAssemblyProgress,
+  getReactorRevealProgress,
+  getConduitRevealProgress,
+  getRedesignCoreActivationProgress,
+  getRedesignFieldTraceGeometry,
+  getRedesignFieldTracePresentation,
+  REDESIGN_BLACK_CORE_RADIUS,
+  getAssemblyFastCompletionProgress,
+  getAssemblyFastCompletionEasing,
+  resolveAssemblyPosition,
+  getDeterministicAssemblyOffset,
+  DEFAULT_TOPOLOGY_ASSEMBLY_TIMING,
+  DEFAULT_CAPABILITY_ASSEMBLY_OFFSET_BUDGET,
+  REDESIGN_FIELD_ASSEMBLY_TIMING,
+  REDESIGN_PROJECT_ASSEMBLY_OFFSET_BUDGET,
+  REDESIGN_CAPABILITY_ASSEMBLY_OFFSET_BUDGET,
+  REDESIGN_FIELD_TRACE_COUNT,
+  TOPOLOGY_ASSEMBLY_FAST_COMPLETION_DURATION_MS,
+  type AssemblyClockState,
+  type AssemblyPoint,
+} from '../utils/topologyAssembly';
 
 // Re-exported for backward compatibility: other modules (ProjectSubsystemCanvas,
 // tests) import the isometric projection helpers from this component file. The
 // canonical implementation lives in ../utils/isometricProjection.
 export { ISO_COS, ISO_SIN, project3DToIso, projectIsoTo3D };
+
+// Phase 4A: the fixed start positions captured once when production startup
+// activates. See assemblyProjectPlanRef inside
+// TopologyCanvas for why nothing else (ring, live target, phase) is stored
+// here.
+interface ActiveProjectAssemblyPlan {
+  startPositions: Record<string, AssemblyPoint>;
+}
+
+// Phase 4B: the capability/reactor counterpart — same shape, same rationale
+// (fixed start positions only; live target re-derived fresh every frame).
+interface ActiveCapabilityAssemblyPlan {
+  startPositions: Record<string, AssemblyPoint>;
+}
+
+// Phase 4C2-B: SKIP reuses assemblyClockRef as its 200ms clock. This plan
+// stores only what must be captured at the request moment: the CURRENT visible
+// node positions and current presentation elapsed value. Targets stay live.
+interface ActiveAssemblyFastCompletionPlan {
+  startPresentationElapsedMs: number;
+  projectStartPositions: Record<string, AssemblyPoint>;
+  capabilityStartPositions: Record<string, AssemblyPoint>;
+}
+
+type TopologyAssemblyMode = 'production' | 'redesign';
+type RedesignPrototypeState = 'idle' | 'active' | 'settled';
 
 interface TopologyCanvasProps {
   selectedProjectId: string | null;
@@ -153,6 +208,7 @@ interface TopologyCanvasProps {
   projects: ProjectData[];
   skills?: InfrastructureSkill[];
   experience?: ExperienceNode[];
+  claimTopologyStartup: () => boolean;
 }
 
 export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
@@ -170,6 +226,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   projects,
   skills,
   experience,
+  claimTopologyStartup,
 }) => {
   const activeSkills = useMemo(() => skills && skills.length > 0 ? skills : INFRASTRUCTURE_SKILLS, [skills]);
   const activeExperience = useMemo(() => experience ?? EXPERIENCE_HISTORY, [experience]);
@@ -371,6 +428,150 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const capabilitySettlingRef = useRef<CapabilitySettlingTransition | null>(null);
   const [capabilitySettlingRenderPositions, setCapabilitySettlingRenderPositions] = useState<Record<string, { x: number; y: number }> | null>(null);
 
+  // Runtime-only startup-assembly clock. Production startup and SKIP both use
+  // it; the shared tick remains the only stepping/completion authority.
+  // null means no transition exists.
+  // Deliberately a ref, not `useState`: stepping it must never itself cause a
+  // React re-render — matching how `capabilitySettlingRef`/`orbitReflowRef`
+  // also stay ref-based for the same reason.
+  const assemblyClockRef = useRef<AssemblyClockState | null>(null);
+  const assemblyFastCompletionPlanRef = useRef<ActiveAssemblyFastCompletionPlan | null>(null);
+  const assemblyModeRef = useRef<TopologyAssemblyMode | null>(null);
+
+  // Phase 4A: reactive mirror of "is a project assembly transition currently
+  // active." Needed as real component state (not just the ref above)
+  // because it must (a) participate in the persistent RAF effect's own
+  // liveness gate, (b) drive the interaction lock, and (c) scope the SKIP
+  // affordance. Those consumers need reactive state rather than only a ref.
+  const [isTopologyAssemblyActive, setIsTopologyAssemblyActive] = useState(false);
+  const [isAssemblyFastCompleting, setIsAssemblyFastCompleting] = useState(false);
+  const [redesignPrototypeState, setRedesignPrototypeState] = useState<RedesignPrototypeState>('idle');
+
+  // Phase 4A: the persistent RAF chain (below) must also stay alive while a
+  // project assembly transition is actively running, even if BOTH SYSTEMS
+  // and REACTOR are explicitly user-paused (isDualOrbitMachineRunning false
+  // in that case) — otherwise the effect would return early and never step
+  // the assembly clock at all (the exact limitation Phase 2 documented and
+  // deliberately deferred). This does NOT change SYSTEMS/REACTOR pause
+  // semantics: isProjectOrbitRunning/isReactorOrbitRunning, and therefore
+  // the ring's own motion, are completely unaffected by this — a project
+  // simply animates toward whatever ring position is CURRENTLY live, which
+  // is stationary while SYSTEMS is paused. That is semantically correct
+  // (see startTopologyAssembly's report notes), not a special case
+  // requiring extra branching here.
+  const shouldRunAnimationMachine = isDualOrbitMachineRunning || isTopologyAssemblyActive;
+
+  // Phase 4A: the FIXED start positions captured once at activation — see
+  // startTopologyAssembly. Everything else needed to resolve a
+  // project's current target every frame (ring, docked index/count, live
+  // phase) is deliberately NOT stored here; it is re-derived fresh each tick
+  // from the same already-memoized dockedOrbitOrderByRing/
+  // projectRingByProjectId this component already uses for ordinary
+  // rendering, so the assembly target formula and the normal formula can
+  // never disagree. A ref, not state: this metadata does not itself need to
+  // trigger a render — only assemblyProjectRenderPositions (below) does.
+  const assemblyProjectPlanRef = useRef<ActiveProjectAssemblyPlan | null>(null);
+
+  // Phase 4A: mirrors projectsById/projectRingByProjectId/dockedOrbitOrderByRing
+  // for the persistent RAF tick's assembly step below. Those three memos are
+  // declared FURTHER DOWN in this component, after the RAF effect — listing
+  // them directly in that effect's own dependency array would be a genuine
+  // TypeScript temporal-dead-zone error, and reordering their declarations
+  // earlier would break the dualOrbitClockRef-to-projectsById source-text
+  // boundary marker several existing tests rely on (dualOrbitMachine.test.ts,
+  // orbitContinuousMachine.test.ts, orbitControls.test.ts,
+  // topologyAssembly.test.ts). Matches the established dragRuntimeRef pattern
+  // elsewhere in this file: assigned unconditionally every render (see below,
+  // once those memos exist), read fresh inside the tick via `.current` —
+  // never itself listed in a dependency array (a ref's identity is stable
+  // for the component's lifetime), so this adds no per-frame effect churn
+  // and no staleness, since the assignment always completes before any
+  // effect scheduled this same render can execute.
+  const assemblyFrameContextRef = useRef<{
+    projectsById: Map<string, ProjectData>;
+    projectRingByProjectId: Map<string, ProjectOrbitRing>;
+    dockedOrbitOrderByRing: Record<string, string[]>;
+    canonicalCapabilityOrder: string[];
+  } | null>(null);
+
+  // The temporary PROJECT assembly render-position layer getProjectPos
+  // consults (see its precedence comment below). Presentation state ONLY —
+  // an entry here is a render override for one project id, nothing more. It
+  // is never written to project.gridPosition, customProjectPositions,
+  // projectDockState, interactiveOrbitOrderByRing, or any other canonical
+  // topology state. Writers: production startup (initial synchronous
+  // populate), SKIP capture, and the shared RAF tick (per-frame update/clear
+  // clear) — Phase 4B removes the Phase 4A interaction-cancellation writer
+  // (see the interaction-lock discussion near the drag handlers below).
+  // Nothing in App.tsx, ASSEMBLE, or RESET ever touches it.
+  const [assemblyProjectRenderPositions, setAssemblyProjectRenderPositions] = useState<Record<string, AssemblyPoint>>({});
+
+  // Phase 4B: the CAPABILITY counterpart to assemblyProjectPlanRef/
+  // assemblyProjectRenderPositions above — same shape, same rationale (fixed
+  // start positions only, re-derived target every frame, ref because the
+  // plan itself needs no render). getSkillPos consults the render-position
+  // state below at the precedence described in its own comment.
+  const assemblyCapabilityPlanRef = useRef<ActiveCapabilityAssemblyPlan | null>(null);
+  const [assemblyCapabilityRenderPositions, setAssemblyCapabilityRenderPositions] = useState<Record<string, AssemblyPoint>>({});
+
+  // Phase 4C1: the ONE render-facing elapsed-time value every presentation
+  // helper (reactor reveal, ring reveal, conduit reveal, status phase)
+  // derives from — null whenever no assembly transition is active (the
+  // ordinary case), so every reveal computation below can simply treat null
+  // as "fully revealed / normal," matching ordinary non-assembly rendering
+  // exactly. Deliberately the ONLY new render-facing state this phase adds:
+  // one state update per frame (piggybacked onto the same tick that already
+  // updates assemblyProjectRenderPositions/assemblyCapabilityRenderPositions),
+  // never one per presentation layer, never a second clock/timer.
+  const [assemblyElapsedMs, setAssemblyElapsedMs] = useState<number | null>(null);
+
+  // Phase 4C1: three small derivations from the one elapsed value above,
+  // each a pure function of (elapsedMs, the fixed timing config) only — no
+  // other component state, so these are safe to compute this early. Every
+  // one defaults to "fully revealed / normal" (opacity 1, phase null) when
+  // assemblyElapsedMs is null, so ordinary non-assembly rendering is
+  // completely unaffected by this phase.
+  const isRedesignPrototypeActive = redesignPrototypeState === 'active';
+  const isRedesignPrototypeVisible = redesignPrototypeState !== 'idle';
+  const activePresentationTiming = isRedesignPrototypeActive
+    ? REDESIGN_FIELD_ASSEMBLY_TIMING
+    : DEFAULT_TOPOLOGY_ASSEMBLY_TIMING;
+  const redesignPresentationElapsedMs = isRedesignPrototypeActive
+    ? (assemblyElapsedMs ?? 0)
+    : redesignPrototypeState === 'settled'
+      ? REDESIGN_FIELD_ASSEMBLY_TIMING.totalDurationMs
+      : null;
+  const assemblyStatusPhase = useMemo(
+    () => (assemblyElapsedMs === null ? null : getTopologyAssemblyPhase(assemblyElapsedMs, activePresentationTiming)),
+    [assemblyElapsedMs, activePresentationTiming]
+  );
+  const assemblyReactorRevealOpacity = useMemo(
+    () => (assemblyElapsedMs === null ? 1 : getReactorRevealProgress(assemblyElapsedMs, activePresentationTiming)),
+    [assemblyElapsedMs, activePresentationTiming]
+  );
+  const assemblyConduitRevealOpacity = useMemo(
+    () => isRedesignPrototypeVisible
+      ? 0
+      : (assemblyElapsedMs === null ? 1 : getConduitRevealProgress(assemblyElapsedMs, DEFAULT_TOPOLOGY_ASSEMBLY_TIMING)),
+    [assemblyElapsedMs, isRedesignPrototypeVisible]
+  );
+  const redesignCoreActivationProgress = useMemo(
+    () => redesignPresentationElapsedMs === null
+      ? 0
+      : getRedesignCoreActivationProgress(redesignPresentationElapsedMs),
+    [redesignPresentationElapsedMs]
+  );
+  const redesignFieldTraces = useMemo(
+    () => Array.from({ length: REDESIGN_FIELD_TRACE_COUNT }, (_, traceIndex) =>
+      getRedesignFieldTraceGeometry(
+        traceIndex,
+        capabilityReactorGeometry.radiusX,
+        capabilityReactorGeometry.radiusY
+      )
+    ),
+    [capabilityReactorGeometry.radiusX, capabilityReactorGeometry.radiusY]
+  );
+
   const cancelCapabilitySettling = useCallback(() => {
     capabilitySettlingRef.current = null;
     setCapabilitySettlingRenderPositions(null);
@@ -438,7 +639,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     // Both phases are preserved, so no old interval is charged at a new rate.
     dualOrbitClockRef.current = rebaselineDualOrbitClock(dualOrbitClockRef.current);
 
-    if (!isDualOrbitMachineRunning) {
+    // Phase 4A: gated on shouldRunAnimationMachine, not isDualOrbitMachineRunning
+    // directly — this is the one authorized liveness change (see its own
+    // definition above for the full reasoning). The assembly clock itself
+    // (stepAssemblyClock, below) does not need any rebaseline call here: it
+    // is stepped on EVERY tick this effect ever runs, continuously, for the
+    // entire duration isTopologyAssemblyActive stays true (never intermittently
+    // — isTopologyAssemblyActive alone is enough to keep this effect alive),
+    // so its own lastTimestamp is never stale by more than one real frame
+    // even across an effect teardown/recreation (e.g. a SYSTEMS rate change
+    // mid-test) — unlike the long-gap case rebaselineDualOrbitClock exists to
+    // guard against, there is no scenario where this effect stops firing
+    // while assembly is active and then resumes later with a stale ref.
+    if (!shouldRunAnimationMachine) {
       return;
     }
 
@@ -484,6 +697,263 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         }
       }
 
+      // Phase 4A/4B: the ONE additional optional consumer of this shared
+      // tick — still no second RAF chain, still gated so it is a genuine
+      // no-op whenever assemblyClockRef is null (the ordinary inactive
+      // case). ONE topology assembly clock drives BOTH the capability and
+      // project layers below — never a second clock, never a per-layer RAF.
+      // The pause condition is its OWN independent read of
+      // isPauseConditionActive (document-hidden or reduced-motion only —
+      // see isOrbitPauseConditionActive in orbitMotion.ts, which already
+      // excludes isCompact and every interaction signal), not a reuse of
+      // isProjectOrbitRunning/isReactorOrbitRunning: those also fold in the
+      // user-facing SYSTEMS/REACTOR pause toggles and rate multipliers,
+      // which must never gate the startup ceremony — pressing SYSTEMS PAUSE
+      // must not freeze initialization halfway through (it instead lets a
+      // project animate toward a temporarily stationary ring target, and
+      // REACTOR PAUSE similarly lets a capability animate toward a
+      // temporarily stationary reactor target — both correct, not a bug).
+      // The RAF-liveness limitation Phase 2 documented is fixed via
+      // shouldRunAnimationMachine above.
+      if (assemblyClockRef.current) {
+        const fastPlan = assemblyFastCompletionPlanRef.current;
+        const assemblyTiming = assemblyModeRef.current === 'redesign'
+          ? REDESIGN_FIELD_ASSEMBLY_TIMING
+          : DEFAULT_TOPOLOGY_ASSEMBLY_TIMING;
+        const isAssemblyRunning = !isPauseConditionActive;
+        const nextAssemblyClock = stepAssemblyClock(
+          assemblyClockRef.current,
+          timestamp,
+          isAssemblyRunning,
+          fastPlan
+            ? TOPOLOGY_ASSEMBLY_FAST_COMPLETION_DURATION_MS
+            : assemblyTiming.presentationCompleteMs
+        );
+        assemblyClockRef.current = nextAssemblyClock;
+
+        if (fastPlan) {
+        // Phase 4C2-B SKIP: reuse this same clock and RAF. The plan's start
+        // positions are the CURRENT visible render maps captured by the click;
+        // every target below is still resolved fresh against this frame's live
+        // ring/reactor phase. No orbit rate or phase is modified.
+        const rawFastProgress = getAssemblyFastCompletionProgress(nextAssemblyClock.elapsedMs);
+        const fastInterpolationFactor = getAssemblyFastCompletionEasing(rawFastProgress);
+        const isFastCompletionComplete = isAssemblyComplete(
+          nextAssemblyClock,
+          TOPOLOGY_ASSEMBLY_FAST_COMPLETION_DURATION_MS
+        );
+
+        if (isFastCompletionComplete) {
+          // The ordinary render positions use the same phases committed at the
+          // top of this tick, so clearing temporary authority is an exact live-
+          // target handoff. Interaction unlocks only in this completed render.
+          assemblyFastCompletionPlanRef.current = null;
+          assemblyModeRef.current = null;
+          assemblyProjectPlanRef.current = null;
+          assemblyCapabilityPlanRef.current = null;
+          assemblyClockRef.current = null;
+          setAssemblyProjectRenderPositions({});
+          setAssemblyCapabilityRenderPositions({});
+          setIsAssemblyFastCompleting(false);
+          setIsTopologyAssemblyActive(false);
+          setAssemblyElapsedMs(null);
+        } else {
+          const presentationElapsedMs = fastPlan.startPresentationElapsedMs +
+            (DEFAULT_TOPOLOGY_ASSEMBLY_TIMING.presentationCompleteMs - fastPlan.startPresentationElapsedMs) *
+              fastInterpolationFactor;
+          setAssemblyElapsedMs(presentationElapsedMs);
+
+          const frameContext = assemblyFrameContextRef.current;
+          if (frameContext) {
+            const nextFastProjectPositions: Record<string, AssemblyPoint> = {};
+            for (const projectId of Object.keys(fastPlan.projectStartPositions)) {
+              const project = frameContext.projectsById.get(projectId);
+              const ring = frameContext.projectRingByProjectId.get(projectId);
+              if (!project || !ring) continue;
+              const dockedIds = frameContext.dockedOrbitOrderByRing[ring.id] || [];
+              const indexWithinRing = dockedIds.indexOf(projectId);
+              if (indexWithinRing === -1) continue;
+              const liveTarget = getDynamicOrbitalPosition(
+                project,
+                indexWithinRing,
+                dockedIds.length,
+                ring.geometry,
+                getRingPhaseFromRefs(ring)
+              );
+              nextFastProjectPositions[projectId] = resolveAssemblyPosition(
+                fastPlan.projectStartPositions[projectId],
+                liveTarget,
+                rawFastProgress,
+                fastInterpolationFactor
+              );
+            }
+            setAssemblyProjectRenderPositions(nextFastProjectPositions);
+
+            const nextFastCapabilityPositions: Record<string, AssemblyPoint> = {};
+            const capabilityCount = frameContext.canonicalCapabilityOrder.length;
+            frameContext.canonicalCapabilityOrder.forEach((capabilityId, indexWithinReactor) => {
+              const startPosition = fastPlan.capabilityStartPositions[capabilityId];
+              if (!startPosition) return;
+              const liveTarget = getMountedCapabilityPosition(
+                indexWithinReactor,
+                capabilityCount,
+                capabilityReactorGeometry,
+                next.reactorPhase
+              );
+              nextFastCapabilityPositions[capabilityId] = resolveAssemblyPosition(
+                startPosition,
+                liveTarget,
+                rawFastProgress,
+                fastInterpolationFactor
+              );
+            });
+            setAssemblyCapabilityRenderPositions(nextFastCapabilityPositions);
+          }
+        }
+        } else {
+        // Phase 4C1: clamped against presentationCompleteMs, not
+        // totalDurationMs — the shared clock must keep advancing past node
+        // capture (MOTION complete) so the presentation layer (status text)
+        // has a brief window to display "TOPOLOGY STABLE" before the whole
+        // assembly runtime tears down. See the two-stage completion below.
+        // The ONE render-facing elapsed value every presentation helper
+        // (reactor/ring/conduit reveal, status phase) derives from — set
+        // unconditionally here (before either completion check) so the very
+        // last frame's elapsed value is visible for one render even on the
+        // tick that also triggers presentation-complete teardown below.
+        setAssemblyElapsedMs(nextAssemblyClock.elapsedMs);
+
+        // Stage 1 — MOTION complete: every node's own capture timing is
+        // guaranteed done at totalDurationMs (capability window ends at
+        // capabilityCaptureStartMs + capabilityCaptureDurationMs = 1130ms;
+        // the last project's window ends well under totalDurationMs — see
+        // topologyAssembly.test.ts's own bounded-schedule proofs), so by
+        // this branch every participating node's own rawProgress has already
+        // reached 1 and resolveAssemblyPosition was already returning its
+        // exact live target on every recent frame. Clearing both temporary
+        // layers here (guarded so it only happens once, not every frame of
+        // the presentation-only tail that follows) therefore falls through
+        // to effectiveProjectPositions/effectiveSkillPositions, computed
+        // from the SAME getDynamicOrbitalPosition/getMountedCapabilityPosition
+        // formulas against the phases THIS very tick just committed to
+        // projectOrbitPhaseRef/projectOrbitPhase,
+        // projectPhaseUnwrappedRef/projectPhaseUnwrapped, and
+        // next.reactorPhase (all three set from the identical values used
+        // below) — so the very next render's ordinary positions are
+        // bit-identical to this tick's final assembly targets. No phase
+        // reset, no docking reset, no ring-order reset; both systems keep
+        // doing whatever they were already doing. Deliberately does NOT
+        // clear assemblyClockRef or isTopologyAssemblyActive — interaction
+        // stays locked and the shared clock keeps advancing through the
+        // brief "TOPOLOGY STABLE" presentation window (Stage 2 below).
+        const isMotionComplete = isAssemblyComplete(nextAssemblyClock, assemblyTiming.totalDurationMs);
+        if (isMotionComplete) {
+          if (assemblyProjectPlanRef.current || assemblyCapabilityPlanRef.current) {
+            assemblyProjectPlanRef.current = null;
+            assemblyCapabilityPlanRef.current = null;
+            setAssemblyProjectRenderPositions({});
+            setAssemblyCapabilityRenderPositions({});
+          }
+        } else {
+          const frameContext = assemblyFrameContextRef.current;
+          if (frameContext) {
+            // PROJECT layer: ONE render-position map built per frame, ONE
+            // setter call — never per-project. Every project's target is
+            // re-resolved fresh this frame (never a frozen snapshot):
+            // ring/docked-index/docked-count come from the same memoized
+            // dockedOrbitOrderByRing/projectRingByProjectId ordinary
+            // rendering already uses, and the ring phase comes from
+            // getRingPhaseFromRefs — the ref-sourced (not state-sourced)
+            // phase, guaranteeing this frame's target agrees exactly with
+            // what the resulting re-render will compute for the same ring.
+            const plan = assemblyProjectPlanRef.current;
+            if (plan) {
+              const nextPositions: Record<string, AssemblyPoint> = {};
+              for (const projectId of Object.keys(plan.startPositions)) {
+                const project = frameContext.projectsById.get(projectId);
+                const ring = frameContext.projectRingByProjectId.get(projectId);
+                if (!project || !ring) continue;
+                const dockedIds = frameContext.dockedOrbitOrderByRing[ring.id] || [];
+                const indexWithinRing = dockedIds.indexOf(projectId);
+                if (indexWithinRing === -1) continue;
+                const dockedCount = dockedIds.length;
+                const rawProgress = getProjectAssemblyProgress(
+                  nextAssemblyClock.elapsedMs,
+                  ring.index,
+                  indexWithinRing,
+                  assemblyTiming
+                );
+                const interpolationFactor = getAssemblyCaptureEasing(rawProgress);
+                const ringPhase = getRingPhaseFromRefs(ring);
+                const liveTarget = getDynamicOrbitalPosition(project, indexWithinRing, dockedCount, ring.geometry, ringPhase);
+                nextPositions[projectId] = resolveAssemblyPosition(
+                  plan.startPositions[projectId],
+                  liveTarget,
+                  rawProgress,
+                  interpolationFactor
+                );
+              }
+              setAssemblyProjectRenderPositions(nextPositions);
+            }
+
+            // CAPABILITY layer: same "one map, one setter" discipline. The
+            // live target reuses the existing getMountedCapabilityPosition
+            // primitive against next.reactorPhase — the value THIS tick just
+            // computed (same-tick source, matching how capability settling
+            // above already reads next.reactorPhase directly rather than a
+            // ref/state indirection — there is only one reactor, so no
+            // outer-ring-style phase derivation is needed here).
+            const capabilityPlan = assemblyCapabilityPlanRef.current;
+            if (capabilityPlan) {
+              const nextCapabilityPositions: Record<string, AssemblyPoint> = {};
+              const capabilityCount = frameContext.canonicalCapabilityOrder.length;
+              frameContext.canonicalCapabilityOrder.forEach((capabilityId, indexWithinReactor) => {
+                const startPosition = capabilityPlan.startPositions[capabilityId];
+                if (!startPosition) return;
+                const rawProgress = getCapabilityAssemblyProgress(
+                  nextAssemblyClock.elapsedMs,
+                  indexWithinReactor,
+                  capabilityCount,
+                  assemblyTiming
+                );
+                const interpolationFactor = getCapabilityAssemblyCaptureEasing(rawProgress);
+                const liveTarget = getMountedCapabilityPosition(
+                  indexWithinReactor,
+                  capabilityCount,
+                  capabilityReactorGeometry,
+                  next.reactorPhase
+                );
+                nextCapabilityPositions[capabilityId] = resolveAssemblyPosition(
+                  startPosition,
+                  liveTarget,
+                  rawProgress,
+                  interpolationFactor
+                );
+              });
+              setAssemblyCapabilityRenderPositions(nextCapabilityPositions);
+            }
+          }
+        }
+
+        // Stage 2 — PRESENTATION complete: the brief "TOPOLOGY STABLE"
+        // window (see getTopologyAssemblyPhase/status UI below) has now
+        // elapsed too. Full teardown — clock, active flag (interaction
+        // unlocks here, not at motion-complete — see the Phase 4C1 report's
+        // motion-complete-vs-presentation-complete discussion), and the
+        // render-facing elapsed value all clear together.
+        if (isAssemblyComplete(nextAssemblyClock, assemblyTiming.presentationCompleteMs)) {
+          const completedMode = assemblyModeRef.current;
+          assemblyModeRef.current = null;
+          assemblyClockRef.current = null;
+          setIsTopologyAssemblyActive(false);
+          setAssemblyElapsedMs(null);
+          if (completedMode === 'redesign') {
+            setRedesignPrototypeState('settled');
+          }
+        }
+        }
+      }
+
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
@@ -495,6 +965,28 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     isReactorOrbitRunning,
     reactorOrbitRateMultiplier,
     capabilityReactorGeometry,
+    // The assembly step reads isPauseConditionActive directly (not
+    // isProjectOrbitRunning/isReactorOrbitRunning, which also fold in the
+    // SYSTEMS/REACTOR pause toggles this must stay decoupled from) — listed
+    // explicitly so the tick closure never goes stale for it, covering the
+    // one case isProjectOrbitRunning/isReactorOrbitRunning wouldn't already
+    // cause a re-subscribe on their own (both already user-paused while
+    // isPauseConditionActive itself changes).
+    isPauseConditionActive,
+    // Phase 4A/4B: shouldRunAnimationMachine gates this effect's own
+    // liveness (replacing the old isDualOrbitMachineRunning-only gate). The
+    // per-project docked/ring lookups AND the capability canonical-order
+    // lookup the assembly step also needs (projectsById,
+    // projectRingByProjectId, dockedOrbitOrderByRing, canonicalCapabilityOrder)
+    // are deliberately NOT listed here — they are declared further down in
+    // this component (after this effect), so referencing them in this array
+    // would be a TypeScript temporal-dead-zone error; the tick instead reads
+    // them fresh every frame via assemblyFrameContextRef.current (see that
+    // ref's own comment above for the full reasoning). getRingPhaseFromRefs
+    // is likewise read directly inside the tick without being listed here —
+    // it is a `useCallback` with an empty dependency array, so its identity
+    // never changes across the component's lifetime and cannot go stale.
+    shouldRunAnimationMachine,
   ]);
 
   const projectsById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
@@ -585,6 +1077,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     }))),
     [activeSkills]
   );
+
+  // Unconditional every-render mirror for assemblyFrameContextRef (declared
+  // earlier, before the persistent RAF effect — see that declaration's own
+  // comment for why this indirection exists). Placed here rather than
+  // immediately after dockedOrbitOrderByRing because canonicalCapabilityOrder
+  // itself is declared here — this single assignment covers both the
+  // project and capability lookups the assembly tick needs. Plain
+  // assignment, not inside any effect: it always completes during THIS
+  // render, before any effect scheduled this render can run, so the tick
+  // never reads a stale value.
+  assemblyFrameContextRef.current = { projectsById, projectRingByProjectId, dockedOrbitOrderByRing, canonicalCapabilityOrder };
+
   const mountedCapabilityOrbitPositions = useMemo(() => {
     const positions: Record<string, { x: number; y: number }> = {};
     const count = canonicalCapabilityOrder.length;
@@ -706,6 +1210,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   }, [isOrbitReflowActive]);
 
   // Synchronized node position getters for 100% frame-accurate alignment
+  // Position-authority precedence (Phase 3 adds the assembly layer at #3):
+  // 1. active drag (visitor interaction always overrides ceremony)
+  // 2. orbit reflow render position (a live redistribution in progress wins
+  //    over assembly — the two should never normally coexist; if a future
+  //    bug somehow produces both, reflow must win rather than fight it)
+  // 3. assembly project render position (Phase 3: always empty — see
+  //    assemblyProjectRenderPositions above; a future phase populates this
+  //    only during the bounded startup-capture window)
+  // 4. effective project position (docked live orbit, or a custom detached
+  //    position — unchanged, unrestructured; assembly does not reach into
+  //    this layer at all)
+  // 5. legacy grid fallback
   const getProjectPos = useCallback((project: ProjectData) => {
     if (draggingNode?.type === 'project' && draggingNode.id === project.id) {
       return draggingNode.currentPos;
@@ -713,9 +1229,27 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (orbitReflowRenderPositions && orbitReflowRenderPositions[project.id]) {
       return orbitReflowRenderPositions[project.id];
     }
+    if (assemblyProjectRenderPositions[project.id]) {
+      return assemblyProjectRenderPositions[project.id];
+    }
     return effectiveProjectPositions[project.id] || project.gridPosition;
-  }, [draggingNode, effectiveProjectPositions, orbitReflowRenderPositions]);
+  }, [draggingNode, effectiveProjectPositions, orbitReflowRenderPositions, assemblyProjectRenderPositions]);
 
+  // Position-authority precedence (Phase 4B adds the assembly layer at #3,
+  // mirroring getProjectPos above while preserving capability-settling's
+  // existing higher precedence):
+  // 1. active drag
+  // 2. capability settling render position (an in-flight re-dock always
+  //    wins over assembly — production startup's precondition already
+  //    refuses to start while settling is active, and once assembly is
+  //    active ordinary capability drag is locked, so a new settle cannot
+  //    begin; this ordering is a defensive belt-and-suspenders guarantee,
+  //    not a scenario expected to actually arise)
+  // 3. capability assembly render position (Phase 4B; populated only while
+  //    startup or its fast completion is active)
+  // 4. effective capability position (mounted reactor position, or a custom
+  //    detached position — unchanged, unrestructured)
+  // 5. legacy grid fallback
   const getSkillPos = useCallback((skill: InfrastructureSkill) => {
     if (draggingNode?.type === 'skill' && draggingNode.id === skill.id) {
       return draggingNode.currentPos;
@@ -723,8 +1257,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (capabilitySettlingRenderPositions && capabilitySettlingRenderPositions[skill.id]) {
       return capabilitySettlingRenderPositions[skill.id];
     }
+    if (assemblyCapabilityRenderPositions[skill.id]) {
+      return assemblyCapabilityRenderPositions[skill.id];
+    }
     return effectiveSkillPositions[skill.id] || skill.gridPosition;
-  }, [draggingNode, capabilitySettlingRenderPositions, effectiveSkillPositions]);
+  }, [draggingNode, capabilitySettlingRenderPositions, assemblyCapabilityRenderPositions, effectiveSkillPositions]);
 
   // PR23 product pivot: derives the actively-dragged project's magnetic dock
   // state and its whole-ellipse projection/attraction toward the shared orbit
@@ -881,6 +1418,179 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       Object.values(interactiveOrbitOrderByRing).some(order => order !== null);
   }, [customProjectPositions, customSkillPositions, projectDockState, interactiveOrbitOrderByRing]);
 
+  // Production topology-startup eligibility. It may begin only from a genuinely
+  // clean topology state — never destructively normalized to make the
+  // clean state and is never coupled to ASSEMBLE/RESET. Every
+  // condition here is a reactive value already computed above; capability
+  // settling is checked via its render-position state (null when inactive)
+  // since capabilitySettlingRef itself is a non-reactive ref.
+  const canStartTopologyAssembly = useMemo(() => {
+    return (
+      !draggingNode &&
+      !isOrbitReflowActive &&
+      capabilitySettlingRenderPositions === null &&
+      !hasCustomLayout &&
+      !prefersReducedMotion &&
+      !isTopologyAssemblyActive
+    );
+  }, [
+    draggingNode,
+    isOrbitReflowActive,
+    capabilitySettlingRenderPositions,
+    hasCustomLayout,
+    prefersReducedMotion,
+    isTopologyAssemblyActive,
+  ]);
+
+  // Single assembly activation primitive. Production remains the default;
+  // the explicit redesign mode is called only by the DEV-only manual control.
+  // Computes every
+  // currently docked project's AND every capability's fixed,
+  // deterministically-bounded displaced start position ONCE (relative to
+  // each node's activation-time live target), creates BOTH plans and the
+  // one shared clock at the SAME activation event, then hands off entirely
+  // to the shared RAF tick above for moving-target capture. Deliberately
+  // reads the CURRENT docked/canonical order the same way
+  // dockedProjectPositions/mountedCapabilityOrbitPositions themselves do
+  // rather than constructing any second ordering model — since the
+  // precondition above only allows activation from a clean topology,
+  // current order and canonical order are the same thing here regardless.
+  const startTopologyAssembly = useCallback((mode: TopologyAssemblyMode = 'production') => {
+    if (!canStartTopologyAssembly) return false;
+    const isRedesignPrototype = mode === 'redesign';
+
+    const projectStartPositions: Record<string, AssemblyPoint> = {};
+    for (const ring of projectRings) {
+      const dockedIds = dockedOrbitOrderByRing[ring.id] || [];
+      const dockedCount = dockedIds.length;
+      if (dockedCount === 0) continue;
+      const ringPhase = getRingPhaseFromRefs(ring);
+      dockedIds.forEach((projectId, indexWithinRing) => {
+        const project = projectsById.get(projectId);
+        if (!project) return;
+
+        // The project's own current live target, and its visual center in
+        // iso-space — the point deterministic offsets are expressed
+        // relative to, so displacement always reads as "belongs to this
+        // ring/slot," never a screen-space random scatter.
+        const liveTarget = getDynamicOrbitalPosition(project, indexWithinRing, dockedCount, ring.geometry, ringPhase);
+        const dims = getTopologyProjectDimensions(project);
+        const liveTargetCenterWorld = { x: liveTarget.x + dims.width / 2, y: liveTarget.y + dims.depth / 2 };
+        const liveTargetCenterIso = project3DToIso(liveTargetCenterWorld.x, liveTargetCenterWorld.y, 0);
+
+        // The live target already sits exactly on the ring ellipse, so
+        // projecting it back onto that same ellipse recovers its own slot
+        // angle (distance 0) — reusing the existing ellipse-angle primitive
+        // rather than re-deriving the ring's internal angle formula.
+        const projection = projectPointOntoOrbitEllipse(liveTargetCenterIso, ring.geometry);
+        const offset = getDeterministicAssemblyOffset(
+          projectId,
+          ring.index,
+          indexWithinRing,
+          isRedesignPrototype ? REDESIGN_PROJECT_ASSEMBLY_OFFSET_BUDGET : undefined
+        );
+        const displacedAngle = projection.theta + offset.angularOffsetRadians;
+        const displacedRadiusX = ring.geometry.radiusX + offset.radialOffsetIso;
+        const displacedRadiusY = ring.geometry.radiusY + offset.radialOffsetIso;
+        const displacedIsoX = ring.geometry.centerIso.x + displacedRadiusX * Math.cos(displacedAngle);
+        const displacedIsoY = ring.geometry.centerIso.y + displacedRadiusY * Math.sin(displacedAngle);
+        const displacedWorldCenter = projectIsoTo3D(displacedIsoX, displacedIsoY);
+        projectStartPositions[projectId] = {
+          x: displacedWorldCenter.x - dims.width / 2,
+          y: displacedWorldCenter.y - dims.depth / 2,
+        };
+      });
+    }
+
+    // Capability start positions: same "recover slot angle from the live
+    // target, displace radially + a small angle, convert back" shape as
+    // projects above, but against the reactor's own ellipse/primitives and
+    // the deliberately smaller DEFAULT_CAPABILITY_ASSEMBLY_OFFSET_BUDGET.
+    // Capabilities store their CENTER directly (no width/depth half-offset
+    // like a project's top-left origin needs).
+    const capabilityStartPositions: Record<string, AssemblyPoint> = {};
+    const capabilityCount = canonicalCapabilityOrder.length;
+    canonicalCapabilityOrder.forEach((capabilityId, indexWithinReactor) => {
+      const liveTarget = getMountedCapabilityPosition(indexWithinReactor, capabilityCount, capabilityReactorGeometry, reactorOrbitPhase);
+      const liveTargetIso = project3DToIso(liveTarget.x, liveTarget.y, 0);
+      const projection = projectPointOntoCapabilityReactor(liveTargetIso, capabilityReactorGeometry);
+      const offset = getDeterministicAssemblyOffset(
+        capabilityId,
+        0,
+        indexWithinReactor,
+        isRedesignPrototype
+          ? REDESIGN_CAPABILITY_ASSEMBLY_OFFSET_BUDGET
+          : DEFAULT_CAPABILITY_ASSEMBLY_OFFSET_BUDGET
+      );
+      const displacedAngle = projection.theta + offset.angularOffsetRadians;
+      const displacedRadiusX = capabilityReactorGeometry.radiusX + offset.radialOffsetIso;
+      const displacedRadiusY = capabilityReactorGeometry.radiusY + offset.radialOffsetIso;
+      const displacedIsoX = capabilityReactorGeometry.centerIso.x + displacedRadiusX * Math.cos(displacedAngle);
+      const displacedIsoY = capabilityReactorGeometry.centerIso.y + displacedRadiusY * Math.sin(displacedAngle);
+      capabilityStartPositions[capabilityId] = projectIsoTo3D(displacedIsoX, displacedIsoY);
+    });
+
+    // Both plans and the one shared clock are created at the SAME activation
+    // event, and both render-position states are populated synchronously in
+    // this same click handler — the first visible frame after activation
+    // already shows displaced projects AND capabilities, never one frame at
+    // the ordinary positions followed by a jump.
+    assemblyProjectPlanRef.current = { startPositions: projectStartPositions };
+    assemblyCapabilityPlanRef.current = { startPositions: capabilityStartPositions };
+    assemblyModeRef.current = mode;
+    assemblyClockRef.current = createAssemblyClockState();
+    setAssemblyProjectRenderPositions(projectStartPositions);
+    setAssemblyCapabilityRenderPositions(capabilityStartPositions);
+    // Phase 4C1: the render-facing elapsed value starts at 0 synchronously
+    // too, so the very first render already shows the "quiet starting
+    // field" presentation state (reactor/rings/conduits at their t=0 reveal
+    // progress, SYSTEM INITIALIZING status) alongside the displaced nodes.
+    setAssemblyElapsedMs(0);
+    setRedesignPrototypeState(isRedesignPrototype ? 'active' : 'idle');
+    setIsTopologyAssemblyActive(true);
+    return true;
+  }, [
+    canStartTopologyAssembly,
+    projectRings,
+    dockedOrbitOrderByRing,
+    getRingPhaseFromRefs,
+    projectsById,
+    canonicalCapabilityOrder,
+    capabilityReactorGeometry,
+    reactorOrbitPhase,
+  ]);
+
+  // Phase 4C2-B: replace the remainder of the normal ceremony with one short
+  // segment whose fixed starts are exactly what is visible on this render.
+  // The existing assembly clock is reset and reused; the existing shared RAF
+  // remains the sole timing authority. Original deterministic start plans are
+  // discarded because returning to them would create a backwards jump.
+  const handleSkipTopologyAssembly = useCallback(() => {
+    if (
+      !isTopologyAssemblyActive ||
+      assemblyElapsedMs === null ||
+      !assemblyClockRef.current ||
+      assemblyFastCompletionPlanRef.current
+    ) {
+      return;
+    }
+
+    assemblyFastCompletionPlanRef.current = {
+      startPresentationElapsedMs: assemblyElapsedMs,
+      projectStartPositions: { ...assemblyProjectRenderPositions },
+      capabilityStartPositions: { ...assemblyCapabilityRenderPositions },
+    };
+    assemblyProjectPlanRef.current = null;
+    assemblyCapabilityPlanRef.current = null;
+    assemblyClockRef.current = createAssemblyClockState();
+    setIsAssemblyFastCompleting(true);
+  }, [
+    isTopologyAssemblyActive,
+    assemblyElapsedMs,
+    assemblyProjectRenderPositions,
+    assemblyCapabilityRenderPositions,
+  ]);
+
   // Real-time preview calculation of snapped & collision-free landing spot
   const dragResolution = useMemo(() => {
     if (!draggingNode || !draggingNode.hasMoved) return null;
@@ -1015,14 +1725,28 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setViewport({ x, y, zoom });
   }, [setViewport, staticOrbitalLattice]);
 
-  // Initial mount auto-fit
+  // Initial mount auto-fit and production startup coordination. Validate the
+  // real measured container rather than the provisional dimension state, then
+  // schedule fitAll and activation in the same layout-effect batch so React
+  // flushes both states before paint, without an intermediate camera snap. The
+  // synchronous App-owned claim is consumed before reduced-motion or dirty-
+  // state fallback, preventing retries on rerender and Contact remount.
   const initializedRef = useRef(false);
-  useEffect(() => {
-    if (!initializedRef.current && containerDimensions.width > 200 && containerDimensions.height > 200) {
-      initializedRef.current = true;
-      fitAll();
-    }
-  }, [containerDimensions, fitAll]);
+  useLayoutEffect(() => {
+    if (initializedRef.current) return;
+
+    const width = containerRef.current?.clientWidth ?? 0;
+    const height = containerRef.current?.clientHeight ?? 0;
+    if (width <= 200 || height <= 200) return;
+
+    fitAll();
+    initializedRef.current = true;
+
+    if (!claimTopologyStartup()) return;
+    if (prefersReducedMotion) return;
+
+    startTopologyAssembly();
+  }, [containerDimensions, fitAll, claimTopologyStartup, prefersReducedMotion, startTopologyAssembly]);
 
   // Keyboard controls for zoom, fit, snap toggle, and reset
   useEffect(() => {
@@ -1086,6 +1810,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     capabilityReactorGeometry,
     canonicalCapabilityOrder,
     commitCapabilitySettling,
+    isTopologyAssemblyActive,
   });
   dragRuntimeRef.current = {
     viewport,
@@ -1105,6 +1830,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     capabilityReactorGeometry,
     canonicalCapabilityOrder,
     commitCapabilitySettling,
+    isTopologyAssemblyActive,
   };
 
   // Global window mousemove & mouseup listeners for buttery smooth dragging
@@ -1118,6 +1844,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const processMove = (clientX: number, clientY: number) => {
       const draggingNode = draggingNodeRef.current;
       if (!draggingNode) return;
+      // Phase 4B: the ONE guard that actually prevents direct manipulation
+      // while topology assembly is active — position never updates,
+      // hasMoved never becomes true, so no detach/redock/magnetic-capture
+      // logic (all gated on hasMoved downstream) can ever trigger. The
+      // gesture itself was still allowed to begin (setDraggingNode ran
+      // normally in onMouseDown/onTouchStart), so a release with zero
+      // movement still resolves as an ordinary select-click in
+      // processRelease below — simple click/selection keeps working. The
+      // cursor stays the OS default the whole time (see the node className
+      // guard) and no fullscreen overlay is introduced; the visitor's
+      // pointer itself is never touched.
+      if (dragRuntimeRef.current.isTopologyAssemblyActive) return;
       const { viewport, projectsById, projectRingByProjectId, capabilityReactorGeometry } = dragRuntimeRef.current;
       const deltaScreenX = (clientX - draggingNode.startClientX) / viewport.zoom;
       const deltaScreenY = (clientY - draggingNode.startClientY) / viewport.zoom;
@@ -1809,6 +2547,74 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </div>
       )}
 
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          aria-label="Run black core field assembly prototype"
+          disabled={!canStartTopologyAssembly}
+          onClick={(event) => {
+            event.stopPropagation();
+            startTopologyAssembly('redesign');
+          }}
+          className="absolute top-3 right-3 z-30 px-2.5 py-1.5 border border-[#15150F] bg-[#D4CDA4] text-[#15150F] font-mono text-[9px] font-bold tracking-[0.1em] shadow-[2px_2px_0px_#15150F] hover:bg-[#C3E54E] disabled:opacity-35 disabled:cursor-not-allowed transition-colors"
+        >
+          BLACK CORE TEST
+        </button>
+      )}
+
+      {isRedesignPrototypeVisible && (
+        <div
+          data-redesign-prototype-status={redesignPrototypeState}
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none font-mono text-[9px] tracking-[0.16em] text-[#15150F]/55"
+        >
+          {isRedesignPrototypeActive ? 'TOPOLOGY // INITIALIZING' : 'EQUILIBRIUM // STABLE'}
+        </div>
+      )}
+
+      {/* System initialization status and the sole Phase 4C2-B skip affordance.
+          Entirely derived from assemblyStatusPhase (itself derived from the
+          single assemblyElapsedMs value) -- no independent phase state.
+          Mounted only while an assembly transition is in flight and
+          unmounted the instant assemblyElapsedMs returns to null at
+          presentation-complete, so it never lingers as a permanent
+          telemetry duplicate. Absolutely positioned so it never participates
+          in layout; only the small real SKIP button opts back into pointer
+          events while the normal startup is still in flight. */}
+      {!isRedesignPrototypeVisible && assemblyElapsedMs !== null && assemblyStatusPhase !== null && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center gap-0.5 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] border border-[#15150F] font-mono text-[11px] font-bold shadow-[3px_3px_0px_#15150F] animate-in fade-in duration-150">
+          {assemblyStatusPhase === 'online' ? (
+            <>
+              <span className="tracking-[0.12em] text-[#C3E54E]">TOPOLOGY STABLE</span>
+              <span className="text-[9px] font-normal tracking-[0.08em] text-[#D4CDA4]/70">
+                {projects.length} SYSTEMS // {canonicalCapabilityOrder.length} CAPABILITIES
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="tracking-[0.12em]">SYSTEM INITIALIZING</span>
+              {assemblyStatusPhase === 'conduits' && (
+                <span className="text-[9px] font-normal tracking-[0.08em] text-[#D4CDA4]/70">
+                  RESOLVING TOPOLOGY
+                </span>
+              )}
+            </>
+          )}
+          {isTopologyAssemblyActive && !isAssemblyFastCompleting && assemblyStatusPhase !== 'online' && (
+            <button
+              type="button"
+              aria-label="Skip topology initialization"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleSkipTopologyAssembly();
+              }}
+              className="pointer-events-auto mt-1 px-2 py-0.5 border border-[#D4CDA4]/70 bg-transparent text-[#D4CDA4] text-[9px] tracking-[0.12em] hover:bg-[#D4CDA4] hover:text-[#15150F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C3E54E] transition-colors"
+            >
+              SKIP
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Bottom-Left Controls & Status */}
       <div className="hidden lg:flex absolute bottom-3 left-3 pointer-events-none flex-col items-start gap-1.5 text-[10px] font-mono text-[#15150F] z-10">
         {/* Desktop dual-orbit console: hidden ONLY when autonomous motion
@@ -2213,8 +3019,22 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             const rx = ring.geometry.radiusX;
             const ry = ring.geometry.radiusY;
             const ringOpacity = Math.max(0.55, 1 - ring.index * 0.12);
+            // Phase 4C1: per-ring guide reveal, staggered by ring index via
+            // the same getRingAssemblyProgress this module already uses for
+            // ring capture stagger — generic across any ring count, and 1
+            // (fully revealed) whenever no assembly is active.
+            const ringRevealProgress =
+              redesignPresentationElapsedMs !== null
+                ? 0.05 + 0.65 * getRingAssemblyProgress(
+                    redesignPresentationElapsedMs,
+                    ring.index,
+                    REDESIGN_FIELD_ASSEMBLY_TIMING
+                  )
+                : assemblyElapsedMs === null
+                  ? 1
+                  : getRingAssemblyProgress(assemblyElapsedMs, ring.index, DEFAULT_TOPOLOGY_ASSEMBLY_TIMING);
             return (
-              <g key={ring.id} opacity={ringOpacity}>
+              <g key={ring.id} opacity={ringOpacity * ringRevealProgress}>
                 <ellipse
                   cx={cx}
                   cy={cy}
@@ -2222,7 +3042,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   ry={ry}
                   fill="none"
                   stroke="#15150F"
-                  strokeWidth="0.8"
+                  strokeWidth="1.15"
                   strokeDasharray="6 6"
                 />
                 {Array.from({ length: 24 }, (_, i) => {
@@ -2253,8 +3073,86 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           })}
         </g>
 
+        {import.meta.env.DEV && isRedesignPrototypeActive && redesignPresentationElapsedMs !== null && (
+          <g
+            id="redesign-field-traces"
+            data-field-trace-count={REDESIGN_FIELD_TRACE_COUNT}
+            pointerEvents="none"
+            className="pointer-events-none"
+          >
+            {redesignFieldTraces.map((trace, traceIndex) => {
+              const presentation = getRedesignFieldTracePresentation(
+                redesignPresentationElapsedMs,
+                traceIndex
+              );
+              const coreX = capabilityReactorGeometry.centerIso.x;
+              const coreY = capabilityReactorGeometry.centerIso.y;
+              return (
+                <path
+                  key={`redesign-field-trace-${traceIndex}`}
+                  data-field-trace-index={traceIndex}
+                  data-field-trace-progress={presentation.progress.toFixed(3)}
+                  d={`M ${coreX + trace.innerOffset.x} ${coreY + trace.innerOffset.y} Q ${coreX + trace.controlOffset.x} ${coreY + trace.controlOffset.y} ${coreX + trace.outerOffset.x} ${coreY + trace.outerOffset.y}`}
+                  pathLength="1"
+                  fill="none"
+                  stroke="#3A3729"
+                  strokeWidth="1.2"
+                  strokeLinecap="butt"
+                  strokeDasharray={`${presentation.visibleLength} 2`}
+                  strokeDashoffset={presentation.dashOffset}
+                  opacity={presentation.opacity}
+                />
+              );
+            })}
+          </g>
+        )}
+
+        {isRedesignPrototypeVisible && (
+          <g
+            id="redesign-black-core"
+            data-core-activation={redesignCoreActivationProgress.toFixed(3)}
+            pointerEvents="none"
+            className="pointer-events-none"
+            opacity={0.34 + redesignCoreActivationProgress * 0.66}
+            transform={`translate(${capabilityReactorGeometry.centerIso.x} ${capabilityReactorGeometry.centerIso.y}) scale(${0.82 + redesignCoreActivationProgress * 0.18}) translate(${-capabilityReactorGeometry.centerIso.x} ${-capabilityReactorGeometry.centerIso.y})`}
+          >
+            <circle
+              cx={capabilityReactorGeometry.centerIso.x}
+              cy={capabilityReactorGeometry.centerIso.y}
+              r={52 + redesignCoreActivationProgress * 6}
+              fill="none"
+              stroke="#15150F"
+              strokeWidth="0.8"
+              strokeDasharray="2 7"
+              opacity={0.08 + redesignCoreActivationProgress * 0.16}
+            />
+            <circle
+              cx={capabilityReactorGeometry.centerIso.x}
+              cy={capabilityReactorGeometry.centerIso.y}
+              r={REDESIGN_BLACK_CORE_RADIUS}
+              fill="#090908"
+              stroke="#15150F"
+              strokeWidth="2"
+            />
+            <circle
+              cx={capabilityReactorGeometry.centerIso.x - 9}
+              cy={capabilityReactorGeometry.centerIso.y - 8}
+              r="8"
+              fill="#4B4838"
+              opacity={0.08 + redesignCoreActivationProgress * 0.12}
+            />
+            <circle
+              cx={capabilityReactorGeometry.centerIso.x}
+              cy={capabilityReactorGeometry.centerIso.y}
+              r="3"
+              fill="#D4CDA4"
+              opacity="0.2"
+            />
+          </g>
+        )}
+
         {/* Fixed capability-reactor ellipse with phase-driven structure circulating along it. */}
-        <g id="capability-reactor" pointerEvents="none" className="pointer-events-none" opacity={0.46}>
+        <g id="capability-reactor" pointerEvents="none" className="pointer-events-none" opacity={0.46 * assemblyReactorRevealOpacity}>
           {capabilityReactorSegmentPaths.map((path, index) => (
             <path
               key={`reactor-segment-${index}`}
@@ -2353,7 +3251,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           id="orbital-field-annotations"
           pointerEvents="none"
           className="pointer-events-none"
-          opacity={0.55}
+          opacity={isRedesignPrototypeVisible ? (isRedesignPrototypeActive ? 0.06 : 0.24) : 0.55}
         >
           <text
             x={capabilityReactorGeometry.centerIso.x}
@@ -2418,7 +3316,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         </g>
 
         {/* Cable / Routing Connections Layer */}
-        <g id="wiring-conduits">
+        <g id="wiring-conduits" opacity={assemblyConduitRevealOpacity}>
           {renderedConnections}
         </g>
 
@@ -2493,7 +3391,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onMouseEnter={() => setHoveredSkillId(skill.id)}
                 onMouseLeave={() => setHoveredSkillId(null)}
-                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${emphasisClass}`}
+                className={`${isTopologyAssemblyActive ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} group transition-all duration-200 ${emphasisClass}`}
               >
                 {/* Active Connected Radar Halo when connected to hovered project */}
                 {isSkillConnected && hoveredProjectId && (
@@ -2845,8 +3743,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 key={project.id}
                 onMouseDown={(e) => {
                   e.stopPropagation();
-                  // PR23: one node interaction/reflow at a time — a new drag
-                  // must never start while the project ring is mid-reflow.
+                  // PR23: no drag while mid-reflow. Phase 4B: assembly-time
+                  // lock lives in processMove below (see its own comment),
+                  // not here, so a no-movement release still click-selects.
                   if (isOrbitReflowActive) return;
                   const startPos = { x: originX, y: originY };
                   const persisted = resolveProjectDockState(projectDockState, project.id);
@@ -2870,6 +3769,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
+                  // Phase 4B: see the onMouseDown comment above — actual
+                  // movement is blocked in processMove, not here.
                   if (isOrbitReflowActive) return;
                   if (e.touches.length === 1) {
                     const startPos = { x: originX, y: originY };
@@ -2892,11 +3793,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
+                  // Phase 4B: opening a subsystem mid-ceremony is incoherent
+                  // — the topology is still initializing. Normal drill-in
+                  // resumes automatically once assembly completes.
+                  if (isTopologyAssemblyActive) return;
                   onDrillIntoProject(project.id);
                 }}
                 onMouseEnter={() => setHoveredProjectId(project.id)}
                 onMouseLeave={() => setHoveredProjectId(null)}
-                className={`cursor-grab active:cursor-grabbing group transition-all duration-200 ${emphasisClass}`}
+                className={`${isTopologyAssemblyActive ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} group transition-all duration-200 ${emphasisClass}`}
               >
                 {/* Structure Shadow on the Drafting Plane */}
                 <polygon

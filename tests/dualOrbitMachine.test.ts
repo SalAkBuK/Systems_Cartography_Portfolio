@@ -173,9 +173,18 @@ test('project docking and moving-frame reflow read only the live project phase',
   ]) {
     assert.ok(canvasSource.includes(marker));
   }
+  // Narrowed to commitOrbitReflow's own actual function body (ending at its
+  // own dependency array) rather than the far-later '// Handle Pan & Drag'
+  // marker: that wider window used to contain nothing but reflow-adjacent
+  // code, but now also spans unrelated later additions (e.g. the DEV-only
+  // topology-assembly trigger, which legitimately reads reactorOrbitPhase
+  // for an entirely different reason — capability start-position placement,
+  // not project docking/reflow). Narrowing the window is a test-boundary
+  // correction, not a loosened invariant: commitOrbitReflow itself still
+  // must never reference reactorOrbitPhase anywhere in its own body.
   const dockingBlock = canvasSource.substring(
     canvasSource.indexOf('const commitOrbitReflow = useCallback(('),
-    canvasSource.indexOf('// Handle Pan & Drag on canvas surface')
+    canvasSource.indexOf('}, [projectsById, prefersReducedMotion, getRingPhaseFromRefs]);')
   );
   // Adaptive rings: commitOrbitReflow reads each ring's own live phase via
   // getRingPhaseFromRefs (ring 0 == projectOrbitPhaseRef.current exactly;
@@ -185,13 +194,24 @@ test('project docking and moving-frame reflow read only the live project phase',
   assert.ok(!dockingBlock.includes('reactorOrbitPhase'), 'reactor phase must never enter project docking/reflow math');
 });
 
-test('one autonomous RAF chain advances both phases and stops when both are paused', () => {
+test('one autonomous RAF chain advances both phases and stops when both are paused (and, as of Phase 4A, also when project assembly is active)', () => {
   const effect = canvasSource.substring(
     canvasSource.indexOf('const dualOrbitClockRef = useRef<DualOrbitClockState>'),
     canvasSource.indexOf('const projectsById')
   );
-  assert.ok(effect.includes('if (!isDualOrbitMachineRunning)'));
-  assert.equal((effect.match(/requestAnimationFrame\(/g) ?? []).length, 2);
+  // Old invariant (Phase 2 and earlier): gated purely on
+  // isDualOrbitMachineRunning — "stops when both are paused" had no
+  // exceptions. New authorized invariant (Phase 4A): gated on
+  // shouldRunAnimationMachine = isDualOrbitMachineRunning ||
+  // isProjectAssemblyActive, so the chain also stays alive while a DEV-only
+  // project-assembly test is running, even with SYSTEMS and REACTOR both
+  // explicitly paused — otherwise the assembly clock could never step in
+  // that combination (the exact limitation Phase 2's report documented and
+  // deliberately deferred). isDualOrbitMachineRunning's own definition, and
+  // its role as one half of that OR, are unchanged.
+  assert.ok(effect.includes('if (!shouldRunAnimationMachine)'));
+  assert.ok(effect.includes('const shouldRunAnimationMachine = isDualOrbitMachineRunning || isTopologyAssemblyActive;') || canvasSource.includes('const shouldRunAnimationMachine = isDualOrbitMachineRunning || isTopologyAssemblyActive;'));
+  assert.equal((effect.match(/requestAnimationFrame\(/g) ?? []).length, 2, 'still exactly one chain — the liveness change adds no second loop');
   assert.equal((effect.match(/stepDualOrbitClock\(/g) ?? []).length, 1);
   assert.ok(effect.includes('return () => cancelAnimationFrame(rafId)'));
 });
