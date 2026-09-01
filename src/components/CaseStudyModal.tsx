@@ -17,6 +17,7 @@ import {
 import { ProjectData, OperatorMetadata, EvidenceProvenance } from '../types';
 import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
 import { ProvenanceBadge } from './RightInspectorPanel';
+import { isSafeHttpUrl } from '../utils/urlSecurity';
 
 interface CaseStudyModalProps {
   project: ProjectData | null;
@@ -263,22 +264,22 @@ export const CaseStudyModal: React.FC<CaseStudyModalProps> = ({
             SPEC DOCUMENT // {operator.name.toUpperCase()} ARCHITECTURAL ARCHIVE
           </div>
           <div className="flex items-center gap-2">
-            {project.links.github && (
+            {project.links.github && isSafeHttpUrl(project.links.github) && (
               <a
                 href={project.links.github}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1 px-3 py-1.5 bg-[#15150F] text-[#D4CDA4] hover:bg-[#2A2920] transition-colors border border-precision text-[10px] font-bold"
               >
                 <Github size={12} />
                 <span>VIEW REPOSITORY</span>
               </a>
             )}
-            {project.links.demo && (
+            {project.links.demo && isSafeHttpUrl(project.links.demo) && (
               <a
                 href={project.links.demo}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1 px-3 py-1.5 bg-[#C3E54E] text-[#15150F] hover:bg-[#B2D63B] transition-colors border border-precision text-[10px] font-bold"
               >
                 <ExternalLink size={12} />

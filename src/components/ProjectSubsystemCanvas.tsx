@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ProjectData, SubsystemNode } from '../types';
 import { project3DToIso } from './TopologyCanvas';
+import { isSafeHttpUrl } from '../utils/urlSecurity';
 
 interface ProjectSubsystemCanvasProps {
   project: ProjectData;
@@ -70,11 +71,11 @@ export const ProjectSubsystemCanvas: React.FC<ProjectSubsystemCanvasProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {project.links.demo && (
+          {project.links.demo && isSafeHttpUrl(project.links.demo) && (
             <a
               href={project.links.demo}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold uppercase bg-[#C3E54E] text-[#15150F] border border-precision hover:bg-[#B2D63B] transition-colors"
             >
               <ExternalLink size={11} />

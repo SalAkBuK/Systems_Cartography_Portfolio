@@ -36,7 +36,7 @@ import {
   VERIFIED_PROJECTS as PROJECTS,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
-import { groupExperienceByProgression, resolveProjectFromEvidenceKey } from '../utils/portfolioUtils';
+import { groupExperienceByProgression, resolveProjectFromEvidenceKey, isSafeHttpUrl } from '../utils/portfolioUtils';
 import { 
   projectUsesCapability, 
   getCapabilityProfessionalHistory, 
@@ -565,11 +565,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     <span>OPEN FULL ARCHITECTURE SPEC</span>
                   </button>
 
-                  {selectedProject.links.github && (
+                  {selectedProject.links.github && isSafeHttpUrl(selectedProject.links.github) && (
                     <a
                       href={selectedProject.links.github}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="w-full min-h-[38px] lg:min-h-[28px] py-2 lg:py-1.5 bg-[#CBC59B] text-[#15150F] font-semibold text-[11.5px] tracking-wider border border-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Github size={13} />
@@ -577,11 +577,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     </a>
                   )}
 
-                  {selectedProject.links.demo && (
+                  {selectedProject.links.demo && isSafeHttpUrl(selectedProject.links.demo) && (
                     <a
                       href={selectedProject.links.demo}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="w-full min-h-[38px] lg:min-h-[28px] py-2 lg:py-1.5 bg-[#C3E54E] text-[#15150F] font-bold text-[11.5px] tracking-wider border border-[#15150F] hover:bg-[#B2D63B] flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <ExternalLink size={13} />
@@ -1060,11 +1060,11 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                             </button>
                           );
                         })()}
-                        {link.url && (
+                        {link.url && isSafeHttpUrl(link.url) && (
                           <a
                             href={link.url}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="py-1.5 px-2 min-h-[38px] lg:min-h-0 bg-[#CBC59B] text-[#15150F] hover:bg-[#15150F] hover:text-[#D4CDA4] font-bold text-[11px] tracking-wider border border-[#15150F] transition-colors flex items-center gap-1"
                           >
                             <Github size={12} />
@@ -1177,14 +1177,14 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                   <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] font-mono text-[11.5px] flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <span className="opacity-60">GITHUB:</span>
-                      <a href={activeOperator.contact.github} target="_blank" rel="noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                      <a href={activeOperator.contact.github} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
                         {activeOperator.contact.github.replace('https://github.com/', '')}
                       </a>
                     </div>
                     {activeOperator.contact.linkedin && (
                       <div className="flex items-center justify-between">
                         <span className="opacity-60">LINKEDIN:</span>
-                        <a href={activeOperator.contact.linkedin} target="_blank" rel="noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                        <a href={activeOperator.contact.linkedin} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
                           PROFILE INTERFACE
                         </a>
                       </div>

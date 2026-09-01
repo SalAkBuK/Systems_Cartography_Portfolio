@@ -149,7 +149,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </nav>
 
-      <a href={templateRepositoryUrl} target="_blank" rel="noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] font-bold tracking-wider" title="Fork this portfolio repository">
+      <a href={templateRepositoryUrl} target="_blank" rel="noopener noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] font-bold tracking-wider" title="Fork this portfolio repository">
         <span className="flex items-center gap-1.5"><Github size={13} /> USE TEMPLATE</span>
         <span>FORK →</span>
       </a>

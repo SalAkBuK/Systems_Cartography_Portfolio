@@ -172,6 +172,29 @@ test('no deployment URL results in undefined demo link', () => {
   assert.equal(result3, undefined);
 });
 
+test('resolveDeploymentLink rejects javascript:, data:, and non-HTTP schemes (SEC-01 mitigation)', () => {
+  // Dangerous homepage from GitHub API is rejected
+  assert.equal(resolveDeploymentLink('bad-repo', 'javascript:alert(1)'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', 'JAVASCRIPT:alert(document.domain)'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', 'data:text/html,<script>alert(1)</script>'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', 'vbscript:msgbox(1)'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', 'file:///etc/passwd'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', '//evil.com'), undefined);
+  assert.equal(resolveDeploymentLink('bad-repo', 'relative/path/index.html'), undefined);
+
+  // Dangerous manual override is rejected
+  const hostileOverrides = {
+    'bad-override': 'javascript:/* hostile code */',
+    'data-override': 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='
+  };
+  assert.equal(resolveDeploymentLink('bad-override', 'https://fallback.com', hostileOverrides), 'https://fallback.com');
+  assert.equal(resolveDeploymentLink('data-override', null, hostileOverrides), undefined);
+
+  // Valid HTTP and HTTPS links are accepted
+  assert.equal(resolveDeploymentLink('good-repo', 'https://valid-demo.com'), 'https://valid-demo.com');
+  assert.equal(resolveDeploymentLink('good-repo', 'http://valid-demo.com:8080/path?q=1'), 'http://valid-demo.com:8080/path?q=1');
+});
+
 test('canonical LinkedIn field is accessible on PORTFOLIO_CONFIG.operator.contact.linkedin', () => {
   assert.equal(typeof PORTFOLIO_CONFIG.operator.contact.linkedin, 'string');
 });

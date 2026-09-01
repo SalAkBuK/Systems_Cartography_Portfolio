@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Copy, ExternalLink, Github, Linkedin, Mail, Send } from 'lucide-react';
 import { OperatorMetadata } from '../types';
+import { isSafeHttpUrl } from '../utils/urlSecurity';
 
 interface ContactPageProps {
   operator: OperatorMetadata;
@@ -90,13 +91,15 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
                 </div>
               </div>
 
-              <a href={operator.contact.github} target="_blank" rel="noreferrer" className="border border-[#15150F] bg-[#E2DCB9] p-3 flex items-center justify-between hover:bg-[#15150F] hover:text-[#D4CDA4] group">
-                <span className="flex items-center gap-2 font-bold text-[10px]"><Github size={14} /> GITHUB</span>
-                <ExternalLink size={13} />
-              </a>
+              {operator.contact.github && isSafeHttpUrl(operator.contact.github) && (
+                <a href={operator.contact.github} target="_blank" rel="noopener noreferrer" className="border border-[#15150F] bg-[#E2DCB9] p-3 flex items-center justify-between hover:bg-[#15150F] hover:text-[#D4CDA4] group">
+                  <span className="flex items-center gap-2 font-bold text-[10px]"><Github size={14} /> GITHUB</span>
+                  <ExternalLink size={13} />
+                </a>
+              )}
 
-              {operator.contact.linkedin && (
-                <a href={operator.contact.linkedin} target="_blank" rel="noreferrer" className="border border-[#15150F] bg-[#E2DCB9] p-3 flex items-center justify-between hover:bg-[#15150F] hover:text-[#D4CDA4]">
+              {operator.contact.linkedin && isSafeHttpUrl(operator.contact.linkedin) && (
+                <a href={operator.contact.linkedin} target="_blank" rel="noopener noreferrer" className="border border-[#15150F] bg-[#E2DCB9] p-3 flex items-center justify-between hover:bg-[#15150F] hover:text-[#D4CDA4]">
                   <span className="flex items-center gap-2 font-bold text-[10px]"><Linkedin size={14} /> LINKEDIN</span>
                   <ExternalLink size={13} />
                 </a>

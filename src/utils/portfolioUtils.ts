@@ -9,8 +9,10 @@ import { parseGitHubTarget, normalizeGitHubTarget, getGithubOwnerIdentity } from
  * call sites (and their `../utils/portfolioUtils` imports) keep working
  * unchanged.
  */
+import { isSafeHttpUrl, sanitizeHttpUrl } from './urlSecurity';
 export type { ParsedGitHubTarget } from './ownerScope';
 export { parseGitHubTarget, normalizeGitHubTarget };
+export { isSafeHttpUrl, sanitizeHttpUrl };
 
 /**
  * Owner-scopes the generated GitHub snapshot.
@@ -73,14 +75,14 @@ export function resolveDeploymentLink(
   if (projectLinks && typeof projectLinks === 'object') {
     const target = (repoName || '').trim().toLowerCase();
     for (const [key, url] of Object.entries(projectLinks)) {
-      if (key.trim().toLowerCase() === target && typeof url === 'string' && url.trim().length > 0) {
-        return url.trim();
+      if (key.trim().toLowerCase() === target && isSafeHttpUrl(url)) {
+        return url!.trim();
       }
     }
   }
 
-  if (homepage && typeof homepage === 'string' && homepage.trim().length > 0) {
-    return homepage.trim();
+  if (isSafeHttpUrl(homepage)) {
+    return homepage!.trim();
   }
 
   return undefined;

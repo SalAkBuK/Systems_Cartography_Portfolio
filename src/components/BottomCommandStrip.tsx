@@ -6,6 +6,7 @@ import {
   Linkedin
 } from 'lucide-react';
 import { ViewportState, TopologyViewMode } from '../types';
+import { isSafeHttpUrl } from '../utils/urlSecurity';
 
 interface BottomCommandStripProps {
   viewport: ViewportState;
@@ -58,11 +59,11 @@ export const BottomCommandStrip: React.FC<BottomCommandStripProps> = ({
         </div>
 
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          {operatorLinkedin && operatorLinkedin.trim() && (
+          {operatorLinkedin && isSafeHttpUrl(operatorLinkedin) && (
             <a
               href={operatorLinkedin.trim()}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="flex items-center gap-1 px-1.5 py-0.5 border border-[#15150F] bg-[#D4CDA4] hover:bg-[#15150F] hover:text-[#D4CDA4] transition-colors"
               title="View LinkedIn Profile"
             >

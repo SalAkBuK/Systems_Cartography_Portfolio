@@ -16,6 +16,7 @@ import {
   RawRepositoryInspection 
 } from './types';
 import { getGridCoordinatesForIndex, inferAccentColor } from '../githubService';
+import { isSafeHttpUrl } from '../../utils/urlSecurity';
 
 interface MergeParams {
   repo: {
@@ -260,7 +261,7 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     performanceEvidence,
     links: {
       github: repo.html_url,
-      demo: typeof repo.homepage === 'string' && repo.homepage.trim() ? repo.homepage.trim() : undefined,
+      demo: isSafeHttpUrl(repo.homepage) ? repo.homepage!.trim() : undefined,
       caseStudy: false
     }
   };
