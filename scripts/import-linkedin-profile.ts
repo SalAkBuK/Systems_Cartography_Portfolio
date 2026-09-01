@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { promisify } from 'node:util';
@@ -8,6 +8,11 @@ import { buildGeneratedOwnerProfile, parseLinkedInProfileText } from './linkedin
 const execFileAsync = promisify(execFile);
 
 type PositionedText = { str: string; x: number; y: number };
+
+export const MAX_LINKEDIN_PDF_PAGES = 50;
+export const MAX_LINKEDIN_PDF_TEXT_ITEMS = 50_000;
+export const MAX_LINKEDIN_PDF_TEXT_CHARACTERS = 2_000_000;
+export const MAX_LINKEDIN_PDF_BYTES = 15 * 1024 * 1024;
 
 function readArg(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -40,62 +45,84 @@ export async function extractPdfColumnsFromBytes(bytes: Uint8Array): Promise<{ m
   if (!bytes || bytes.length === 0) {
     throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
   }
+  if (bytes.length > MAX_LINKEDIN_PDF_BYTES) {
+    throw new Error('PDF exceeds the 15 MB import limit.');
+  }
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const document = await pdfjs.getDocument({ data: bytes }).promise;
-  const main: string[] = [];
-  const sidebar: string[] = [];
-  let totalItems = 0;
+  try {
+    if (document.numPages > MAX_LINKEDIN_PDF_PAGES) {
+      throw new Error(`PDF exceeds the ${MAX_LINKEDIN_PDF_PAGES}-page import limit.`);
+    }
+    const main: string[] = [];
+    const sidebar: string[] = [];
+    let totalItems = 0;
+    let totalCharacters = 0;
 
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 1 });
-    const content = await page.getTextContent();
-    const positioned: PositionedText[] = [];
-    for (const raw of content.items as unknown[]) {
-      const item = raw as { str?: unknown; transform?: unknown };
-      if (typeof item.str !== 'string' || !Array.isArray(item.transform) || item.transform.length < 6) continue;
-      const x = Number(item.transform[4]);
-      const y = Number(item.transform[5]);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !item.str.trim()) continue;
-      positioned.push({ str: item.str, x, y });
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const positioned: PositionedText[] = [];
+      if (totalItems + content.items.length > MAX_LINKEDIN_PDF_TEXT_ITEMS) {
+        throw new Error(`PDF exceeds the ${MAX_LINKEDIN_PDF_TEXT_ITEMS}-item text extraction limit.`);
+      }
+      for (const raw of content.items as unknown[]) {
+        const item = raw as { str?: unknown; transform?: unknown };
+        if (typeof item.str !== 'string' || !Array.isArray(item.transform) || item.transform.length < 6) continue;
+        const x = Number(item.transform[4]);
+        const y = Number(item.transform[5]);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !item.str.trim()) continue;
+        totalCharacters += item.str.length;
+        if (totalCharacters > MAX_LINKEDIN_PDF_TEXT_CHARACTERS) {
+          throw new Error(`PDF exceeds the ${MAX_LINKEDIN_PDF_TEXT_CHARACTERS}-character text extraction limit.`);
+        }
+        positioned.push({ str: item.str, x, y });
+      }
+
+      totalItems += positioned.length;
+      if (positioned.length === 0) continue;
+
+      const splitX = viewport.width * 0.35;
+      const leftItems = positioned.filter(item => item.x < splitX);
+      const rightItems = positioned.filter(item => item.x >= splitX);
+
+      const isSidebarHeading = (str: string) => /^(?:contact|top\s+skills|skills|certifications|licenses|languages|honors|publications|patents):?$/i.test(str.trim());
+      const hasSidebarHeadings = leftItems.some(item => isSidebarHeading(item.str));
+
+      if (pageNumber === 1 && (hasSidebarHeadings || rightItems.length > 0)) {
+        const pageSidebar = groupIntoLines(leftItems);
+        const pageMain = groupIntoLines(rightItems);
+        main.push(...pageMain);
+        sidebar.push(...pageSidebar);
+      } else if (hasSidebarHeadings) {
+        const pageSidebar = groupIntoLines(leftItems);
+        const pageMain = groupIntoLines(rightItems);
+        main.push(...pageMain);
+        sidebar.push(...pageSidebar);
+      } else {
+        // Full-width page (e.g. Page 2, 3+ with Experience, Education)
+        const pageMain = groupIntoLines(positioned);
+        main.push(...pageMain);
+      }
     }
 
-    totalItems += positioned.length;
-    if (positioned.length === 0) continue;
-
-    const splitX = viewport.width * 0.35;
-    const leftItems = positioned.filter(item => item.x < splitX);
-    const rightItems = positioned.filter(item => item.x >= splitX);
-
-    const isSidebarHeading = (str: string) => /^(?:contact|top\s+skills|skills|certifications|licenses|languages|honors|publications|patents):?$/i.test(str.trim());
-    const hasSidebarHeadings = leftItems.some(item => isSidebarHeading(item.str));
-
-    if (pageNumber === 1 && (hasSidebarHeadings || rightItems.length > 0)) {
-      const pageSidebar = groupIntoLines(leftItems);
-      const pageMain = groupIntoLines(rightItems);
-      main.push(...pageMain);
-      sidebar.push(...pageSidebar);
-    } else if (hasSidebarHeadings) {
-      const pageSidebar = groupIntoLines(leftItems);
-      const pageMain = groupIntoLines(rightItems);
-      main.push(...pageMain);
-      sidebar.push(...pageSidebar);
-    } else {
-      // Full-width page (e.g. Page 2, 3+ with Experience, Education)
-      const pageMain = groupIntoLines(positioned);
-      main.push(...pageMain);
+    if (totalItems === 0 || (main.length === 0 && sidebar.length === 0)) {
+      throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
     }
-  }
 
-  if (totalItems === 0 || (main.length === 0 && sidebar.length === 0)) {
-    throw new Error('No extractable text found in PDF. The file may be scanned, encrypted, or empty.');
+    return { main, sidebar };
+  } finally {
+    await document.destroy?.();
   }
-
-  return { main, sidebar };
 }
 
 export async function extractPdfColumns(pdfPath: string): Promise<{ main: string[]; sidebar: string[] }> {
+  const fileStats = await stat(pdfPath);
+  if (fileStats.size > MAX_LINKEDIN_PDF_BYTES) {
+    throw new Error('PDF exceeds the 15 MB import limit.');
+  }
   const bytes = new Uint8Array(await readFile(pdfPath));
   return extractPdfColumnsFromBytes(bytes);
 }

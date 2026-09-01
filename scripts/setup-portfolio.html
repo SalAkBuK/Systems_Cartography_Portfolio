@@ -582,6 +582,14 @@
         showStatus('Please select a valid PDF file.', 'error');
         return;
       }
+      if (file.type && file.type !== 'application/pdf') {
+        showStatus('Please select a PDF with the application/pdf media type.', 'error');
+        return;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        showStatus('PDF exceeds the 15 MB import limit.', 'error');
+        return;
+      }
       selectedFile = file;
       parsedProfile = null;
       document.getElementById('parsedProfileReview').style.display = 'none';
@@ -768,7 +776,7 @@
           <div
             class="flagship-card"
             draggable="true"
-            ondragstart="handleDragStart(event, '${p.id}', 'available')"
+            ondragstart="handleDragStart(event, ${inlineJsString(p.id)}, 'available')"
             ondragend="handleDragEnd(event)"
           >
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -776,7 +784,7 @@
                 <span class="badge">${escapeHtml(p.code)}</span>
                 <span style="font-weight:700;">${escapeHtml(p.title)}</span>
               </div>
-              <button class="btn btn-sm" onclick="addFlagship('${p.id}')" ${canAdd ? '' : 'disabled'}>+ ADD</button>
+              <button class="btn btn-sm" onclick="addFlagship(${inlineJsString(p.id)})" ${canAdd ? '' : 'disabled'}>+ ADD</button>
             </div>
             <div style="display:flex; gap:6px; align-items:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
               <span>${escapeHtml(p.id)}</span>
@@ -808,7 +816,7 @@
           <div
             class="flagship-card"
             draggable="true"
-            ondragstart="handleDragStart(event, '${id}', 'selected')"
+            ondragstart="handleDragStart(event, ${inlineJsString(id)}, 'selected')"
             ondragover="handleCardDragOver(event)"
             ondragleave="handleCardDragLeave(event)"
             ondrop="handleCardDrop(event, ${index})"
@@ -823,7 +831,7 @@
               <div style="display:flex; gap:4px;">
                 <button class="btn btn-sm" onclick="moveFlagship(${index}, -1)" ${isFirst ? 'disabled' : ''}>↑</button>
                 <button class="btn btn-sm" onclick="moveFlagship(${index}, 1)" ${isLast ? 'disabled' : ''}>↓</button>
-                <button class="btn btn-sm btn-remove" onclick="removeFlagship('${id}')">✕</button>
+                <button class="btn btn-sm btn-remove" onclick="removeFlagship(${inlineJsString(id)})">✕</button>
               </div>
             </div>
             <div style="display:flex; gap:6px; align-items:center; font-size:10px; color:var(--text-muted); margin-top:4px;">
@@ -1108,7 +1116,11 @@
 
     function escapeHtml(str) {
       if (!str) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function inlineJsString(value) {
+      return escapeHtml(JSON.stringify(String(value)));
     }
 
     init();

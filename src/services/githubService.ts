@@ -17,6 +17,7 @@ import {
   RECOGNIZED_CAPABILITY_TAXONOMY 
 } from '../utils/capabilityAssociations';
 import { parseGitHubTarget } from '../utils/portfolioUtils';
+import { sanitizeHttpUrl } from '../utils/urlSecurity';
 import {
   GitHubRequestScheduler,
   GitHubPrimaryRateLimitError,
@@ -31,6 +32,10 @@ export const MAX_MANIFEST_DEPTH = 4;
 export const MAX_MANIFEST_FILES_PER_REPO = 15;
 export const MAX_RAW_README_BYTES = 1024 * 1024;
 export const MAX_RAW_MANIFEST_BYTES = 512 * 1024;
+export const MAX_GITHUB_API_JSON_BYTES = 8 * 1024 * 1024;
+export const MAX_GITHUB_REPOSITORIES = 250;
+export const MAX_GITHUB_TREE_ENTRIES = 20_000;
+export const DEFAULT_GITHUB_RAW_TIMEOUT_MS = 15_000;
 
 const RAW_GITHUB_ORIGIN = 'https://raw.githubusercontent.com';
 const README_FILE_PRIORITY = [
@@ -55,6 +60,19 @@ export interface GitHubUser {
   blog: string | null;
 }
 
+function boundedString(value: unknown, maxLength: number): string {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function boundedNullableString(value: unknown, maxLength: number): string | null {
+  const result = boundedString(value, maxLength);
+  return result || null;
+}
+
+function safeFiniteNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 export function sanitizeGitHubUser(raw: any): GitHubUser {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -72,17 +90,17 @@ export function sanitizeGitHubUser(raw: any): GitHubUser {
     };
   }
   return {
-    login: typeof raw.login === 'string' ? raw.login : '',
-    name: typeof raw.name === 'string' ? raw.name : null,
-    avatar_url: typeof raw.avatar_url === 'string' ? raw.avatar_url : '',
-    bio: typeof raw.bio === 'string' ? raw.bio : null,
-    html_url: typeof raw.html_url === 'string' ? raw.html_url : '',
-    public_repos: typeof raw.public_repos === 'number' ? raw.public_repos : 0,
-    followers: typeof raw.followers === 'number' ? raw.followers : 0,
-    following: typeof raw.following === 'number' ? raw.following : 0,
-    company: typeof raw.company === 'string' ? raw.company : null,
-    location: typeof raw.location === 'string' ? raw.location : null,
-    blog: typeof raw.blog === 'string' ? raw.blog : null
+    login: boundedString(raw.login, 100),
+    name: boundedNullableString(raw.name, 200),
+    avatar_url: sanitizeHttpUrl(boundedString(raw.avatar_url, 2048)) || '',
+    bio: boundedNullableString(raw.bio, 1000),
+    html_url: sanitizeHttpUrl(boundedString(raw.html_url, 2048)) || '',
+    public_repos: safeFiniteNumber(raw.public_repos),
+    followers: safeFiniteNumber(raw.followers),
+    following: safeFiniteNumber(raw.following),
+    company: boundedNullableString(raw.company, 200),
+    location: boundedNullableString(raw.location, 200),
+    blog: sanitizeHttpUrl(boundedString(raw.blog, 2048)) || null
   };
 }
 
@@ -115,6 +133,58 @@ export interface GitHubRepoRaw {
     login: string;
     avatar_url: string;
     html_url: string;
+  };
+}
+
+/** Validate and bound the subset of a GitHub repository payload used by the portfolio. */
+export function sanitizeGitHubRepo(raw: unknown): GitHubRepoRaw | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  const ownerValue = value.owner && typeof value.owner === 'object'
+    ? value.owner as Record<string, unknown>
+    : null;
+  const name = boundedString(value.name, 300);
+  const ownerLogin = boundedString(ownerValue?.login, 100);
+  const id = safeFiniteNumber(value.id);
+  if (!name || !ownerLogin || id <= 0) return null;
+
+  const canonicalUrl = `https://github.com/${encodeURIComponent(ownerLogin)}/${encodeURIComponent(name)}`;
+  const licenseValue = value.license && typeof value.license === 'object'
+    ? value.license as Record<string, unknown>
+    : null;
+
+  return {
+    id,
+    name,
+    full_name: boundedString(value.full_name, 500) || `${ownerLogin}/${name}`,
+    description: boundedNullableString(value.description, 2000),
+    html_url: sanitizeHttpUrl(boundedString(value.html_url, 2048)) || canonicalUrl,
+    homepage: sanitizeHttpUrl(boundedString(value.homepage, 2048)) || null,
+    stargazers_count: safeFiniteNumber(value.stargazers_count),
+    forks_count: safeFiniteNumber(value.forks_count),
+    open_issues_count: safeFiniteNumber(value.open_issues_count),
+    watchers_count: safeFiniteNumber(value.watchers_count),
+    language: boundedNullableString(value.language, 100),
+    topics: Array.isArray(value.topics)
+      ? value.topics.map(topic => boundedString(topic, 100)).filter(Boolean).slice(0, 100)
+      : [],
+    size: safeFiniteNumber(value.size),
+    created_at: boundedString(value.created_at, 100),
+    updated_at: boundedString(value.updated_at, 100),
+    pushed_at: boundedString(value.pushed_at, 100) || undefined,
+    archived: value.archived === true,
+    fork: value.fork === true,
+    default_branch: boundedString(value.default_branch, 300) || 'main',
+    license: licenseValue ? {
+      key: boundedString(licenseValue.key, 100) || undefined,
+      name: boundedString(licenseValue.name, 200) || undefined,
+      spdx_id: boundedString(licenseValue.spdx_id, 100) || undefined
+    } : null,
+    owner: {
+      login: ownerLogin,
+      avatar_url: sanitizeHttpUrl(boundedString(ownerValue?.avatar_url, 2048)) || '',
+      html_url: sanitizeHttpUrl(boundedString(ownerValue?.html_url, 2048)) || `https://github.com/${encodeURIComponent(ownerLogin)}`
+    }
   };
 }
 
@@ -294,6 +364,18 @@ async function readBoundedResponseText(res: Response, maxBytes: number, context:
   }
 }
 
+async function readBoundedJsonResponse(res: Response, maxBytes: number, context: string): Promise<unknown> {
+  // Test doubles from older callers may expose only json(); real fetch responses
+  // always take the bounded text path.
+  if (typeof res.text !== 'function' && typeof res.json === 'function') return res.json();
+  const text = await readBoundedResponseText(res, maxBytes, context);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${context} returned invalid JSON.`);
+  }
+}
+
 async function fetchPublicRawText(
   owner: string,
   repo: string,
@@ -304,10 +386,18 @@ async function fetchPublicRawText(
 ): Promise<{ status: number; statusText: string; text?: string }> {
   const rawFetchImpl = options?.rawFetchImpl || options?.fetchImpl || globalThis.fetch;
   const rawUrl = buildGitHubRawContentUrl(owner, repo, ref, filePath);
-  const res = await rawFetchImpl(rawUrl, {
-    headers: { Accept: 'text/plain' },
-    redirect: 'error'
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_GITHUB_RAW_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await rawFetchImpl(rawUrl, {
+      headers: { Accept: 'text/plain' },
+      redirect: 'error',
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (res.url) {
     const finalUrl = new URL(res.url);
@@ -878,12 +968,19 @@ export async function fetchRepoInspection(
     handleGitHubHttpError(treeRes, `fetching git tree for "${cleanOwner}/${cleanRepo}"`);
   }
 
-  const treeData = await treeRes.json();
+  const treeData = await readBoundedJsonResponse(
+    treeRes,
+    MAX_GITHUB_API_JSON_BYTES,
+    `Git tree for "${cleanOwner}/${cleanRepo}"`
+  ) as { truncated?: unknown; tree?: unknown };
   if (treeData.truncated === true) {
     throw new Error(`Tree truncated for "${cleanOwner}/${cleanRepo}". Deep inspection incomplete.`);
   }
   if (!treeData || !Array.isArray(treeData.tree)) {
     throw new Error(`Incomplete inspection for "${cleanOwner}/${cleanRepo}": Git tree payload is missing or not an array.`);
+  }
+  if (treeData.tree.length > MAX_GITHUB_TREE_ENTRIES) {
+    throw new Error(`Git tree for "${cleanOwner}/${cleanRepo}" exceeds the ${MAX_GITHUB_TREE_ENTRIES}-entry inspection limit.`);
   }
   inspection.treeFiles = treeData.tree
     .filter((entry: { path?: unknown; type?: unknown }) => typeof entry.path === 'string' && (!entry.type || entry.type === 'blob'))
@@ -1187,7 +1284,7 @@ export async function discoverGitHubInventory(
     handleGitHubHttpError(userRes, `fetching GitHub profile for "@${cleanUser}"`);
   }
 
-  const rawUser = await userRes.json();
+  const rawUser = await readBoundedJsonResponse(userRes, MAX_GITHUB_API_JSON_BYTES, `GitHub profile for "@${cleanUser}"`);
   const user = sanitizeGitHubUser(rawUser);
 
   // 2. Fetch Repositories with pagination
@@ -1210,14 +1307,25 @@ export async function discoverGitHubInventory(
       }
     }
 
-    const pageRepos: GitHubRepoRaw[] = await reposRes.json();
-    if (!Array.isArray(pageRepos) || pageRepos.length === 0) {
+    const rawPageRepos = await readBoundedJsonResponse(
+      reposRes,
+      MAX_GITHUB_API_JSON_BYTES,
+      `GitHub repository page ${page} for "${cleanUser}"`
+    );
+    if (!Array.isArray(rawPageRepos)) {
+      throw new Error(`GitHub repository page ${page} for "${cleanUser}" is not an array.`);
+    }
+    if (rawPageRepos.length === 0) {
       break;
     }
 
-    allRawRepos.push(...pageRepos);
+    const pageRepos = rawPageRepos
+      .map(sanitizeGitHubRepo)
+      .filter((repo): repo is GitHubRepoRaw => repo !== null);
 
-    if (pageRepos.length < 100) {
+    allRawRepos.push(...pageRepos.slice(0, MAX_GITHUB_REPOSITORIES - allRawRepos.length));
+
+    if (rawPageRepos.length < 100 || allRawRepos.length >= MAX_GITHUB_REPOSITORIES) {
       break;
     }
     page++;
@@ -1380,7 +1488,12 @@ export async function fetchGitHubRepoData(
     handleGitHubHttpError(repoRes, `fetching repository "${cleanOwner}/${cleanRepo}"`);
   }
 
-  const rawRepo: GitHubRepoRaw = await repoRes.json();
+  const rawRepo = sanitizeGitHubRepo(
+    await readBoundedJsonResponse(repoRes, MAX_GITHUB_API_JSON_BYTES, `GitHub repository "${cleanOwner}/${cleanRepo}"`)
+  );
+  if (!rawRepo) {
+    throw new Error(`GitHub repository "${cleanOwner}/${cleanRepo}" returned an invalid payload.`);
+  }
 
   // Try fetching user profile of repo owner
   let user: GitHubUser | null = null;
@@ -1392,7 +1505,9 @@ export async function fetchGitHubRepoData(
       { operation: `fetching GitHub profile for "@${cleanOwner}"` }
     );
     if (userRes.ok) {
-      user = sanitizeGitHubUser(await userRes.json());
+      user = sanitizeGitHubUser(
+        await readBoundedJsonResponse(userRes, MAX_GITHUB_API_JSON_BYTES, `GitHub profile for "@${cleanOwner}"`)
+      );
     }
   } catch {
     // Non-fatal

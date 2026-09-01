@@ -15,6 +15,7 @@ import {
   VERIFIED_EXPERIENCE as EXPERIENCE_HISTORY,
   VERIFIED_SKILLS as INFRASTRUCTURE_SKILLS
 } from '../data/verifiedPortfolioData';
+import { sanitizeHttpUrl } from '../utils/urlSecurity';
 
 interface LeftNavigationRailProps {
   activeView: ActiveView;
@@ -56,7 +57,7 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
     'Claims require repository evidence.'
   ];
 
-  const navItems: { id: ActiveView; num: string; label: string; count?: number; icon: React.ComponentType<{ size: number }> }[] = [
+  const navItems: { id: ActiveView; num: string; label: string; count?: number; icon: React.ComponentType<{ size: number; className?: string }> }[] = [
     { id: 'system_overview', num: '00', label: 'SYSTEM OVERVIEW', icon: Compass },
     { id: 'identity', num: '01', label: 'OPERATOR PROFILE', icon: User },
     { id: 'experience', num: '02', label: 'PROFESSIONAL EXPERIENCE', count: (experience || []).length, icon: History },
@@ -149,10 +150,12 @@ export const LeftNavigationRail: React.FC<LeftNavigationRailProps> = ({
         })}
       </nav>
 
-      <a href={templateRepositoryUrl} target="_blank" rel="noopener noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] font-bold tracking-wider" title="Fork this portfolio repository">
-        <span className="flex items-center gap-1.5"><Github size={13} /> USE TEMPLATE</span>
-        <span>FORK →</span>
-      </a>
+      {sanitizeHttpUrl(templateRepositoryUrl) && (
+        <a href={sanitizeHttpUrl(templateRepositoryUrl)} target="_blank" rel="noopener noreferrer" className="min-h-[38px] lg:min-h-[30px] p-2.5 lg:p-2 border-b border-[#15150F] bg-[#15150F] text-[#C3E54E] hover:bg-[#22211A] flex items-center justify-between text-[11px] font-bold tracking-wider" title="Fork this portfolio repository">
+          <span className="flex items-center gap-1.5"><Github size={13} /> USE TEMPLATE</span>
+          <span>FORK →</span>
+        </a>
+      )}
 
       {/* Topology View Mode & Search Toolbar */}
       <div className="p-2.5 border-b border-[#15150F] bg-[#CBC59B]/30 flex flex-col gap-2">

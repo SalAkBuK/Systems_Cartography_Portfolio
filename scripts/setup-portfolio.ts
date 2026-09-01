@@ -18,7 +18,7 @@ import * as http from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as crypto from 'node:crypto';
-import { parseLinkedInPdfBytes, writeGeneratedOwnerProfile, inferGitHubTarget } from './import-linkedin-profile';
+import { MAX_LINKEDIN_PDF_BYTES, parseLinkedInPdfBytes, writeGeneratedOwnerProfile, inferGitHubTarget } from './import-linkedin-profile';
 import { generateGitHubSnapshot, syncGitHubSnapshotToFile } from './sync-github-snapshot';
 import { getGitHubAuthStatus } from './githubAuthResolver';
 import { runOwnerSetupChecks } from './check-owner-setup';
@@ -38,6 +38,7 @@ import type { GeneratedOwnerProfile, GitHubSnapshotMetadata } from '../src/types
 import type { GitHubSyncResult } from '../src/services/githubService';
 import { sanitizeGitHubUser } from '../src/services/githubService';
 import type { OwnerPortfolioPreferences } from '../src/config/ownerPreferences';
+import { sanitizeEmailAddress, sanitizeHttpUrl } from '../src/utils/urlSecurity';
 
 /**
  * A fork inherits the previous owner's generated files (ownerProfile,
@@ -116,6 +117,51 @@ const PREFERENCES_PATH = path.resolve(process.cwd(), 'src/config/ownerPreference
 const HTML_FILE_PATH = path.resolve(process.cwd(), 'scripts/setup-portfolio.html');
 
 export const WIZARD_SESSION_CSRF_TOKEN = crypto.randomBytes(24).toString('hex');
+export const MAX_SETUP_PDF_SIZE = MAX_LINKEDIN_PDF_BYTES;
+
+export function validateOwnerProfilePayload(value: unknown): value is GeneratedOwnerProfile {
+  if (!value || typeof value !== 'object') return false;
+  const profile = value as GeneratedOwnerProfile;
+  const operator = profile.operator;
+  if (!operator || typeof operator !== 'object') return false;
+  if (
+    !profile.source || profile.source.kind !== 'linkedin_pdf'
+    || typeof profile.source.importedAt !== 'string'
+    || typeof profile.source.reviewed !== 'boolean'
+    || !Array.isArray(profile.source.warnings) || profile.source.warnings.length > 200
+  ) return false;
+  const boundedStrings = [
+    operator.name,
+    operator.role,
+    operator.location,
+    operator.focus,
+    operator.systemManifesto,
+    profile.githubTarget,
+    operator.contact?.email,
+    operator.contact?.linkedin
+  ];
+  if (boundedStrings.some(item => typeof item !== 'string' || item.length > 10_000)) return false;
+  if (!operator.name.trim() || operator.name.length > 200) return false;
+  if (operator.contact.email && !sanitizeEmailAddress(operator.contact.email)) return false;
+  if (operator.contact.linkedin && !sanitizeHttpUrl(operator.contact.linkedin)) return false;
+  if (profile.githubTarget && !sanitizeHttpUrl(profile.githubTarget)) return false;
+  if (
+    !Array.isArray(profile.experience) || profile.experience.length > 200
+    || !Array.isArray(profile.skills) || profile.skills.length > 200
+    || !Array.isArray(profile.certifications) || profile.certifications.length > 200
+    || !Array.isArray(profile.education) || profile.education.length > 200
+    || !Array.isArray(operator.primaryStack) || operator.primaryStack.length > 200
+  ) return false;
+  if (
+    !operator.primaryStack.every(item => typeof item === 'string' && item.length <= 200)
+    || !profile.skills.every(item => typeof item === 'string' && item.length <= 200)
+    || !profile.certifications.every(item => typeof item === 'string' && item.length <= 1000)
+    || !profile.education.every(item => item && typeof item.raw === 'string' && item.raw.length <= 2000)
+    || !profile.source.warnings.every(item => typeof item === 'string' && item.length <= 2000)
+    || !profile.experience.every(item => item && typeof item.id === 'string' && typeof item.role === 'string' && typeof item.organization === 'string')
+  ) return false;
+  return true;
+}
 
 export interface WizardRuntimeState {
   ownerProfile: GeneratedOwnerProfile;
@@ -383,19 +429,26 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         return;
       }
 
+      const contentType = String(req.headers['content-type'] || '').toLowerCase();
+      const isRawPdf = contentType.split(';', 1)[0].trim() === 'application/pdf';
+      const isMultipartPdf = contentType.startsWith('multipart/form-data;') && contentType.includes('boundary=');
+      if (!isRawPdf && !isMultipartPdf) {
+        sendJson(415, { success: false, error: 'Unsupported media type: upload application/pdf.' });
+        return;
+      }
+
       const chunks: Buffer[] = [];
       let totalSize = 0;
-      const MAX_PDF_SIZE = 15 * 1024 * 1024; // 15MB
 
       req.on('data', chunk => {
         totalSize += chunk.length;
-        if (totalSize <= MAX_PDF_SIZE) {
+        if (totalSize <= MAX_SETUP_PDF_SIZE) {
           chunks.push(chunk);
         }
       });
 
       req.on('end', async () => {
-        if (totalSize > MAX_PDF_SIZE) {
+        if (totalSize > MAX_SETUP_PDF_SIZE) {
           sendJson(413, { success: false, error: 'PDF exceeds maximum size limit (15MB)' });
           return;
         }
@@ -408,14 +461,13 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
         const pdfSignature = Buffer.from('%PDF');
         const pdfStart = buffer.indexOf(pdfSignature);
-        if (pdfStart === -1) {
+        if (pdfStart === -1 || (isRawPdf && pdfStart !== 0)) {
           sendJson(400, { success: false, error: 'Invalid file: PDF magic header (%PDF) not found' });
           return;
         }
 
         let pdfBytes: Uint8Array;
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
+        if (isMultipartPdf) {
           const endBoundaryIndex = buffer.lastIndexOf(Buffer.from('\r\n--'));
           const end = endBoundaryIndex > pdfStart ? endBoundaryIndex : buffer.length;
           pdfBytes = new Uint8Array(buffer.subarray(pdfStart, end));
@@ -459,8 +511,8 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
       try {
         const parsed = await readBoundedJsonBody<{ profile?: GeneratedOwnerProfile }>(req);
-        if (!parsed.profile || !parsed.profile.operator?.name) {
-          sendJson(400, { success: false, error: 'Invalid profile data: operator name is required' });
+        if (!validateOwnerProfilePayload(parsed.profile)) {
+          sendJson(400, { success: false, error: 'Invalid or oversized profile data' });
           return;
         }
 

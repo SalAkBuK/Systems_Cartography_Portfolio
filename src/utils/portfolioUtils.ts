@@ -298,20 +298,20 @@ export interface GroupedExperienceEntry extends ExperienceNode {
  * Used by RightInspectorPanel (Experience Index & Career History views).
  */
 export function groupExperienceByProgression(experience: ExperienceNode[]): GroupedExperienceEntry[] {
-  const groups: Record<string, ExperienceNode[]> = {};
+  const groups = new Map<string, ExperienceNode[]>();
   const order: string[] = [];
 
   for (const exp of experience) {
     const groupKey = (exp.progressionGroup || exp.organization || '').trim().toLowerCase();
-    if (!groups[groupKey]) {
-      groups[groupKey] = [];
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, []);
       order.push(groupKey);
     }
-    groups[groupKey].push(exp);
+    groups.get(groupKey)!.push(exp);
   }
 
   return order.map(groupKey => {
-    const groupNodes = groups[groupKey];
+    const groupNodes = groups.get(groupKey)!;
     // Find primary or latest role in progression group (with progressionRoles or highest progressionOrder)
     const primaryNode = groupNodes.find(n => n.progressionRoles && n.progressionRoles.length > 0)
       || [...groupNodes].sort((a, b) => (b.progressionOrder || 0) - (a.progressionOrder || 0))[0]

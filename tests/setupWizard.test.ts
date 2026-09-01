@@ -272,6 +272,7 @@ test('7. setup:portfolio: rejects empty and invalid PDF uploads purely in-memory
 
 test('8. setup:portfolio: live runtimeState updates immediately across same session without server restart', async () => {
   const initialProfile: any = {
+    source: { kind: 'linkedin_pdf', importedAt: new Date().toISOString(), reviewed: true, warnings: [] },
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     sourceIdentifier: 'test-source',
@@ -280,10 +281,13 @@ test('8. setup:portfolio: live runtimeState updates immediately across same sess
       name: 'Initial Developer',
       role: 'Junior Engineer',
       location: 'Remote',
+      focus: 'Initial focus',
+      primaryStack: [],
+      systemManifesto: 'Initial Summary',
       status: 'AVAILABLE // INITIAL',
       headline: 'Initial Headline',
       summary: 'Initial Summary',
-      contact: { github: 'https://github.com/initial-owner' }
+      contact: { github: 'https://github.com/initial-owner', email: '', linkedin: '' }
     },
     experience: [],
     skills: [],

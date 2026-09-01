@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSafeHttpUrl, sanitizeHttpUrl } from '../src/utils/urlSecurity';
+import { buildMailtoUrl, isSafeHttpUrl, sanitizeEmailAddress, sanitizeHttpUrl } from '../src/utils/urlSecurity';
 import { applyProjectLinkOverrides } from '../src/utils/portfolioUtils';
 import type { ProjectData } from '../src/types';
 
@@ -101,4 +101,22 @@ test('6. applyProjectLinkOverrides strips malicious demo URLs from projects', ()
     'malicious-repo': 'data:text/html,<script>alert(1)</script>'
   });
   assert.equal(withDangerousOverride[0].links.demo, undefined);
+});
+
+test('7. HTTP URL validation rejects credentials and control-character normalization tricks', () => {
+  assert.equal(sanitizeHttpUrl('https://user:password@example.com/private'), undefined);
+  assert.equal(sanitizeHttpUrl('http:\n//example.com'), undefined);
+  assert.equal(sanitizeHttpUrl('https://example.com/path\u007fmore'), undefined);
+  assert.equal(sanitizeHttpUrl('https://example.com/%0Ajavascript:alert(1)'), 'https://example.com/%0Ajavascript:alert(1)');
+});
+
+test('8. email and mailto builders reject header injection and encode user-supplied fields', () => {
+  assert.equal(sanitizeEmailAddress('owner@example.com'), 'owner@example.com');
+  assert.equal(sanitizeEmailAddress('owner@example.com\r\nBcc: attacker@example.com'), undefined);
+  assert.equal(sanitizeEmailAddress('not-an-email'), undefined);
+  assert.equal(buildMailtoUrl('owner@example.com', {
+    subject: 'Hello & review',
+    body: 'Line one\nLine two'
+  }), 'mailto:owner@example.com?subject=Hello%20%26%20review&body=Line%20one%0ALine%20two');
+  assert.equal(buildMailtoUrl('owner@example.com\nBcc: attacker@example.com'), undefined);
 });

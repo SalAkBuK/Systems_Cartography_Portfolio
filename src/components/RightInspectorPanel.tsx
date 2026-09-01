@@ -1175,16 +1175,18 @@ export const RightInspectorPanel: React.FC<RightInspectorPanelProps> = ({
                     COMMUNICATION &amp; VERIFICATION CHANNELS
                   </div>
                   <div className="p-2.5 border border-[#15150F] bg-[#E2DCB9] font-mono text-[11.5px] flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="opacity-60">GITHUB:</span>
-                      <a href={activeOperator.contact.github} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
-                        {activeOperator.contact.github.replace('https://github.com/', '')}
-                      </a>
-                    </div>
-                    {activeOperator.contact.linkedin && (
+                    {isSafeHttpUrl(activeOperator.contact.github) && (
+                      <div className="flex items-center justify-between">
+                        <span className="opacity-60">GITHUB:</span>
+                        <a href={activeOperator.contact.github.trim()} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                          {activeOperator.contact.github.trim().replace('https://github.com/', '')}
+                        </a>
+                      </div>
+                    )}
+                    {activeOperator.contact.linkedin && isSafeHttpUrl(activeOperator.contact.linkedin) && (
                       <div className="flex items-center justify-between">
                         <span className="opacity-60">LINKEDIN:</span>
-                        <a href={activeOperator.contact.linkedin} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
+                        <a href={activeOperator.contact.linkedin.trim()} target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-[#2E6B3A]">
                           PROFILE INTERFACE
                         </a>
                       </div>

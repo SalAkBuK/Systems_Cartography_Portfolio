@@ -440,27 +440,27 @@ function renderHtmlPage(): string {
           <div
             class="card"
             draggable="true"
-            ondragstart="handleDragStart(event, '\${p.id}', 'available')"
+            ondragstart="handleDragStart(event, \${inlineJsString(p.id)}, 'available')"
             ondragend="handleDragEnd(event)"
           >
             <div class="card-top">
               <div class="card-title-group">
-                <span class="badge">\${p.code}</span>
+                <span class="badge">\${escapeHtml(p.code)}</span>
                 <span class="card-title">\${escapeHtml(p.title)}</span>
               </div>
               <button
                 class="btn btn-sm"
-                onclick="addFlagship('\${p.id}')"
+                onclick="addFlagship(\${inlineJsString(p.id)})"
                 \${canAdd ? '' : 'disabled style=\"opacity: 0.5; cursor: not-allowed;\"'}
               >
                 + ADD
               </button>
             </div>
             <div class="card-meta">
-              <span class="card-id">\${p.id}</span>
-              <span class="tag">\${p.category}</span>
-              <span class="tag">\${p.status}</span>
-              <span class="tag">\${p.year}</span>
+              <span class="card-id">\${escapeHtml(p.id)}</span>
+              <span class="tag">\${escapeHtml(p.category)}</span>
+              <span class="tag">\${escapeHtml(p.status)}</span>
+              <span class="tag">\${escapeHtml(p.year)}</span>
               \${p.techStack.map(t => \`<span class="tag">\${escapeHtml(t)}</span>\`).join('')}
             </div>
           </div>
@@ -489,7 +489,7 @@ function renderHtmlPage(): string {
           <div
             class="card"
             draggable="true"
-            ondragstart="handleDragStart(event, '\${id}', 'selected')"
+            ondragstart="handleDragStart(event, \${inlineJsString(id)}, 'selected')"
             ondragover="handleCardDragOver(event)"
             ondragleave="handleCardDragLeave(event)"
             ondrop="handleCardDrop(event, \${index})"
@@ -498,19 +498,19 @@ function renderHtmlPage(): string {
             <div class="card-top">
               <div class="card-title-group">
                 <span class="rank-badge">\${rankStr}</span>
-                <span class="badge">\${p.code}</span>
+                <span class="badge">\${escapeHtml(p.code)}</span>
                 <span class="card-title">\${escapeHtml(p.title)}</span>
               </div>
               <div class="card-actions">
                 <button class="btn btn-sm" onclick="moveFlagship(\${index}, -1)" \${isFirst ? 'disabled style=\"opacity:0.3\"' : ''} title="Move Up">?</button>
                 <button class="btn btn-sm" onclick="moveFlagship(\${index}, 1)" \${isLast ? 'disabled style=\"opacity:0.3\"' : ''} title="Move Down">?</button>
-                <button class="btn btn-sm btn-remove" onclick="removeFlagship('\${id}')" title="Remove">?</button>
+                <button class="btn btn-sm btn-remove" onclick="removeFlagship(\${inlineJsString(id)})" title="Remove">?</button>
               </div>
             </div>
             <div class="card-meta">
-              <span class="card-id">\${p.id}</span>
-              <span class="tag">\${p.category}</span>
-              <span class="tag">\${p.year}</span>
+              <span class="card-id">\${escapeHtml(p.id)}</span>
+              <span class="tag">\${escapeHtml(p.category)}</span>
+              <span class="tag">\${escapeHtml(p.year)}</span>
               \${p.techStack.map(t => \`<span class="tag">\${escapeHtml(t)}</span>\`).join('')}
             </div>
           </div>
@@ -671,7 +671,12 @@ function renderHtmlPage(): string {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function inlineJsString(value) {
+      return escapeHtml(JSON.stringify(String(value)));
     }
 
     init();

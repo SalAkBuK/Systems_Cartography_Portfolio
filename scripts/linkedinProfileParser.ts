@@ -26,6 +26,10 @@ export interface ParsedLinkedInProfile {
 
 export const NO_EXPERIENCE_WARNING =
   'No Experience section was found in this LinkedIn profile. You can continue setup and add professional experience later.';
+export const MAX_LINKEDIN_INPUT_LINES = 20_000;
+export const MAX_LINKEDIN_INPUT_CHARACTERS = 2_000_000;
+export const MAX_LINKEDIN_PROFILE_ENTRIES = 200;
+export const MAX_LINKEDIN_SUMMARY_LENGTH = 10_000;
 
 const MONTH_NAMES: Array<{ name: string; index: number; patterns: string[] }> = [
   { name: 'January', index: 1, patterns: ['january', 'jan'] },
@@ -433,6 +437,14 @@ function firstSentence(text: string): string {
 }
 
 export function parseLinkedInProfileText(mainInput: string[], sidebarInput: string[]): ParsedLinkedInProfile {
+  const inputLines = [...mainInput, ...sidebarInput];
+  if (inputLines.length > MAX_LINKEDIN_INPUT_LINES) {
+    throw new Error(`LinkedIn text exceeds the ${MAX_LINKEDIN_INPUT_LINES}-line import limit.`);
+  }
+  const inputCharacters = inputLines.reduce((total, line) => total + line.length, 0);
+  if (inputCharacters > MAX_LINKEDIN_INPUT_CHARACTERS) {
+    throw new Error(`LinkedIn text exceeds the ${MAX_LINKEDIN_INPUT_CHARACTERS}-character import limit.`);
+  }
   const mainLines = normalizeLinkedInLines(mainInput);
   const sidebarLines = normalizeLinkedInLines(sidebarInput);
 
@@ -510,13 +522,13 @@ export function parseLinkedInProfileText(mainInput: string[], sidebarInput: stri
     name,
     headline,
     location,
-    summary: normalizeLinkedInLine(summary),
+    summary: normalizeLinkedInLine(summary).slice(0, MAX_LINKEDIN_SUMMARY_LENGTH),
     email: contact.email,
     linkedin: contact.linkedin,
-    topSkills,
-    certifications,
-    education,
-    experience: parsedExperience,
+    topSkills: topSkills.slice(0, MAX_LINKEDIN_PROFILE_ENTRIES),
+    certifications: certifications.slice(0, MAX_LINKEDIN_PROFILE_ENTRIES),
+    education: education.slice(0, MAX_LINKEDIN_PROFILE_ENTRIES),
+    experience: parsedExperience.slice(0, MAX_LINKEDIN_PROFILE_ENTRIES),
     warnings
   };
 }

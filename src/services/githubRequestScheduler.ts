@@ -135,6 +135,8 @@ export interface GitHubRequestSchedulerOptions {
   maxRetries?: number;
   /** Base delay for retry backoff; attempt N waits `retryBaseDelayMs * N` ms. */
   retryBaseDelayMs?: number;
+  /** Per-attempt network timeout. */
+  requestTimeoutMs?: number;
   sleepImpl?: (ms: number) => Promise<void>;
   nowImpl?: () => number;
 }
@@ -143,6 +145,7 @@ export const DEFAULT_GITHUB_SCHEDULER_MAX_CONCURRENCY = 2;
 export const DEFAULT_GITHUB_SCHEDULER_MIN_SPACING_MS = 120;
 export const DEFAULT_GITHUB_SCHEDULER_MAX_RETRIES = 1;
 export const DEFAULT_GITHUB_SCHEDULER_RETRY_BASE_DELAY_MS = 50;
+export const DEFAULT_GITHUB_REQUEST_TIMEOUT_MS = 15_000;
 
 function defaultSleep(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
@@ -172,6 +175,7 @@ export class GitHubRequestScheduler {
   private readonly minSpacingMs: number;
   private readonly maxRetries: number;
   private readonly retryBaseDelayMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly sleepImpl: (ms: number) => Promise<void>;
   private readonly nowImpl: () => number;
 
@@ -187,6 +191,7 @@ export class GitHubRequestScheduler {
     this.minSpacingMs = Math.max(0, options?.minSpacingMs ?? DEFAULT_GITHUB_SCHEDULER_MIN_SPACING_MS);
     this.maxRetries = Math.max(0, options?.maxRetries ?? DEFAULT_GITHUB_SCHEDULER_MAX_RETRIES);
     this.retryBaseDelayMs = Math.max(0, options?.retryBaseDelayMs ?? DEFAULT_GITHUB_SCHEDULER_RETRY_BASE_DELAY_MS);
+    this.requestTimeoutMs = Math.max(1, options?.requestTimeoutMs ?? DEFAULT_GITHUB_REQUEST_TIMEOUT_MS);
     this.sleepImpl = options?.sleepImpl || defaultSleep;
     this.nowImpl = options?.nowImpl || (() => Date.now());
   }
@@ -258,7 +263,22 @@ export class GitHubRequestScheduler {
       let attempt = 0;
       for (;;) {
         try {
-          const res = await fetchImpl(url, init);
+          const controller = new AbortController();
+          const upstreamSignal = init.signal;
+          const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+          if (upstreamSignal?.aborted) abortFromUpstream();
+          else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+          const timeout = setTimeout(
+            () => controller.abort(new Error(`GitHub request timed out after ${this.requestTimeoutMs}ms.`)),
+            this.requestTimeoutMs
+          );
+          let res: Response;
+          try {
+            res = await fetchImpl(url, { ...init, signal: controller.signal });
+          } finally {
+            clearTimeout(timeout);
+            upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+          }
           const parsedRateLimit = parseGitHubRateLimitHeaders(res.headers);
           if (parsedRateLimit) this.rateLimit = parsedRateLimit;
 
@@ -282,6 +302,7 @@ export class GitHubRequestScheduler {
           return res;
         } catch (err) {
           if (err instanceof GitHubPrimaryRateLimitError) throw err;
+          if (init.signal?.aborted) throw err;
           if (attempt < this.maxRetries) {
             attempt++;
             await this.sleepImpl(this.retryBaseDelayMs * attempt);

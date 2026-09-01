@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Check, Copy, ExternalLink, Github, Linkedin, Mail, Send } from 'lucide-react';
 import { OperatorMetadata } from '../types';
-import { isSafeHttpUrl } from '../utils/urlSecurity';
+import { buildMailtoUrl, isSafeHttpUrl, sanitizeEmailAddress, sanitizeHttpUrl } from '../utils/urlSecurity';
+import { CONTACT_FIELD_LIMITS, validateContactInput, type ContactInput } from '../utils/contactValidation';
 
 interface ContactPageProps {
   operator: OperatorMetadata;
@@ -14,45 +15,84 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
   const [copied, setCopied] = useState(false);
   const [submissionState, setSubmissionState] = useState<SubmissionState>('idle');
   const [statusMessage, setStatusMessage] = useState('');
+  const submissionInFlightRef = useRef(false);
+  const safeOwnerEmail = sanitizeEmailAddress(operator.contact.email);
+  const directMailtoUrl = buildMailtoUrl(safeOwnerEmail);
+  const safeFormEndpoint = sanitizeHttpUrl(formEndpoint);
 
   const copyEmail = async () => {
-    await navigator.clipboard.writeText(operator.contact.email);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    if (!safeOwnerEmail) return;
+    try {
+      await navigator.clipboard.writeText(safeOwnerEmail);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setSubmissionState('error');
+      setStatusMessage('Clipboard access was unavailable. Select and copy the published address instead.');
+    }
   };
 
-  const openMailClient = (form: HTMLFormElement) => {
-    const data = new FormData(form);
-    const subject = String(data.get('subject') || 'Portfolio inquiry');
+  const openMailClient = (input: ContactInput) => {
     const body = [
-      `Name: ${String(data.get('name') || '')}`,
-      `Reply-to: ${String(data.get('email') || '')}`,
+      `Name: ${input.name}`,
+      `Reply-to: ${input.email}`,
       '',
-      String(data.get('message') || '')
+      input.message
     ].join('\n');
-    window.location.href = `mailto:${operator.contact.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const mailtoUrl = buildMailtoUrl(safeOwnerEmail, { subject: input.subject, body });
+    if (!mailtoUrl) {
+      setSubmissionState('error');
+      setStatusMessage('The configured contact email is invalid. Use another published contact channel.');
+      return;
+    }
+    window.location.href = mailtoUrl;
     setSubmissionState('sent');
     setStatusMessage('Your default email application was opened.');
   };
 
   const submitContact = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submissionInFlightRef.current) return;
     const form = event.currentTarget;
     const data = new FormData(form);
+    const validation = validateContactInput({
+      name: String(data.get('name') || ''),
+      email: String(data.get('email') || ''),
+      subject: String(data.get('subject') || ''),
+      message: String(data.get('message') || ''),
+      companyWebsite: String(data.get('company_website') || '')
+    });
 
-    if (String(data.get('company_website') || '').trim()) return;
+    if (validation.valid === false) {
+      if (validation.isBot) return;
+      setSubmissionState('error');
+      setStatusMessage(validation.error);
+      return;
+    }
+    submissionInFlightRef.current = true;
     if (!formEndpoint) {
-      openMailClient(form);
+      openMailClient(validation.value);
+      return;
+    }
+    if (!safeFormEndpoint) {
+      setSubmissionState('error');
+      setStatusMessage('The configured contact endpoint is invalid. Use the direct email option instead.');
+      submissionInFlightRef.current = false;
       return;
     }
 
     setSubmissionState('sending');
     setStatusMessage('');
     try {
-      const response = await fetch(formEndpoint, {
+      const outboundData = new FormData();
+      outboundData.set('name', validation.value.name);
+      outboundData.set('email', validation.value.email);
+      outboundData.set('subject', validation.value.subject);
+      outboundData.set('message', validation.value.message);
+      const response = await fetch(safeFormEndpoint, {
         method: 'POST',
         headers: { Accept: 'application/json' },
-        body: data
+        body: outboundData
       });
       if (!response.ok) throw new Error(`Contact endpoint returned ${response.status}`);
       form.reset();
@@ -61,6 +101,8 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
     } catch {
       setSubmissionState('error');
       setStatusMessage('The form could not deliver this message. Use the direct email option instead.');
+    } finally {
+      submissionInFlightRef.current = false;
     }
   };
 
@@ -82,10 +124,14 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
               <div className="border border-[#15150F] bg-[#E2DCB9] p-3">
                 <div className="text-[11px] font-bold text-[#5C5946] mb-1">DIRECT EMAIL</div>
                 <div className="flex items-center justify-between gap-3">
-                  <a className="font-bold text-[10px] sm:text-xs break-all hover:underline" href={`mailto:${operator.contact.email}`}>
-                    {operator.contact.email}
-                  </a>
-                  <button type="button" onClick={copyEmail} className="shrink-0 p-2 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F]" aria-label="Copy email address">
+                  {directMailtoUrl && safeOwnerEmail ? (
+                    <a className="font-bold text-[10px] sm:text-xs break-all hover:underline" href={directMailtoUrl}>
+                      {safeOwnerEmail}
+                    </a>
+                  ) : (
+                    <span className="font-bold text-[10px] sm:text-xs">UNAVAILABLE</span>
+                  )}
+                  <button disabled={!safeOwnerEmail} type="button" onClick={copyEmail} className="shrink-0 p-2 bg-[#15150F] text-[#D4CDA4] hover:bg-[#C3E54E] hover:text-[#15150F] disabled:opacity-40" aria-label="Copy email address">
                     {copied ? <Check size={13} /> : <Copy size={13} />}
                   </button>
                 </div>
@@ -117,24 +163,24 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
             <div className="text-[11px] font-bold tracking-[0.2em] text-[#5C5946]">SEND AN INQUIRY</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="text-[11px] font-bold">NAME
-                <input required name="name" autoComplete="name" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
+                <input required maxLength={CONTACT_FIELD_LIMITS.name} name="name" autoComplete="name" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
               </label>
               <label className="text-[11px] font-bold">REPLY EMAIL
-                <input required name="email" type="email" autoComplete="email" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
+                <input required maxLength={CONTACT_FIELD_LIMITS.email} name="email" type="email" autoComplete="email" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
               </label>
             </div>
             <label className="block text-[11px] font-bold">SUBJECT
-              <input required name="subject" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
+              <input required maxLength={CONTACT_FIELD_LIMITS.subject} name="subject" className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0]" />
             </label>
             <label className="block text-[11px] font-bold">MESSAGE
-              <textarea required name="message" rows={7} className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0] resize-y" />
+              <textarea required maxLength={CONTACT_FIELD_LIMITS.message} name="message" rows={7} className="mt-1.5 w-full p-3 bg-[#E2DCB9] border-2 border-[#15150F] text-[11px] focus:outline-none focus:bg-[#EFEAD0] resize-y" />
             </label>
             <label className="absolute -left-[10000px]" aria-hidden="true">Company website
               <input name="company_website" tabIndex={-1} autoComplete="off" />
             </label>
 
-            <button disabled={submissionState === 'sending'} type="submit" className="w-full p-3 bg-[#C3E54E] border-2 border-[#15150F] font-bold text-[10px] tracking-[0.18em] hover:bg-[#15150F] hover:text-[#C3E54E] disabled:opacity-60 flex items-center justify-center gap-2">
-              <Send size={14} /> {submissionState === 'sending' ? 'SENDING…' : formEndpoint ? 'SEND MESSAGE' : 'OPEN EMAIL CLIENT'}
+            <button disabled={submissionState === 'sending' || submissionState === 'sent'} type="submit" className="w-full p-3 bg-[#C3E54E] border-2 border-[#15150F] font-bold text-[10px] tracking-[0.18em] hover:bg-[#15150F] hover:text-[#C3E54E] disabled:opacity-60 flex items-center justify-center gap-2">
+              <Send size={14} /> {submissionState === 'sending' ? 'SENDING…' : safeFormEndpoint ? 'SEND MESSAGE' : 'OPEN EMAIL CLIENT'}
             </button>
 
             <div id="contact-status" role="status" className={`min-h-5 text-[11px] font-bold ${submissionState === 'error' ? 'text-[#7A3E2E]' : 'text-[#2E6B3A]'}`}>
@@ -142,7 +188,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
             </div>
             <p className="text-[10px] text-[#5C5946] leading-relaxed flex items-start gap-1.5">
               <Mail size={11} className="shrink-0 mt-0.5" />
-              {formEndpoint ? 'This form sends through the configured deployment endpoint.' : 'No form endpoint is configured, so submission opens your email application. No message is stored by this site.'}
+              {safeFormEndpoint ? 'This form sends through the configured deployment endpoint.' : 'No valid form endpoint is configured, so submission opens your email application. No message is stored by this site.'}
             </p>
           </form>
         </div>

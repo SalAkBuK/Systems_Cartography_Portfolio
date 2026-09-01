@@ -12,6 +12,7 @@ import { OperatorMetadata, ProjectData, InfrastructureSkill, ExperienceNode } fr
 import { VERIFIED_OPERATOR_METADATA as OPERATOR_METADATA } from '../data/verifiedPortfolioData';
 import { PORTFOLIO_CONFIG } from '../config/portfolioConfig';
 import { resolveFlagshipProjects } from '../utils/portfolioUtils';
+import { sanitizeHttpUrl } from '../utils/urlSecurity';
 
 interface ResumeModalProps {
   isOpen: boolean;
@@ -457,9 +458,9 @@ ${p.links?.github ? `- **Repository:** ${p.links.github}\n` : ''}`).join('\n')}
                           </span>
                         ))}
                       </div>
-                      {p.links?.github && (
+                      {sanitizeHttpUrl(p.links?.github) && (
                         <a
-                          href={p.links.github}
+                          href={sanitizeHttpUrl(p.links?.github)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[10px] font-bold text-[#15150F] hover:text-[#2E6B3A] transition-colors"

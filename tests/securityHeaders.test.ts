@@ -27,6 +27,13 @@ test('1. public/_headers defines comprehensive HTTP security headers', () => {
   assert.ok(content.includes("object-src 'none'"), "CSP must forbid plugins via object-src 'none'");
   assert.ok(content.includes("base-uri 'self'"), "CSP must restrict base-uri to 'self'");
   assert.ok(content.includes("script-src 'self'"), "CSP must restrict script-src to 'self'");
+  assert.ok(content.includes("default-src 'none'"), "CSP must deny unspecified resource types");
+  assert.ok(content.includes("script-src-attr 'none'"), "CSP must block inline script attributes");
+  assert.ok(content.includes("frame-src 'none'"), "CSP must block embedded frames");
+  assert.ok(content.includes("form-action 'none'"), "CSP must block form navigation");
+  assert.ok(content.includes("img-src 'self' data:"), "CSP must limit images to local and embedded assets");
+  assert.ok(!content.includes("img-src 'self' data: https:"), "CSP must not allow arbitrary remote images");
+  assert.ok(!content.includes("'unsafe-eval'"), "CSP must not allow eval-like script execution");
   assert.ok(content.includes("https://fonts.googleapis.com"), "CSP must allow Google Fonts styles");
   assert.ok(content.includes("https://fonts.gstatic.com"), "CSP must allow Google Fonts font files");
 });
@@ -73,7 +80,8 @@ test('4. index.html includes fallback CSP and Referrer meta tags', () => {
   const content = fs.readFileSync(htmlPath, 'utf8');
 
   assert.ok(content.includes('<meta http-equiv="Content-Security-Policy"'), 'Must include fallback CSP meta tag');
-  assert.ok(content.includes('default-src \'self\''), 'Fallback CSP must include default-src self');
+  assert.ok(content.includes('default-src \'none\''), 'Fallback CSP must deny unspecified resource types');
   assert.ok(content.includes('script-src \'self\''), 'Fallback CSP must restrict scripts to self');
+  assert.ok(content.includes('form-action \'none\''), 'Fallback CSP must block form navigation');
   assert.ok(content.includes('<meta name="referrer" content="strict-origin-when-cross-origin"'), 'Must include Referrer meta tag');
 });

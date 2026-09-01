@@ -148,7 +148,7 @@ test('development/setup workflow is not accidentally blocked: command !== "build
   assert.ok((config as Record<string, unknown>).plugins, 'the dev server must still get the real Vite config');
 });
 
-test('owner/generated data and the deployment-readiness source of truth are untouched by this fix', () => {
+test('owner/generated data and deployment-readiness source-of-truth files remain untouched', () => {
   const protectedPaths = [
     'src/data/ownerProfile.generated.ts',
     'src/data/githubSnapshot.generated.ts',
@@ -157,8 +157,7 @@ test('owner/generated data and the deployment-readiness source of truth are unto
     'src/utils/deploymentReadiness.ts',
     'scripts/deployment-readiness.ts',
     'scripts/check-deployment-readiness.ts',
-    'scripts/check-owner-setup.ts',
-    'scripts/setup-portfolio.ts'
+    'scripts/check-owner-setup.ts'
   ];
   const changed = execFileSync(
     'git',

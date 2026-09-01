@@ -2256,7 +2256,7 @@ test('4C2-B/35-39: interaction stays locked during fast completion and returns o
   const unlock = fast.indexOf('setIsTopologyAssemblyActive(false);', complete);
   assert.ok(complete !== -1 && unlock > complete);
   assert.ok(canvasSource.includes('if (dragRuntimeRef.current.isTopologyAssemblyActive) return;'));
-  assert.ok(canvasSource.includes("if (isTopologyAssemblyActive) return;\n                  onDrillIntoProject(project.id);"));
+  assert.match(canvasSource, /if \(isTopologyAssemblyActive\) return;\s+onDrillIntoProject\(project\.id\);/);
   assert.ok(fast.indexOf('setAssemblyProjectRenderPositions({});') < unlock);
   assert.ok(fast.indexOf('setAssemblyCapabilityRenderPositions({});') < unlock);
 });
@@ -2444,7 +2444,7 @@ test('Redesign Step 1/16,18: interaction lock and reduced-motion eligibility rem
   assert.ok(precondition.includes('!isTopologyAssemblyActive'));
   assert.ok(trigger.includes('setIsTopologyAssemblyActive(true);'));
   assert.ok(canvasSource.includes('if (dragRuntimeRef.current.isTopologyAssemblyActive) return;'));
-  assert.ok(canvasSource.includes("if (isTopologyAssemblyActive) return;\n                  onDrillIntoProject(project.id);"));
+  assert.match(canvasSource, /if \(isTopologyAssemblyActive\) return;\s+onDrillIntoProject\(project\.id\);/);
 });
 
 test('Redesign Step 1/19-22: redesign stays generic and protected mechanics remain outside the experiment', () => {
@@ -2612,7 +2612,7 @@ test('Redesign Step 1.5 field-trace geometry: destination geometry is anchored t
 
 test('Redesign Step 1.5/8-10 (timing updated by Step 1.6): shared elapsed time starts staggered spawn before capability ingestion', () => {
   const layer = extractRedesignFieldTraceLayer(canvasSource);
-  assert.ok(layer.includes('getRedesignFieldTracePresentation(\n                redesignPresentationElapsedMs,'));
+  assert.match(layer, /getRedesignFieldTracePresentation\(\s*redesignPresentationElapsedMs,/);
   assert.equal(REDESIGN_FIELD_TRACE_TIMING.startMs, 100);
   assert.ok(REDESIGN_FIELD_TRACE_TIMING.startMs >= 80 && REDESIGN_FIELD_TRACE_TIMING.startMs <= 120);
   assert.ok(REDESIGN_FIELD_TRACE_TIMING.startMs < REDESIGN_FIELD_ASSEMBLY_TIMING.capabilityCaptureStartMs);
@@ -2806,7 +2806,7 @@ test('Redesign Step 1.5/21,22: environmental traces stay separate from real topo
   ]) {
     assert.ok(!layer.includes(forbidden), `environmental layer must not consume ${forbidden}`);
   }
-  assert.ok(canvasSource.includes("const assemblyConduitRevealOpacity = useMemo(\n    () => isRedesignPrototypeVisible\n      ? 0"));
+  assert.match(canvasSource, /const assemblyConduitRevealOpacity = useMemo\(\s*\(\) => isRedesignPrototypeVisible\s*\? 0/);
   assert.ok(canvasSource.includes('<g id="wiring-conduits" opacity={assemblyConduitRevealOpacity}>'));
 });
 
