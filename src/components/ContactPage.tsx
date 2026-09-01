@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Check, Copy, ExternalLink, Github, Linkedin, Mail, Send } from 'lucide-react';
 import { OperatorMetadata } from '../types';
-import { buildMailtoUrl, isSafeHttpUrl, sanitizeEmailAddress, sanitizeHttpUrl } from '../utils/urlSecurity';
-import { CONTACT_FIELD_LIMITS, validateContactInput, type ContactInput } from '../utils/contactValidation';
+import { buildMailtoUrl, isSafeHttpUrl, sanitizeEmailAddress } from '../utils/urlSecurity';
+import { CONTACT_FIELD_LIMITS, validateContactInput } from '../utils/contactValidation';
+import { ContactDeliveryError, deliverContact, sanitizeContactEndpoint, type ContactSubmissionLock } from '../utils/contactDelivery';
 
 interface ContactPageProps {
   operator: OperatorMetadata;
@@ -15,10 +16,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
   const [copied, setCopied] = useState(false);
   const [submissionState, setSubmissionState] = useState<SubmissionState>('idle');
   const [statusMessage, setStatusMessage] = useState('');
-  const submissionInFlightRef = useRef(false);
+  const submissionLockRef = useRef<ContactSubmissionLock>({ inFlight: false });
   const safeOwnerEmail = sanitizeEmailAddress(operator.contact.email);
   const directMailtoUrl = buildMailtoUrl(safeOwnerEmail);
-  const safeFormEndpoint = sanitizeHttpUrl(formEndpoint);
+  const safeFormEndpoint = sanitizeContactEndpoint(formEndpoint);
 
   const copyEmail = async () => {
     if (!safeOwnerEmail) return;
@@ -32,27 +33,8 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
     }
   };
 
-  const openMailClient = (input: ContactInput) => {
-    const body = [
-      `Name: ${input.name}`,
-      `Reply-to: ${input.email}`,
-      '',
-      input.message
-    ].join('\n');
-    const mailtoUrl = buildMailtoUrl(safeOwnerEmail, { subject: input.subject, body });
-    if (!mailtoUrl) {
-      setSubmissionState('error');
-      setStatusMessage('The configured contact email is invalid. Use another published contact channel.');
-      return;
-    }
-    window.location.href = mailtoUrl;
-    setSubmissionState('sent');
-    setStatusMessage('Your default email application was opened.');
-  };
-
   const submitContact = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (submissionInFlightRef.current) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const validation = validateContactInput({
@@ -69,40 +51,36 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
       setStatusMessage(validation.error);
       return;
     }
-    submissionInFlightRef.current = true;
-    if (!formEndpoint) {
-      openMailClient(validation.value);
-      return;
-    }
-    if (!safeFormEndpoint) {
-      setSubmissionState('error');
-      setStatusMessage('The configured contact endpoint is invalid. Use the direct email option instead.');
-      submissionInFlightRef.current = false;
-      return;
-    }
-
-    setSubmissionState('sending');
+    if (submissionLockRef.current.inFlight) return;
+    if (safeFormEndpoint) setSubmissionState('sending');
     setStatusMessage('');
     try {
-      const outboundData = new FormData();
-      outboundData.set('name', validation.value.name);
-      outboundData.set('email', validation.value.email);
-      outboundData.set('subject', validation.value.subject);
-      outboundData.set('message', validation.value.message);
-      const response = await fetch(safeFormEndpoint, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: outboundData
+      const result = await deliverContact({
+        input: validation.value,
+        ownerEmail: safeOwnerEmail,
+        formEndpoint,
+        lock: submissionLockRef.current,
+        openMailClient: mailtoUrl => {
+          window.location.href = mailtoUrl;
+        }
       });
-      if (!response.ok) throw new Error(`Contact endpoint returned ${response.status}`);
-      form.reset();
+      if (result.outcome === 'duplicate') return;
+      if (result.outcome === 'delivered') {
+        form.reset();
+        setStatusMessage('Message delivered. Thank you for reaching out.');
+      } else {
+        setStatusMessage('Your default email application was opened. You may submit again if needed.');
+      }
       setSubmissionState('sent');
-      setStatusMessage('Message delivered. Thank you for reaching out.');
-    } catch {
+    } catch (error) {
       setSubmissionState('error');
-      setStatusMessage('The form could not deliver this message. Use the direct email option instead.');
-    } finally {
-      submissionInFlightRef.current = false;
+      if (error instanceof ContactDeliveryError && error.reason === 'invalid-owner-email') {
+        setStatusMessage('The configured contact email is invalid. Use another published contact channel.');
+      } else if (error instanceof ContactDeliveryError && error.reason === 'timeout') {
+        setStatusMessage('The contact service timed out. Try again or use the direct email option.');
+      } else {
+        setStatusMessage('The form could not deliver this message. Use the direct email option instead.');
+      }
     }
   };
 
@@ -179,7 +157,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
               <input name="company_website" tabIndex={-1} autoComplete="off" />
             </label>
 
-            <button disabled={submissionState === 'sending' || submissionState === 'sent'} type="submit" className="w-full p-3 bg-[#C3E54E] border-2 border-[#15150F] font-bold text-[10px] tracking-[0.18em] hover:bg-[#15150F] hover:text-[#C3E54E] disabled:opacity-60 flex items-center justify-center gap-2">
+            <button disabled={submissionState === 'sending'} type="submit" className="w-full p-3 bg-[#C3E54E] border-2 border-[#15150F] font-bold text-[10px] tracking-[0.18em] hover:bg-[#15150F] hover:text-[#C3E54E] disabled:opacity-60 flex items-center justify-center gap-2">
               <Send size={14} /> {submissionState === 'sending' ? 'SENDING…' : safeFormEndpoint ? 'SEND MESSAGE' : 'OPEN EMAIL CLIENT'}
             </button>
 

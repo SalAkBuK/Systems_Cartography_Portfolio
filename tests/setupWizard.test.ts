@@ -369,7 +369,54 @@ test('8. setup:portfolio: live runtimeState updates immediately across same sess
   server.close();
 });
 
-test('9. setup:portfolio: verification endpoint evaluates live runtimeState directly', async () => {
+test('9. setup:portfolio: profile persistence canonicalizes GitHub shorthand and rejects malformed targets', async () => {
+  const server = createSetupPortfolioServer({ persistToDisk: false });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const addr = server.address() as { port: number };
+  const profile: any = {
+    source: { kind: 'linkedin_pdf', importedAt: new Date().toISOString(), reviewed: true, warnings: [] },
+    githubTarget: 'owner/repo',
+    operator: {
+      name: 'Owner',
+      role: 'Engineer',
+      location: 'Remote',
+      focus: 'Systems',
+      primaryStack: [],
+      systemManifesto: 'Build reliable systems.',
+      contact: { email: 'owner@example.com', linkedin: 'https://www.linkedin.com/in/owner' }
+    },
+    experience: [],
+    skills: [],
+    certifications: [],
+    education: []
+  };
+
+  try {
+    const saved = await fetch(`http://127.0.0.1:${addr.port}/api/save-profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({ profile })
+    });
+    assert.equal(saved.status, 200);
+
+    const state = await (await fetch(`http://127.0.0.1:${addr.port}/api/state`)).json();
+    assert.equal(state.ownerProfile.githubTarget, 'https://github.com/owner/repo');
+    assert.equal(state.confirmedGitHub, 'https://github.com/owner/repo');
+
+    const malformed = await fetch(`http://127.0.0.1:${addr.port}/api/save-profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-setup-csrf-token': WIZARD_SESSION_CSRF_TOKEN },
+      body: JSON.stringify({
+        profile: { ...profile, githubTarget: 'https://github.com.evil.example/owner' }
+      })
+    });
+    assert.equal(malformed.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test('10. setup:portfolio: verification endpoint evaluates live runtimeState directly', async () => {
   const validProfile: any = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -426,7 +473,7 @@ test('9. setup:portfolio: verification endpoint evaluates live runtimeState dire
   server.close();
 });
 
-test('10. flagshipSelectionModel: pure rules enforce max 4, no duplicates, and rejection when full', () => {
+test('11. flagshipSelectionModel: pure rules enforce max 4, no duplicates, and rejection when full', () => {
   const current = ['p1', 'p2', 'p3'];
 
   // Add 4th item -> Success
@@ -458,7 +505,7 @@ test('10. flagshipSelectionModel: pure rules enforce max 4, no duplicates, and r
   assert.deepEqual(movedUp, ['p2', 'p1', 'p3']);
 });
 
-test('11. setup:portfolio: wizard enforces first-time owner profile progression gating and existing owner skip semantics', async () => {
+test('12. setup:portfolio: wizard enforces first-time owner profile progression gating and existing owner skip semantics', async () => {
   // 1. First-time uninitialized owner session
   const uninitializedProfile: any = {
     schemaVersion: 1,
@@ -545,7 +592,7 @@ test('11. setup:portfolio: wizard enforces first-time owner profile progression 
   );
 });
 
-test('12. setup wizard renders and continues after a successful zero-experience LinkedIn import', async () => {
+test('13. setup wizard renders and continues after a successful zero-experience LinkedIn import', async () => {
   const harness = createWizardBrowserHarness();
   await new Promise(resolve => setImmediate(resolve));
   const profile = {

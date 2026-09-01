@@ -7,6 +7,7 @@ import {
   canonicalizeRepositories,
   generateGitHubProfileDetails,
   GitHubRepoRaw,
+  MAX_GITHUB_REPOSITORIES,
   transformGitHubRepoToProject
 } from '../src/services/githubService.ts';
 import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig.ts';
@@ -305,6 +306,63 @@ test('discoverGitHubInventory paginates cleanly across full boundary (200 repos)
     const result = await discoverGitHubInventory('SalAkBuK');
     assert.equal(result.rawCount, 200);
     assert.equal(result.repos.length, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('discoverGitHubInventory reports the defensive repository cap honestly', async () => {
+  const originalFetch = globalThis.fetch;
+  const pages = [0, 1, 2].map(pageIndex => Array.from({ length: 100 }, (_, index) => {
+    const id = pageIndex * 100 + index + 1;
+    return {
+      ...repo,
+      id,
+      name: `repo-${id}`,
+      full_name: `SalAkBuK/repo-${id}`,
+      html_url: `https://github.com/SalAkBuK/repo-${id}`
+    };
+  }));
+  const requestedPages: number[] = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.includes('/users/SalAkBuK/repos')) {
+      const page = Number(url.match(/[?&]page=(\d+)/)?.[1] || 1);
+      requestedPages.push(page);
+      return { ok: true, status: 200, json: async () => pages[page - 1] || [] } as Response;
+    }
+    if (url.includes('/users/SalAkBuK')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ login: 'SalAkBuK', public_repos: 300 })
+      } as Response;
+    }
+    if (url.includes('/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ truncated: false, tree: [] }) } as Response;
+    }
+    return { ok: false, status: 404 } as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await discoverGitHubInventory('SalAkBuK');
+    assert.equal(result.repos.length, MAX_GITHUB_REPOSITORIES);
+    assert.equal(result.rawCount, 300, 'rawCount must reflect the account inventory, not the retained slice');
+    assert.equal(result.repositoryInventoryTruncated, true);
+    assert.equal(result.warnings.length, 1);
+    assert.match(result.warnings[0], /truncated.*retained 250.*at least 300/i);
+    assert.deepEqual(requestedPages, [1, 2, 3]);
+
+    const syncResult = await fetchGitHubUserData('SalAkBuK', {
+      inspectionConcurrency: 25,
+      schedulerOptions: { maxConcurrency: 25, minSpacingMs: 0, maxRetries: 0 }
+    });
+    assert.equal(syncResult.rawCount, 300);
+    assert.equal(syncResult.repositoryInventoryTruncated, true);
+    assert.equal(syncResult.inspectionSummary?.canonicalRepositoryCount, 250);
+    assert.equal(syncResult.inspectionSummary?.inspectedRepositoryCount, 250);
+    assert.match(syncResult.inspectionSummary?.warnings[0] || '', /inventory truncated/i);
   } finally {
     globalThis.fetch = originalFetch;
   }

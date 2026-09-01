@@ -120,6 +120,14 @@ export function parseGitHubTarget(input?: string | null): ParsedGitHubTarget {
   };
 }
 
+/** Converts every accepted GitHub target form into the stable profile URL representation. */
+export function canonicalizeGitHubTarget(input?: string | null): string {
+  const parsed = parseGitHubTarget(input);
+  const owner = encodeURIComponent(parsed.owner);
+  const repo = parsed.type === 'repo' && parsed.repo ? `/${encodeURIComponent(parsed.repo)}` : '';
+  return `https://github.com/${owner}${repo}`;
+}
+
 /**
  * Normalizes a GitHub target string (URL, handle, or path) to a canonical
  * lowercased identity. For a bare user/org target this is just the owner

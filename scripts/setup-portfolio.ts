@@ -23,7 +23,7 @@ import { generateGitHubSnapshot, syncGitHubSnapshotToFile } from './sync-github-
 import { getGitHubAuthStatus } from './githubAuthResolver';
 import { runOwnerSetupChecks } from './check-owner-setup';
 import { evaluateOwnerIdentityMatch } from '../src/utils/ownerIdentityMatch';
-import { getGithubOwnerIdentity } from '../src/utils/ownerScope';
+import { canonicalizeGitHubTarget, getGithubOwnerIdentity } from '../src/utils/ownerScope';
 import { writeOwnerPreferences } from '../src/utils/ownerPreferencesStorage';
 import { createOwnerSetupManifest, type OwnerSetupManifest } from '../src/config/ownerSetupManifest';
 import { OWNER_SETUP_MANIFEST } from '../src/config/ownerSetup.generated';
@@ -478,7 +478,7 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
         try {
           const queryTarget = url.searchParams.get('githubTarget');
           if (queryTarget && queryTarget.trim()) {
-            runtimeState.confirmedGitHub = queryTarget.trim().replace(/\/$/, '');
+            runtimeState.confirmedGitHub = canonicalizeGitHubTarget(queryTarget);
           }
 
           // A detected-but-unconfirmed suggestion (from git origin / repository
@@ -511,21 +511,24 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
       try {
         const parsed = await readBoundedJsonBody<{ profile?: GeneratedOwnerProfile }>(req);
-        if (!validateOwnerProfilePayload(parsed.profile)) {
+        const profile = parsed.profile?.githubTarget
+          ? { ...parsed.profile, githubTarget: canonicalizeGitHubTarget(parsed.profile.githubTarget) }
+          : parsed.profile;
+        if (!validateOwnerProfilePayload(profile)) {
           sendJson(400, { success: false, error: 'Invalid or oversized profile data' });
           return;
         }
 
         if (shouldPersistToDisk) {
-          await writeGeneratedOwnerProfile(parsed.profile);
+          await writeGeneratedOwnerProfile(profile);
         }
 
-        runtimeState.ownerProfile = parsed.profile;
+        runtimeState.ownerProfile = profile;
         runtimeState.crossOwnerConfirmed = false;
         runtimeState.verificationPassed = false;
         runtimeState.profileSavedThisSession = true;
-        if (parsed.profile.githubTarget) {
-          runtimeState.confirmedGitHub = parsed.profile.githubTarget;
+        if (profile.githubTarget) {
+          runtimeState.confirmedGitHub = profile.githubTarget;
         }
 
         sendJson(200, { success: true });
@@ -545,11 +548,12 @@ export function createSetupPortfolioServer(options?: SetupPortfolioServerOptions
 
       try {
         const parsed = await readBoundedJsonBody<{ githubTarget?: string }>(req);
-        const target = parsed.githubTarget?.trim();
-        if (!target) {
+        const requestedTarget = parsed.githubTarget?.trim();
+        if (!requestedTarget) {
           sendJson(400, { success: false, error: 'Missing githubTarget' });
           return;
         }
+        const target = canonicalizeGitHubTarget(requestedTarget);
 
         let metadata: GitHubSnapshotMetadata;
         let snapshot: GitHubSyncResult;

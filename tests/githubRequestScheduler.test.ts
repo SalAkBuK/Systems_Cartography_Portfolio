@@ -398,7 +398,7 @@ test('14. a failed rate-limited sync does not persist a partial snapshot, set gi
     const sync = await fetch(`http://127.0.0.1:${port}/api/sync-github`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Setup-CSRF-Token': WIZARD_SESSION_CSRF_TOKEN },
-      body: JSON.stringify({ githubTarget: `https://github.com/${owner}` })
+      body: JSON.stringify({ githubTarget: owner })
     });
     assert.equal(sync.status >= 400, true);
     const syncData = await sync.json();
@@ -480,7 +480,7 @@ test('15. a successful retry after a simulated reset completes normally and bind
     const state = await fetch(`http://127.0.0.1:${port}/api/state`);
     const stateData = await state.json();
     assert.equal(stateData.confirmedGitHub, `https://github.com/${owner}`);
-    assert.equal(stateData.ownerProfile.githubTarget, `https://github.com/${owner}`, 'retry success binds the fresh profile');
+    assert.equal(stateData.ownerProfile.githubTarget, `https://github.com/${owner}`, 'successful shorthand sync binds the canonical profile URL');
     assert.equal(stateData.snapshot.projects.length, 2);
   } finally {
     await close(server);

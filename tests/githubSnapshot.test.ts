@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { 
   resolveGitHubSnapshotForTarget, 
+  canonicalizeGitHubTarget,
   normalizeGitHubTarget,
   parseGitHubTarget,
   applyProjectLinkOverrides 
@@ -20,6 +21,7 @@ import {
   MAX_MANIFEST_DEPTH,
   MAX_MANIFEST_FILES_PER_REPO,
   MAX_RAW_README_BYTES,
+  MAX_GITHUB_TREE_ENTRIES,
   sanitizeGitHubUser,
   GitHubRepoRaw 
 } from '../src/services/githubService.ts';
@@ -1052,10 +1054,71 @@ test('normalizeGitHubTarget normalizes equivalent valid GitHub targets to canoni
   assert.equal(normalizeGitHubTarget('https://evil.example/github.com/SalAkBuK'), '');
 });
 
+test('one oversized repository inspection is isolated while successful repositories and truthful counts remain', async () => {
+  const owner = 'test-owner';
+  const repositories: GitHubRepoRaw[] = ['healthy-a', 'oversized', 'healthy-b'].map((name, index) => ({
+    ...sampleRepo,
+    id: index + 1,
+    name,
+    full_name: `${owner}/${name}`,
+    owner: { ...sampleRepo.owner, login: owner }
+  }));
+  const oversizedTree = Array.from(
+    { length: MAX_GITHUB_TREE_ENTRIES + 1 },
+    (_, index) => ({ path: `src/file-${index}.ts`, type: 'blob' })
+  );
+
+  const mockFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.includes(`/users/${owner}/repos`)) {
+      return { ok: true, status: 200, json: async () => repositories } as Response;
+    }
+    if (url.includes(`/users/${owner}`)) {
+      return { ok: true, status: 200, json: async () => ({ login: owner, public_repos: 3 }) } as Response;
+    }
+    if (url.includes('/repos/test-owner/oversized/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ truncated: false, tree: oversizedTree }) } as Response;
+    }
+    if (url.includes('/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ truncated: false, tree: [] }) } as Response;
+    }
+    return { ok: false, status: 404 } as Response;
+  }) as typeof fetch;
+
+  const { snapshot: result, metadata, outputContent } = await generateGitHubSnapshot(owner, {
+    token: 'test-token',
+    fetchImpl: mockFetch,
+    schedulerOptions: { minSpacingMs: 0, maxRetries: 0 }
+  });
+
+  assert.equal(result.projects.length, 3, 'repository metadata remains represented');
+  assert.equal(result.inspectionSummary?.canonicalRepositoryCount, 3);
+  assert.equal(result.inspectionSummary?.inspectedRepositoryCount, 2);
+  assert.equal(result.inspectionSummary?.warnings.length, 1);
+  assert.match(result.inspectionSummary?.warnings[0] || '', /test-owner\/oversized.*20000-entry inspection limit/i);
+  assert.equal(metadata.githubTarget, 'https://github.com/test-owner');
+  assert.equal(metadata.inspectedRepositoryCount, 2);
+  assert.equal(metadata.inspectionWarnings.length, 1);
+  assert.match(outputContent, /Deep inspection skipped for/);
+});
+
+test('canonicalizeGitHubTarget persists every supported input form as a stable HTTPS URL', () => {
+  assert.equal(canonicalizeGitHubTarget('SalAkBuK'), 'https://github.com/SalAkBuK');
+  assert.equal(canonicalizeGitHubTarget('owner/repo'), 'https://github.com/owner/repo');
+  assert.equal(
+    canonicalizeGitHubTarget('http://www.github.com/Owner/Repository/'),
+    'https://github.com/Owner/Repository'
+  );
+  assert.throws(
+    () => canonicalizeGitHubTarget('https://github.com.evil.example/owner'),
+    /Invalid GitHub host/
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 13. Snapshot Completeness Contract & Inspection Summary Requirement
 // ---------------------------------------------------------------------------
-test('generateGitHubSnapshot requires inspectionSummary and throws internal contract error if missing', async () => {
+test('generateGitHubSnapshot records its inspection summary in snapshot metadata', async () => {
   const mockFetchWithoutSummary: typeof fetch = (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/users/test-user/repos')) {

@@ -3,6 +3,7 @@ import { PORTFOLIO_CONFIG } from '../src/config/portfolioConfig';
 import { connectGitHubTarget, GitHubSyncResult, GitHubFetchOptions, DEFAULT_INSPECTION_CONCURRENCY } from '../src/services/githubService';
 import { resolveGitHubAuth } from './githubAuthResolver';
 import type { GitHubSnapshotMetadata } from '../src/types';
+import { canonicalizeGitHubTarget } from '../src/utils/ownerScope';
 
 function readArg(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -29,13 +30,14 @@ export async function generateGitHubSnapshot(
   target: string,
   options?: GitHubFetchOptions
 ): Promise<{ metadata: GitHubSnapshotMetadata; snapshot: GitHubSyncResult; outputContent: string }> {
+  const canonicalTarget = canonicalizeGitHubTarget(target);
   let activeToken = options?.token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (!activeToken) {
     const auth = await resolveGitHubAuth();
     activeToken = auth.token;
   }
 
-  const result = await connectGitHubTarget(target, {
+  const result = await connectGitHubTarget(canonicalTarget, {
     inspectionConcurrency: DEFAULT_INSPECTION_CONCURRENCY,
     ...options,
     token: activeToken
@@ -48,25 +50,13 @@ export async function generateGitHubSnapshot(
   const metadata: GitHubSnapshotMetadata = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    githubTarget: target,
+    githubTarget: canonicalTarget,
     sourceIdentifier: result.sourceIdentifier,
     rawRepositoryCount: result.rawCount ?? result.projects.length,
     canonicalRepositoryCount: result.inspectionSummary.canonicalRepositoryCount,
     inspectedRepositoryCount: result.inspectionSummary.inspectedRepositoryCount,
     inspectionWarnings: result.inspectionSummary.warnings
   };
-
-  if (metadata.inspectedRepositoryCount !== metadata.canonicalRepositoryCount) {
-    throw new Error(
-      `Snapshot generation incomplete: Inspected ${metadata.inspectedRepositoryCount} of ${metadata.canonicalRepositoryCount} canonical repositories.`
-    );
-  }
-
-  if (metadata.inspectionWarnings.length > 0) {
-    throw new Error(
-      `Snapshot generation produced warnings: ${metadata.inspectionWarnings.join('; ')}`
-    );
-  }
 
   const outputContent = serializeGitHubSnapshot(metadata, result);
 

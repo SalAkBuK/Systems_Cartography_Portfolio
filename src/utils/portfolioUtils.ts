@@ -1,7 +1,7 @@
 import { ExperienceNode, EvidenceProvenance, SystemCategory, GitHubSnapshotMetadata, ProjectData } from '../types';
 import { getCanonicalRepositoryKey } from '../data/repositoryEvidence';
 import type { GitHubSyncResult } from '../services/githubService';
-import { parseGitHubTarget, normalizeGitHubTarget, getGithubOwnerIdentity } from './ownerScope';
+import { canonicalizeGitHubTarget, parseGitHubTarget, normalizeGitHubTarget, getGithubOwnerIdentity } from './ownerScope';
 
 /**
  * GitHub target parsing/normalization now lives in the centralized
@@ -11,7 +11,7 @@ import { parseGitHubTarget, normalizeGitHubTarget, getGithubOwnerIdentity } from
  */
 import { isSafeHttpUrl, sanitizeHttpUrl } from './urlSecurity';
 export type { ParsedGitHubTarget } from './ownerScope';
-export { parseGitHubTarget, normalizeGitHubTarget };
+export { canonicalizeGitHubTarget, parseGitHubTarget, normalizeGitHubTarget };
 export { isSafeHttpUrl, sanitizeHttpUrl };
 
 /**

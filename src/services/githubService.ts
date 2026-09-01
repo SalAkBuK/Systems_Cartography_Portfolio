@@ -21,6 +21,7 @@ import { sanitizeHttpUrl } from '../utils/urlSecurity';
 import {
   GitHubRequestScheduler,
   GitHubPrimaryRateLimitError,
+  GitHubQuotaInsufficientError,
   type GitHubRequestSchedulerOptions
 } from './githubRequestScheduler';
 
@@ -203,6 +204,7 @@ export interface GitHubSyncResult {
   operator: OperatorMetadata;
   experience: ExperienceNode[];
   rawCount?: number;
+  repositoryInventoryTruncated?: boolean;
   inspectionSummary?: RepositoryInspectionSummary;
 }
 
@@ -1264,7 +1266,13 @@ export function generateGitHubProfileDetails(
 export async function discoverGitHubInventory(
   username: string,
   options?: GitHubFetchOptions
-): Promise<{ user: GitHubUser; repos: GitHubRepoRaw[]; rawCount: number }> {
+): Promise<{
+  user: GitHubUser;
+  repos: GitHubRepoRaw[];
+  rawCount: number;
+  repositoryInventoryTruncated: boolean;
+  warnings: string[];
+}> {
   const fetchImpl = options?.fetchImpl || globalThis.fetch;
   const scheduler = resolveGitHubScheduler(options);
   const cleanUser = username.trim().replace(/^@/, '');
@@ -1289,6 +1297,8 @@ export async function discoverGitHubInventory(
 
   // 2. Fetch Repositories with pagination
   const allRawRepos: GitHubRepoRaw[] = [];
+  let observedRepositoryCount = 0;
+  let repositoryInventoryTruncated = false;
   let page = 1;
 
   while (true) {
@@ -1322,10 +1332,16 @@ export async function discoverGitHubInventory(
     const pageRepos = rawPageRepos
       .map(sanitizeGitHubRepo)
       .filter((repo): repo is GitHubRepoRaw => repo !== null);
+    observedRepositoryCount += pageRepos.length;
 
-    allRawRepos.push(...pageRepos.slice(0, MAX_GITHUB_REPOSITORIES - allRawRepos.length));
+    const remainingCapacity = MAX_GITHUB_REPOSITORIES - allRawRepos.length;
+    if (pageRepos.length > remainingCapacity) repositoryInventoryTruncated = true;
+    allRawRepos.push(...pageRepos.slice(0, remainingCapacity));
 
     if (rawPageRepos.length < 100 || allRawRepos.length >= MAX_GITHUB_REPOSITORIES) {
+      if (allRawRepos.length >= MAX_GITHUB_REPOSITORIES && user.public_repos > allRawRepos.length) {
+        repositoryInventoryTruncated = true;
+      }
       break;
     }
     page++;
@@ -1335,7 +1351,16 @@ export async function discoverGitHubInventory(
     throw new Error(`User "@${cleanUser}" has no public repositories to visualize.`);
   }
 
-  return { user, repos: allRawRepos, rawCount: allRawRepos.length };
+  const rawCount = repositoryInventoryTruncated
+    ? Math.max(observedRepositoryCount, allRawRepos.length, Math.floor(user.public_repos))
+    : allRawRepos.length;
+  const warnings = repositoryInventoryTruncated
+    ? [
+      `Repository inventory truncated: retained ${allRawRepos.length} repositories within the defensive limit while the account inventory contains at least ${rawCount}.`
+    ]
+    : [];
+
+  return { user, repos: allRawRepos, rawCount, repositoryInventoryTruncated, warnings };
 }
 
 /**
@@ -1391,22 +1416,33 @@ export async function inspectCanonicalRepositories(
     scheduler.assertSufficientQuotaFor(canonicalRepos.length, `inspecting ${canonicalRepos.length} remaining repositories`);
   }
 
-  let successfulInspections = 0;
+  const warningSlots: Array<string | undefined> = new Array(canonicalRepos.length);
 
   const inspections = await runWithConcurrency(
     canonicalRepos,
     concurrency,
-    async (repo) => {
-      const insp = await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, effectiveOptions);
-      successfulInspections++;
-      return insp;
+    async (repo, index) => {
+      try {
+        return await fetchRepoInspection(repo.owner.login, repo.name, repo.default_branch, effectiveOptions);
+      } catch (error) {
+        // Account-wide quota exhaustion remains a systemic failure. Repository-
+        // specific size, timeout, payload, and transport failures are isolated.
+        if (error instanceof GitHubPrimaryRateLimitError || error instanceof GitHubQuotaInsufficientError) {
+          throw error;
+        }
+        const detail = error instanceof Error ? error.message : String(error);
+        warningSlots[index] = `Deep inspection skipped for "${repo.owner.login}/${repo.name}": ${detail}`.slice(0, 2000);
+        return undefined;
+      }
     }
   );
+
+  const successfulInspections = inspections.filter(Boolean).length;
 
   const summary: RepositoryInspectionSummary = {
     canonicalRepositoryCount: canonicalRepos.length,
     inspectedRepositoryCount: successfulInspections,
-    warnings: []
+    warnings: warningSlots.filter((warning): warning is string => Boolean(warning))
   };
 
   return { inspections, summary };
@@ -1450,12 +1486,20 @@ export async function fetchGitHubUserData(
   // concurrency, pacing, and rate-limit knowledge apply to the whole
   // operation rather than resetting per stage.
   const effectiveOptions: GitHubFetchOptions = { ...options, scheduler: resolveGitHubScheduler(options) };
-  const { user, repos, rawCount } = await discoverGitHubInventory(username, effectiveOptions);
+  const {
+    user,
+    repos,
+    rawCount,
+    repositoryInventoryTruncated,
+    warnings: inventoryWarnings
+  } = await discoverGitHubInventory(username, effectiveOptions);
   const eligibleRepos = filterEligibleRepositories(repos);
   const canonicalRepos = canonicalizeRepositories(eligibleRepos);
   const { inspections, summary } = await inspectCanonicalRepositories(canonicalRepos, effectiveOptions);
   const result = analyzeGitHubSnapshot(user, canonicalRepos, inspections, user.login || username, effectiveOptions);
   result.rawCount = rawCount;
+  result.repositoryInventoryTruncated = repositoryInventoryTruncated;
+  summary.warnings.unshift(...inventoryWarnings);
   result.inspectionSummary = summary;
   return result;
 }
