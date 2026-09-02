@@ -41,12 +41,12 @@ identity.
 
 ```mermaid
 flowchart LR
-    A[GitHub identity] --> B[Repository snapshot]
-    B --> C["Repository evidence<br/>README · git tree · manifests"]
-    C --> D[Projects + capabilities]
-    P["LinkedIn / CV PDF"] --> Q[Professional profile]
-    Q --> R[Experience + progression]
-    D --> T(("Interactive<br/>systems topology"))
+    A["GitHub identity"] --> B["Repository snapshot"]
+    B --> C["Repository evidence:<br/>README, git tree, manifests"]
+    C --> D["Projects and capabilities"]
+    P["LinkedIn / CV PDF"] --> Q["Professional profile"]
+    Q --> R["Experience and progression"]
+    D --> T(["Interactive systems topology"])
     R --> T
 ```
 
