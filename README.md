@@ -1,8 +1,21 @@
-# Systems Cartography
+# Systems Cartography Portfolio
 
-An evidence-driven interactive engineering portfolio that turns a developer's GitHub repositories and professional profile into a systems landscape.
+A self-hosting developer portfolio that turns a GitHub account, a professional
+profile, and repository-derived technical evidence into an **interactive systems
+topology**.
 
-Fork it, point it at your own GitHub account and LinkedIn export, and deploy a static, self-hosted site that maps your own work — not a template that still talks about someone else's.
+It is not a hardcoded personal site. It is a portfolio *system*: fork it, point
+it at your own GitHub identity and LinkedIn/CV export, and it binds itself to
+you — ingesting your profile, deriving repository-backed project and capability
+evidence, and rendering all of it as a navigable map of systems instead of a
+list of links.
+
+![Systems Cartography topology](docs/screenshots/08-topology-hero.png)
+
+*Public repositories orbit as deployed systems (outer ring); technologies
+synthesized from those repositories orbit as capability nodes (inner reactor).
+Every panel is labeled `VERIFIED`, `DERIVED`, `CURATED`, or `UNAVAILABLE` so a
+visitor can tell GitHub-checkable fact from owner assertion.*
 
 ## What you get
 
@@ -14,6 +27,136 @@ Fork it, point it at your own GitHub account and LinkedIn export, and deploy a s
 - **Evidence provenance** — every claim on the site is labeled `VERIFIED`, `DERIVED`, `CURATED`, or `UNAVAILABLE` so a visitor can tell what is GitHub-verifiable metadata versus what the owner has personally attested to.
 - **Static, self-hosted deployment** — the built site is plain static assets (Vite output); no server, no database.
 - **No visitor-time GitHub API dependency** — the GitHub snapshot is generated once at setup time and committed; the deployed site never calls the GitHub API at runtime, so it isn't subject to rate limits or GitHub outages.
+
+## From Setup to Systems Map
+
+Configuration happens once, locally, through an interactive wizard
+(`npm run setup:portfolio`) that walks
+`00 WELCOME → 01 PROFILE → 02 GITHUB → 03 FLAGSHIPS → 04 REVIEW → 05 VERIFY → 06 COMPLETE`.
+A freshly forked repository starts from a genuinely unconfigured baseline — the
+previous owner's committed data is inert until you complete setup for your own
+identity.
+
+![Setup wizard start](docs/screenshots/01-setup-start.png)
+
+```mermaid
+flowchart LR
+    A[GitHub identity] --> B[Repository snapshot]
+    B --> C["Repository evidence<br/>README · git tree · manifests"]
+    C --> D[Projects + capabilities]
+    P["LinkedIn / CV PDF"] --> Q[Professional profile]
+    Q --> R[Experience + progression]
+    D --> T(("Interactive<br/>systems topology"))
+    R --> T
+```
+
+### 1. Bind your GitHub identity
+
+![GitHub identity step](docs/screenshots/02-github-identity.png)
+
+The wizard accepts a GitHub username, an `owner/repo` target, or a full GitHub
+URL and canonicalizes it to a single portfolio-owner identity. A target detected
+from your fork's git remote is offered as a suggestion but is never used until
+you confirm it. GitHub access runs anonymously by default; setting
+`GITHUB_TOKEN` / `GH_TOKEN` raises the sync rate limit but is optional.
+
+### 2. Synchronize repositories
+
+![GitHub synchronization result](docs/screenshots/03-github-sync.png)
+
+The sync discovers your public repositories, filters to eligible non-fork
+projects, canonicalizes repository clusters, deep-inspects each one (README, git
+tree, bounded dependency manifests), and synthesizes a committed snapshot of
+projects **and** the capability technologies detected across them. This is the
+only time GitHub is contacted — the deployed site ships the snapshot.
+
+### 3. Import professional context
+
+![Profile import](docs/screenshots/04-profile-import.png)
+
+Point the importer at a LinkedIn "Save to PDF" export (or any CV PDF with a
+comparable layout). It is parsed **locally, in memory** — the PDF is never
+uploaded or committed — to populate identity, location, education, and an
+employment history with promotion/progression detection. Ambiguous fields are
+surfaced as review warnings rather than guessed.
+
+### 4. Select flagship systems
+
+![Flagship selection](docs/screenshots/06-flagship-selection.png)
+
+Choose up to four repositories to feature prominently in the Portfolio Brief and
+control their order. Everything else still appears in the topology; flagships
+just get top billing.
+
+### 5. Verify and complete
+
+![Review configuration](docs/screenshots/05-profile-verification.png)
+
+The `REVIEW` step shows the generated identity, GitHub target, capability and
+experience counts, and an owner-identity match check before anything is
+finalized. `VERIFY` then runs deterministic owner-setup diagnostics
+([see the full check list](docs/screenshots/07b-verify-diagnostics.png)) — a
+blocking failure prevents completion.
+
+![Setup complete](docs/screenshots/07-setup-complete.png)
+
+`COMPLETE` binds the setup to this repository's identity. A production build
+stays blocked on any fork that still carries a different repository's manifest.
+
+### 6. Explore the resulting topology
+
+![Systems topology](docs/screenshots/09-systems-topology.png)
+
+## What the Portfolio Shows
+
+### Systems topology
+
+![Systems topology overview](docs/screenshots/09-systems-topology.png)
+
+Every public repository is a node on a spatial workplane. Switch the topology
+between **Systems** (project-centric), **Capabilities** (stack-centric), and
+**Relationships** (full wiring); pan, zoom, search, and fit-to-view. Nothing here
+is a mockup — the layout is driven entirely by the committed snapshot.
+
+### Repository-backed project inspector
+
+![Project inspector](docs/screenshots/10-project-inspector.png)
+
+Select a node to focus-lock it: the inspector shows the repository summary,
+detected tier, and the exact capability nodes it wires to, with each block
+tagged by how the engine knows it (`VERIFIED` from repository metadata,
+`CURATED` from owner-reviewed notes).
+
+### Architecture and technical evidence
+
+![Project architecture](docs/screenshots/11-project-architecture.png)
+
+The architecture tab renders sub-service decomposition, protocols, and key
+architectural decisions for repositories that have a reviewed
+`repositoryEvidence.ts` entry. Repositories without one show only what generic
+analysis can support — an explicit evidence gap instead of an invented diagram.
+
+### Professional experience
+
+![Professional experience](docs/screenshots/12-professional-experience.png)
+
+Roles are grouped into organization progressions with promotion detection.
+Curated evidence overlays connect an employer to the specific systems delivered
+there and back to the matching repositories in the topology.
+
+### Technical capabilities
+
+![Technical capabilities](docs/screenshots/13-technical-capabilities.png)
+
+The capability matrix is ranked by how many of your repositories each technology
+appears in — "Detected in N public GitHub repositories" — never by a
+self-assigned proficiency score.
+
+### Responsive
+
+![Mobile topology](docs/screenshots/14-mobile-topology.png)
+
+The same topology, inspector, and navigation adapt to a phone-sized viewport.
 
 ## Quick owner setup
 
@@ -44,12 +187,17 @@ wizard's `VERIFY` and `COMPLETE` steps. The completed setup is bound to the
 fork's repository identity, so copied upstream owner data cannot authorize a
 deployment by itself.
 
+> **Windows note:** the commands above are the same on every platform. If your
+> PowerShell execution policy blocks the `npm.ps1` shim, use `npm.cmd` instead
+> (`npm.cmd install`, `npm.cmd run setup:portfolio`, …).
+
 ---
 
 ## Detailed / manual setup
 
 Advanced users or CI environments can also run each setup step individually:
-4. **Export your LinkedIn profile to PDF** (LinkedIn profile page → "More" → "Save to PDF") and save it somewhere local. `imports/` is convenient and `imports/*.pdf` is already gitignored.
+
+1. **Export your LinkedIn profile to PDF** (LinkedIn profile page → "More" → "Save to PDF") and save it somewhere local. `imports/` is convenient and `imports/*.pdf` is already gitignored.
    ```bash
    # macOS / Linux / Git Bash
    mkdir -p imports
@@ -58,31 +206,31 @@ Advanced users or CI environments can also run each setup step individually:
    # Windows PowerShell
    New-Item -ItemType Directory -Force -Path imports
    ```
-5. **Run the one-time profile importer.** It reads the PDF locally, infers your GitHub target from your fork's git remote (or asks you), and shows a review gate before writing anything.
+2. **Run the one-time profile importer.** It reads the PDF locally, infers your GitHub target from your fork's git remote (or asks you), and shows a review gate before writing anything.
    ```bash
    npm run setup -- ./imports/linkedin-profile.pdf
    ```
-6. **Generate the committed GitHub repository snapshot** for your account.
+3. **Generate the committed GitHub repository snapshot** for your account.
    ```bash
    npm run sync:github
    ```
-7. **Configure your flagship systems (optional).** Launch the local-only interactive configurator to drag and choose up to 4 key architectural flagship projects displayed in the Portfolio Brief.
+4. **Configure your flagship systems (optional).** Launch the local-only interactive configurator to drag and choose up to 4 key architectural flagship projects displayed in the Portfolio Brief.
    ```bash
    npm run setup:flagships
    ```
-8. **Run the owner-setup diagnostic** to confirm everything is configured and scoped correctly.
+5. **Run the owner-setup diagnostic** to confirm everything is configured and scoped correctly.
    ```bash
    npm run setup:check
    ```
    If these manual steps are being used in a new fork, finish in
    `npm run setup:portfolio` and complete `VERIFY` then `COMPLETE`. Only the
    verified wizard completion updates the repository-bound setup manifest.
-9. **Run it locally.**
+6. **Run it locally.**
    ```bash
    npm run dev
    ```
    Open `http://127.0.0.1:3000`.
-10. **Verify before you ship.**
+7. **Verify before you ship.**
    ```bash
    npm test
    npm run lint
@@ -90,7 +238,7 @@ Advanced users or CI environments can also run each setup step individually:
    # or, all at once:
    npm run verify
    ```
-11. **Deploy** the built static site — see [Deployment](#deployment) below.
+8. **Deploy** the built static site — see [Deployment](#deployment) below.
 
 ## Requirements
 
@@ -279,6 +427,12 @@ To make your own version, **fork the repository** and run the setup tools descri
 
 The deployed application never calls the GitHub API — `App.tsx` reads only the committed, owner-scope-checked snapshot. The topology canvas (`src/components/TopologyCanvas.tsx`) and capability reactor (`src/utils/capabilityReactor.ts`, `src/utils/orbitMotion.ts`) run a single autonomous animation frame loop driving deterministic orbit/dock/reflow physics — this rendering and motion layer is intentionally out of scope for owner-data customization; it operates identically regardless of which owner's data is loaded.
 </details>
+
+## Screenshots
+
+All screenshots in this README are captured from the real running application and
+setup wizard (see [`docs/screenshots/`](docs/screenshots/)). The wizard shots use
+a disposable clone; e-mail addresses in the review screen are masked.
 
 ## License
 
