@@ -26,10 +26,16 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+// Explicit `.js` specifier: Vercel transpiles this file to `api/github-live.js`
+// and runs it under Node's native ESM loader (the project is `"type": "module"`),
+// which does NOT perform `.js` extension inference for relative specifiers. An
+// extensionless import here dies with ERR_MODULE_NOT_FOUND before the handler
+// runs. TypeScript (`moduleResolution: bundler`) and Vite still resolve this to
+// the `.ts` source.
 import {
   handleLiveGitHubRequest,
   LIVE_TOTAL_BUDGET_MS,
-} from '../src/services/githubLiveInventory';
+} from '../src/services/githubLiveInventory.js';
 
 export default async function handler(
   req: IncomingMessage,

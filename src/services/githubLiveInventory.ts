@@ -27,20 +27,26 @@
  * inspection analyzer stack is intentionally NOT pulled in here.
  */
 
-import { OWNER_PROFILE } from '../data/ownerProfile.generated';
-import { parseGitHubTarget } from '../utils/ownerScope';
-import { sanitizeHttpUrl } from '../utils/urlSecurity';
+// Explicit `.js` specifiers on every LOCAL RUNTIME import below. This module is
+// the root of the dependency graph Vercel emits for the `api/github-live`
+// serverless function; that function runs under Node's native ESM loader
+// (`"type": "module"`), which requires the extension on relative specifiers and
+// does no `.js` inference. TypeScript (`moduleResolution: bundler`), Vite, and
+// tsx all still resolve these `.js` specifiers to the `.ts` sources.
+import { OWNER_PROFILE } from '../data/ownerProfile.generated.js';
+import { parseGitHubTarget } from '../utils/ownerScope.js';
+import { sanitizeHttpUrl } from '../utils/urlSecurity.js';
 import {
   GitHubRequestScheduler,
   GitHubPrimaryRateLimitError,
   formatRateLimitResetTime,
   type GitHubRequestSchedulerOptions,
-} from './githubRequestScheduler';
+} from './githubRequestScheduler.js';
 import type {
   LiveInventoryReason,
   LiveInventoryResponse,
   LiveRepository,
-} from './githubLiveTypes';
+} from './githubLiveTypes.js';
 
 /**
  * Defensive repository ceiling. Deliberately identical to
