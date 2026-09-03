@@ -6,7 +6,7 @@ import type { GitHubSyncResult } from '../services/githubService';
 
 export const GITHUB_SNAPSHOT_METADATA: GitHubSnapshotMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-03T15:59:47.197Z",
+  "generatedAt": "2026-09-03T18:45:04.946Z",
   "githubTarget": "https://github.com/SalAkBuK",
   "sourceIdentifier": "SalAkBuK",
   "rawRepositoryCount": 18,
@@ -25,7 +25,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     "bio": null,
     "html_url": "https://github.com/SalAkBuK",
     "public_repos": 18,
-    "followers": 26,
+    "followers": 27,
     "following": 39,
     "company": null,
     "location": null,
@@ -37,14 +37,16 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "code": "GH-01",
       "title": "Systems_Cartography_Portfolio",
       "tagline": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface.",
-      "category": "frontend",
+      "category": "fullstack",
       "classifications": [
-        "frontend"
+        "fullstack",
+        "frontend",
+        "backend"
       ],
       "status": "ACTIVE",
       "year": "2026",
       "dimensions": {
-        "width": 101,
+        "width": 102,
         "height": 77,
         "levels": 2
       },
@@ -64,12 +66,16 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "React",
         "React DOM",
         "Tailwind CSS",
+        "Node.js",
+        "Vercel Functions",
         "Vite"
       ],
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-3"
+        "gh-infra-3",
+        "gh-infra-4",
+        "gh-infra-27"
       ],
       "subsystems": [
         {
@@ -214,7 +220,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         },
         {
           "label": "Repo Footprint",
-          "value": "4.0 MB",
+          "value": "4.1 MB",
           "note": "Source code & assets",
           "provenance": "VERIFIED"
         },
@@ -238,7 +244,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         }
       ],
       "keyDecisions": [],
-      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 47 test files detected in repository structure.",
+      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 50 test files detected in repository structure.",
       "provenance": {
         "summary": "VERIFIED",
         "problem": "VERIFIED",
@@ -261,8 +267,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         ],
         "hasDocker": false,
         "hasMigrations": false,
-        "testFilesDetected": 47,
-        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 47 test files detected in repository structure.",
+        "testFilesDetected": 50,
+        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 50 test files detected in repository structure.",
         "provenance": "VERIFIED"
       },
       "performanceEvidence": {
@@ -310,7 +316,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-18",
         "gh-infra-21",
-        "gh-infra-27"
+        "gh-infra-28"
       ],
       "subsystems": [
         {
@@ -890,7 +896,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-2",
-        "gh-infra-5",
+        "gh-infra-4",
         "gh-infra-10",
         "gh-infra-11",
         "gh-infra-13",
@@ -1156,7 +1162,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-5",
+        "gh-infra-4",
         "gh-infra-6",
         "gh-infra-8",
         "gh-infra-9",
@@ -1874,7 +1880,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-5",
+        "gh-infra-4",
         "gh-infra-7",
         "gh-infra-9",
         "gh-infra-12",
@@ -2103,7 +2109,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-4"
+        "gh-infra-5"
       ],
       "subsystems": [
         {
@@ -2252,7 +2258,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-4"
+        "gh-infra-5"
       ],
       "subsystems": [
         {
@@ -3245,7 +3251,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-4"
+        "gh-infra-5"
       ],
       "subsystems": [
         {
@@ -3449,6 +3455,35 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-4",
       "code": "INF-04",
+      "name": "Node.js & Application Architecture",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 80,
+        "y": 40
+      },
+      "systemCount": 7,
+      "usedInProjects": [
+        "gh-1347309405",
+        "gh-1122295326",
+        "gh-1301560608",
+        "gh-1237812647",
+        "gh-1237757392",
+        "gh-913331020",
+        "gh-1133595694"
+      ],
+      "primaryUseCases": [
+        "Detected in 7 public GitHub repositories"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-5",
+      "code": "INF-05",
       "name": "JavaScript & Application Engineering",
       "category": "fullstack",
       "yearsActive": 0,
@@ -3465,34 +3500,6 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-913331020",
         "gh-1133595694",
         "gh-929429993"
-      ],
-      "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-5",
-      "code": "INF-05",
-      "name": "Node.js & Application Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 60,
-        "y": 60
-      },
-      "systemCount": 6,
-      "usedInProjects": [
-        "gh-1122295326",
-        "gh-1301560608",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1133595694"
       ],
       "primaryUseCases": [
         "Detected in 6 public GitHub repositories"
@@ -3589,7 +3596,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -40,
+        "x": -20,
         "y": 80
       },
       "systemCount": 4,
@@ -3666,7 +3673,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -100,
-        "y": 40
+        "y": 60
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3690,7 +3697,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -120,
-        "y": 20
+        "y": 40
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3738,7 +3745,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -120,
-        "y": -20
+        "y": 0
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3785,7 +3792,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -140,
-        "y": -60
+        "y": -40
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3807,8 +3814,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -100,
-        "y": -80
+        "x": -120,
+        "y": -60
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3830,8 +3837,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -80,
-        "y": -100
+        "x": -100,
+        "y": -80
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3853,7 +3860,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -40,
+        "x": -60,
         "y": -100
       },
       "systemCount": 1,
@@ -3876,8 +3883,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 0,
-        "y": -120
+        "x": -40,
+        "y": -100
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3899,7 +3906,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 20,
+        "x": 0,
         "y": -120
       },
       "systemCount": 1,
@@ -3922,7 +3929,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 60,
+        "x": 40,
         "y": -100
       },
       "systemCount": 1,
@@ -3945,8 +3952,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 100,
-        "y": -80
+        "x": 60,
+        "y": -100
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3968,8 +3975,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 140,
-        "y": -80
+        "x": 120,
+        "y": -100
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3991,8 +3998,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 180,
-        "y": -60
+        "x": 160,
+        "y": -80
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -4009,12 +4016,35 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-27",
       "code": "INF-27",
-      "name": "WhatsApp Cloud API & Messaging Platform Integration",
+      "name": "Vercel Functions & Serverless API Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
         "x": 180,
+        "y": -60
+      },
+      "systemCount": 1,
+      "usedInProjects": [
+        "gh-1347309405"
+      ],
+      "primaryUseCases": [
+        "Detected in 1 public GitHub repository"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-28",
+      "code": "INF-28",
+      "name": "WhatsApp Cloud API & Messaging Platform Integration",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 200,
         "y": -40
       },
       "systemCount": 1,
@@ -4036,7 +4066,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     "role": "GitHub profile",
     "location": "Not provided on GitHub",
     "status": "ACTIVE_BUILD // GITHUB SNAPSHOT",
-    "focus": "Public GitHub repositories using React, TypeScript, Tailwind CSS, JavaScript",
+    "focus": "Public GitHub repositories using React, TypeScript, Tailwind CSS, Node.js",
     "yearsActive": 0,
     "commitsIndexed": "Not indexed",
     "productionUptime": "Not claimed",
@@ -4044,8 +4074,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "React",
       "TypeScript",
       "Tailwind CSS",
-      "JavaScript",
       "Node.js",
+      "JavaScript",
       "Next.js",
       "Express"
     ],
@@ -4071,7 +4101,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "systemDomain": "Public repository metadata",
       "keyOutputs": [
         "Mapped 17 public repositories returned by GitHub.",
-        "Detected repository languages and topics: React, TypeScript, Tailwind CSS, JavaScript, Node.js.",
+        "Detected repository languages and topics: React, TypeScript, Tailwind CSS, Node.js, JavaScript.",
         "No employment history or performance claims inferred."
       ],
       "systemsArchitected": [
@@ -4083,8 +4113,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "React",
         "TypeScript",
         "Tailwind CSS",
-        "JavaScript",
-        "Node.js"
+        "Node.js",
+        "JavaScript"
       ],
       "gridPosition": {
         "x": -260,
