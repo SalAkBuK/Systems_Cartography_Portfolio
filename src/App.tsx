@@ -23,8 +23,13 @@ import { CaseStudyModal } from './components/CaseStudyModal';
 import { ContactPage } from './components/ContactPage';
 import { ResumeModal } from './components/ResumeModal';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from './data/githubSnapshot.generated';
-import { applyProjectLinkOverrides, resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
+import { resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
+import { projectIdStillPresent } from './utils/reconcileLiveRepositories';
+import { useLiveGitHubInventory } from './hooks/useLiveGitHubInventory';
 import { Menu, X } from 'lucide-react';
+
+/** Stable empty base so the live-inventory hook never re-seeds from a fresh array each render. */
+const EMPTY_PROJECTS: ProjectData[] = [];
 
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
@@ -57,9 +62,24 @@ export default function App() {
     GITHUB_SNAPSHOT
   );
 
-  const [projects] = useState<ProjectData[]>(() => {
-    if (!configuredSnapshot?.projects) return [];
-    return applyProjectLinkOverrides(configuredSnapshot.projects, PORTFOLIO_CONFIG.projectLinks);
+  // The committed snapshot renders IMMEDIATELY (synchronous initial value).
+  // After mount, a single same-origin /api/github-live request reconciles the
+  // CURRENT public repository inventory (repos created / renamed / deleted /
+  // archived / made private). Any live failure keeps the snapshot projects
+  // untouched. This path never imports the heavy per-repository deep-inspection
+  // pipeline -- it calls the lightweight same-origin /api/github-live endpoint.
+  const {
+    projects,
+    status: liveInventoryStatus,
+    lastRefreshedAt: liveInventoryRefreshedAt,
+    repositoryCount: liveRepositoryCount,
+    isRefreshing: liveInventoryRefreshing,
+    refresh: refreshLiveInventory,
+  } = useLiveGitHubInventory({
+    snapshotProjects: configuredSnapshot?.projects ?? EMPTY_PROJECTS,
+    projectLinks: PORTFOLIO_CONFIG.projectLinks,
+    configuredGithubTarget: PORTFOLIO_CONFIG.githubTarget,
+    enabled: Boolean(configuredSnapshot),
   });
   const [skills] = useState<InfrastructureSkill[]>(() => configuredSnapshot?.skills || []);
   const [experience] = useState<ExperienceNode[]>(() => 
@@ -217,6 +237,19 @@ export default function App() {
     }
   };
 
+  // If a live reconciliation removes a project that is currently selected or
+  // drilled into, clear that stale reference so the inspector / subsystem view
+  // can never strand on a project that no longer exists.
+  useEffect(() => {
+    if (!projectIdStillPresent(projects, selectedProjectId)) {
+      setSelectedProjectId(null);
+    }
+    if (!projectIdStillPresent(projects, drilledProjectId)) {
+      setDrilledProjectId(null);
+      setSelectedSubsystem(null);
+    }
+  }, [projects, selectedProjectId, drilledProjectId]);
+
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -282,6 +315,14 @@ export default function App() {
         siteId={PORTFOLIO_CONFIG.siteId}
         templateRepositoryUrl={PORTFOLIO_CONFIG.templateRepositoryUrl}
         syncState={gitHubSyncState}
+        liveSync={{
+          available: Boolean(configuredSnapshot),
+          status: liveInventoryStatus,
+          lastRefreshedAt: liveInventoryRefreshedAt,
+          repositoryCount: liveRepositoryCount,
+          isRefreshing: liveInventoryRefreshing,
+          onRefresh: refreshLiveInventory,
+        }}
       />
 
       {/* Mobile Drawer Trigger Bar */}

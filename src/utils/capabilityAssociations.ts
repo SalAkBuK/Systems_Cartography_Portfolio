@@ -135,6 +135,28 @@ const CANONICAL_TECH_MAP: Record<string, string> = {
   'vitest': 'Vitest',
   'cypress': 'Cypress',
 
+  // Workflow automation & integration (evidence: n8n workflow JSON node types,
+  // or an exact GitHub topic). n8n workflow exports are structured evidence --
+  // each node carries a machine-readable `type` -- so the technologies below
+  // are derived from node types, never from README/description prose.
+  'n8n': 'n8n',
+  'n8n.io': 'n8n',
+  'n8n workflow': 'n8n',
+  'n8n-workflow': 'n8n',
+  'n8n-nodes-base': 'n8n',
+  'google sheets': 'Google Sheets',
+  'google-sheets': 'Google Sheets',
+  'googlesheets': 'Google Sheets',
+  'gsheets': 'Google Sheets',
+  'google sheets api': 'Google Sheets',
+  'whatsapp cloud api': 'WhatsApp Cloud API',
+  'whatsapp-cloud-api': 'WhatsApp Cloud API',
+  'whatsapp business api': 'WhatsApp Cloud API',
+  'whatsapp business cloud': 'WhatsApp Cloud API',
+  'whatsapp api': 'WhatsApp Cloud API',
+  'webhook': 'Webhooks',
+  'webhooks': 'Webhooks',
+
   // Utilities / Data
   'curl': 'cURL',
   'json': 'JSON',
@@ -484,7 +506,15 @@ export const RECOGNIZED_CAPABILITY_TAXONOMY: Record<string, { category: SystemCa
   'Jest': { category: 'tooling', titleSuffix: 'Automated Test Harness' },
   'Vitest': { category: 'tooling', titleSuffix: 'Unit & Integration Testing' },
   'Go': { category: 'backend', titleSuffix: 'Systems & Concurrent Services' },
-  'Rust': { category: 'backend', titleSuffix: 'Systems Architecture' }
+  'Rust': { category: 'backend', titleSuffix: 'Systems Architecture' },
+
+  // Workflow automation & integration. Eligible for a capability node only from
+  // STRUCTURED evidence -- an n8n workflow JSON node type, or an exact GitHub
+  // topic that normalizes here -- never from free-form description text.
+  'n8n': { category: 'infrastructure', titleSuffix: 'Workflow Automation & Orchestration' },
+  'Webhooks': { category: 'backend', titleSuffix: 'Event-Driven Integration' },
+  'Google Sheets': { category: 'backend', titleSuffix: 'Spreadsheet Data Integration' },
+  'WhatsApp Cloud API': { category: 'backend', titleSuffix: 'Messaging Platform Integration' }
 };
 
 /**

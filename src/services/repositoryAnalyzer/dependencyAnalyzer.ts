@@ -1,4 +1,5 @@
 import { AnalyzedDependencies, RawRepositoryInspection } from './types';
+import { analyzeN8nWorkflows } from './n8nWorkflowAnalyzer';
 
 /**
  * Known Node/TypeScript packages dictionary with layer mappings
@@ -337,6 +338,18 @@ export function analyzeDependencies(inspection: RawRepositoryInspection): Analyz
     result.isMonorepo = true;
     if (inspection.turboJson) {
       addFramework(result, 'devops', 'Turborepo');
+    }
+  }
+
+  // 3b. n8n workflow exports (structured evidence: JSON node `type` strings).
+  //     `n8n` leads so architecture analysis names the workflow subsystem after it.
+  const n8n = analyzeN8nWorkflows(inspection.n8nWorkflowContents);
+  if (n8n.isN8nProject) {
+    if (result.primaryEcosystem === 'General' || !result.primaryEcosystem) {
+      result.primaryEcosystem = 'n8n';
+    }
+    for (const tech of n8n.technologies) {
+      addFramework(result, 'backend', tech);
     }
   }
 

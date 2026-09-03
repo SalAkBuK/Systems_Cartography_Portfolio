@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { getCanonicalRepositoryKey, getRepositoryEvidence } from '../data/repositoryEvidence';
 import { analyzeRepository, RawRepositoryInspection } from './repositoryAnalyzer';
+import { isCandidateN8nWorkflowPath, isN8nWorkflowDocument } from './repositoryAnalyzer/n8nWorkflowAnalyzer';
 import { 
   getProjectTechnologyEvidence, 
   normalizeTechnologyName, 
@@ -31,8 +32,10 @@ export type { GitHubRateLimitSnapshot, GitHubRequestSchedulerOptions } from './g
 export const DEFAULT_INSPECTION_CONCURRENCY = 3;
 export const MAX_MANIFEST_DEPTH = 4;
 export const MAX_MANIFEST_FILES_PER_REPO = 15;
+export const MAX_N8N_WORKFLOW_FILES = 5;
 export const MAX_RAW_README_BYTES = 1024 * 1024;
 export const MAX_RAW_MANIFEST_BYTES = 512 * 1024;
+export const MAX_RAW_N8N_WORKFLOW_BYTES = 1024 * 1024;
 export const MAX_GITHUB_API_JSON_BYTES = 8 * 1024 * 1024;
 export const MAX_GITHUB_REPOSITORIES = 250;
 export const MAX_GITHUB_TREE_ENTRIES = 20_000;
@@ -1104,6 +1107,51 @@ export async function fetchRepoInspection(
           inspection.turboJson = content;
         }
       }
+    }
+
+    // n8n workflow exports: structured technology evidence (JSON node `type`
+    // strings). Bounded like manifests -- a narrow path shape filter, a small
+    // cap, and per-file content validation. A candidate that does not parse as
+    // a genuine n8n workflow document is silently discarded (unlike manifests,
+    // a missing/foreign JSON here is never a repository-integrity failure).
+    const n8nCandidates = files
+      .filter(f => !isIgnoredPath(f) && f.split('/').length <= MAX_MANIFEST_DEPTH && isCandidateN8nWorkflowPath(f))
+      .sort((a, b) => {
+        const aRoot = !a.includes('/');
+        const bRoot = !b.includes('/');
+        if (aRoot !== bRoot) return aRoot ? -1 : 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, MAX_N8N_WORKFLOW_FILES);
+
+    for (const workflowPath of n8nCandidates) {
+      let workflowResult: Awaited<ReturnType<typeof fetchPublicRawText>>;
+      try {
+        workflowResult = await fetchPublicRawText(
+          cleanOwner,
+          cleanRepo,
+          rawRef,
+          workflowPath,
+          MAX_RAW_N8N_WORKFLOW_BYTES,
+          options
+        );
+      } catch {
+        continue; // oversized / transport failure on an optional file is non-fatal
+      }
+      if (workflowResult.status < 200 || workflowResult.status >= 300 || !workflowResult.text) continue;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(workflowResult.text);
+      } catch {
+        continue;
+      }
+      if (!isN8nWorkflowDocument(parsed)) continue;
+
+      inspection.n8nWorkflowFiles = inspection.n8nWorkflowFiles || [];
+      inspection.n8nWorkflowContents = inspection.n8nWorkflowContents || {};
+      inspection.n8nWorkflowFiles.push(workflowPath);
+      inspection.n8nWorkflowContents[workflowPath] = workflowResult.text;
     }
   }
 

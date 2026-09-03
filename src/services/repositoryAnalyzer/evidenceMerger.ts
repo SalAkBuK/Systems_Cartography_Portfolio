@@ -108,7 +108,12 @@ export function mergeRepositoryEvidence(params: MergeParams): ProjectData {
     });
   }
 
-  const hasInspectionEvidence = Boolean(inspection.readmeContent || inspection.packageJsonContent || (inspection.treeFiles && inspection.treeFiles.length > 0));
+  const hasInspectionEvidence = Boolean(
+    inspection.readmeContent ||
+    inspection.packageJsonContent ||
+    (inspection.treeFiles && inspection.treeFiles.length > 0) ||
+    (inspection.n8nWorkflowContents && Object.keys(inspection.n8nWorkflowContents).length > 0)
+  );
 
   // 1. Engineering Challenge
   let problem = 'Not established by GitHub repository metadata.';

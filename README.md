@@ -25,8 +25,8 @@ visitor can tell GitHub-checkable fact from owner assertion.*
 - **GitHub-derived capabilities** — capability nodes are computed from what your repositories actually contain, not hand-picked from a resume.
 - **Professional experience** — imported from a LinkedIn PDF export, with support for progression/promotion within an organization and persistent curated evidence overlays.
 - **Evidence provenance** — every claim on the site is labeled `VERIFIED`, `DERIVED`, `CURATED`, or `UNAVAILABLE` so a visitor can tell what is GitHub-verifiable metadata versus what the owner has personally attested to.
-- **Static, self-hosted deployment** — the built site is plain static assets (Vite output); no server, no database.
-- **No visitor-time GitHub API dependency** — the GitHub snapshot is generated once at setup time and committed; the deployed site never calls the GitHub API at runtime, so it isn't subject to rate limits or GitHub outages.
+- **Static, self-hosted deployment** — the built site is plain static assets (Vite output); no server, no database. One optional serverless function (`/api/github-live`) adds live repository sync where the host supports it (Vercel); without it the site still runs entirely from the committed snapshot.
+- **Committed snapshot is the source of truth, live GitHub is progressive enhancement** — the GitHub snapshot is generated once at setup time and committed and always renders immediately. On a functions-capable host the deployed site also calls its OWN same-origin `/api/github-live` endpoint once after load to reflect the *current* public repository membership (repos created / renamed / deleted / archived / made private). The visitor browser never calls GitHub directly; a rate limit, outage, or offline visitor simply falls back to the committed snapshot. See [Live GitHub sync](#live-github-sync).
 
 ## From Setup to Systems Map
 
@@ -67,8 +67,10 @@ you confirm it. GitHub access runs anonymously by default; setting
 The sync discovers your public repositories, filters to eligible non-fork
 projects, canonicalizes repository clusters, deep-inspects each one (README, git
 tree, bounded dependency manifests), and synthesizes a committed snapshot of
-projects **and** the capability technologies detected across them. This is the
-only time GitHub is contacted — the deployed site ships the snapshot.
+projects **and** the capability technologies detected across them. This deep
+inspection only ever runs here, at setup time — a deployed instance's optional
+live sync ([below](#live-github-sync)) reads only lightweight repository
+membership + metadata, never per-repository source.
 
 ### 3. Import professional context
 
@@ -331,20 +333,78 @@ manifest fails closed and is instructed to run `npm run setup:portfolio`.
 
 **Vercel**
 - Framework preset: Vite. Build command: `npm run build`. Output directory: `dist`.
+- The `api/` directory is auto-detected and deployed as a Node serverless function — this is what powers [live GitHub sync](#live-github-sync). No extra configuration is needed; `vercel.json` only defines security headers.
 - Set `VITE_CONTACT_FORM_ENDPOINT` (if used) as an environment variable in the Vercel project settings, not committed to source.
+- Optionally set `GITHUB_TOKEN` (server-side only — **never** a `VITE_` variable) to raise the live-sync GitHub rate limit. Live sync also works with no token.
 
 **Netlify**
 - Build command: `npm run build`. Publish directory: `dist`.
-- Same environment-variable guidance applies.
+- Same environment-variable guidance applies. Netlify does not build the `api/` directory, so a Netlify deploy runs snapshot-only (the live endpoint 404s and the site falls back to the committed snapshot). Add a Netlify function + `/api/*` redirect if you want live sync there.
 
-**Other static Vite hosts** (Cloudflare Pages, GitHub Pages, static S3/CDN, etc.) work the same way: run `npm run build`, deploy the contents of `dist/`.
+**Other static Vite hosts** (Cloudflare Pages, GitHub Pages, static S3/CDN, etc.) work the same way: run `npm run build`, deploy the contents of `dist/`. Without a functions runtime the live endpoint is simply absent and the site renders the committed snapshot.
 
 If a production build environment has neither trusted provider/CI repository
 metadata nor a checkout retaining a valid GitHub `origin`, the build fails
 closed. There is intentionally no manual repository-identity override or guard
 bypass.
 
-Because the GitHub snapshot is committed and there is no visitor-time API dependency, no server-side runtime or database is required anywhere in this deployment model.
+The committed GitHub snapshot needs no server-side runtime or database anywhere in this deployment model. The optional `/api/github-live` function is the only server-side code, and the site is fully functional without it.
+
+### Live GitHub sync
+
+On a host that runs the `api/` function (Vercel), a deployed instance keeps its
+topology in step with the configured owner's **current** public repository
+inventory without you re-running `npm run sync:github` after every repo change:
+
+```
+visitor loads page
+    ↓
+committed snapshot renders immediately
+    ↓
+browser requests same-origin /api/github-live   (never github.com directly)
+    ↓
+Vercel edge cache  ──hit──►  instant response
+    │
+    └──miss──►  function calls GitHub REST once, caches the result
+    ↓
+success  →  reconcile: overlay GitHub metadata on matched projects,
+            add newly-public repos, drop repos that are no longer public
+failure  →  keep the committed snapshot untouched
+```
+
+- **Owner-bound.** The endpoint queries only the owner from
+  `src/data/ownerProfile.generated.ts` (`OWNER_PROFILE.githubTarget`). A visitor
+  cannot supply a username or URL — it is not a GitHub proxy. There is no
+  environment-variable owner override in any environment; to point the live
+  endpoint at a different account, change the committed owner configuration.
+- **Lightweight.** The function returns only repository membership + a bounded
+  set of GitHub metadata fields, capped at 250 repositories. It never runs the
+  setup-time deep inspection (README / git tree / manifests).
+- **Cached.** Responses carry `s-maxage=600, stale-while-revalidate=3600`
+  (≈10 min fresh, up to 1 h stale-while-revalidate). Soft failures cache for
+  60–900 s so a GitHub outage can't stampede the API.
+- **Credentials stay server-side.** `GITHUB_TOKEN` / `GH_TOKEN` is read only
+  inside the function, never serialized into a response, never bundled.
+- **Fails safe.** Any failure — offline, timeout, rate limit, malformed payload,
+  function error — leaves the committed snapshot in place. The topology is never
+  emptied. A snapshot project is removed only when a *complete* live inventory
+  proves it is no longer public.
+- **Snapshot stays authoritative for engineering evidence.** Architecture,
+  subsystems, capabilities, key decisions, and curated copy always come from the
+  committed snapshot. A repo that is live-only (created since the last snapshot)
+  appears with honest `UNAVAILABLE` inspector sections until the next
+  `npm run sync:github`.
+
+The top telemetry bar shows the current source: `GITHUB // LIVE`,
+`GITHUB // CACHED`, or `GITHUB // SNAPSHOT FALLBACK`, with a repository count,
+last-refresh time, and a manual refresh control (it re-requests the endpoint
+without reloading the page).
+
+**Local development.** `vite dev` does not run Vercel functions, so
+`vite.config.ts` registers a dev-only middleware that serves the same endpoint
+core at `/api/github-live`. `npm run dev` works unchanged; hit
+`http://localhost:3000/api/github-live` to exercise it. A local non-`VITE_`
+`GITHUB_TOKEN` (e.g. in `.env`) is picked up by the dev middleware only.
 
 ## Privacy & provenance
 
@@ -354,8 +414,8 @@ Because the GitHub snapshot is committed and there is no visitor-time API depend
 - GitHub metadata (stars, languages, topics) is **not** a professional claim — the engine never infers proficiency percentages, years of experience, uptime, latency, or business outcomes from repository metadata.
 - **CURATED is not VERIFIED.** Curated evidence is explicitly the owner's own assertion; it is labeled as such everywhere it appears.
 - Unknown data is shown as unknown (`UNAVAILABLE`) or omitted — never invented to fill a gap.
-- There is no visitor-time upload, GitHub connection, or personalization UI. Visitors read a static, pre-generated site.
-- The deployed site makes **no GitHub API calls at runtime** — everything a visitor sees was generated and committed during your own setup.
+- There is no visitor-time upload, GitHub connection, or personalization UI. A visitor cannot influence which account is queried or turn the instance into their own.
+- The **visitor browser never calls the GitHub API.** Everything a visitor sees is either the committed snapshot or the output of the instance's own owner-bound `/api/github-live` endpoint ([Live GitHub sync](#live-github-sync)), which reads only public repository membership + metadata for the one configured owner and keeps any credential server-side.
 
 ## Troubleshooting
 
@@ -425,7 +485,7 @@ To make your own version, **fork the repository** and run the setup tools descri
 <details>
 <summary>Network-independent runtime & topology/reaction engine</summary>
 
-The deployed application never calls the GitHub API — `App.tsx` reads only the committed, owner-scope-checked snapshot. The topology canvas (`src/components/TopologyCanvas.tsx`) and capability reactor (`src/utils/capabilityReactor.ts`, `src/utils/orbitMotion.ts`) run a single autonomous animation frame loop driving deterministic orbit/dock/reflow physics — this rendering and motion layer is intentionally out of scope for owner-data customization; it operates identically regardless of which owner's data is loaded.
+`App.tsx` renders from the committed, owner-scope-checked snapshot on first paint and never imports the deep GitHub-inspection pipeline. Its only runtime network call is to the instance's own same-origin `/api/github-live` endpoint (owner-bound, credential-free in the browser); a failure there leaves the snapshot untouched. The topology canvas (`src/components/TopologyCanvas.tsx`) and capability reactor (`src/utils/capabilityReactor.ts`, `src/utils/orbitMotion.ts`) run a single autonomous animation frame loop driving deterministic orbit/dock/reflow physics — this rendering and motion layer is intentionally out of scope for owner-data customization; it operates identically regardless of which owner's data is loaded.
 </details>
 
 ## Screenshots

@@ -1,8 +1,68 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import {defineConfig, loadEnv, type Plugin} from 'vite';
 import {runDeploymentReadinessCheck} from './scripts/check-deployment-readiness';
+
+/**
+ * Local-development adapter for the runtime live-GitHub endpoint.
+ *
+ * On Vercel, `api/github-live.ts` is auto-deployed as a serverless function.
+ * `vite dev` does not execute Vercel functions, so this dev-only plugin serves
+ * the SAME transport-agnostic core (`handleLiveGitHubRequest`) at the same
+ * path, keeping `npm run dev` working and the endpoint testable locally. It is
+ * only registered for `command === 'serve'` and is dynamically imported inside
+ * `configureServer` so it adds nothing to a production build. A local `.env`
+ * `GITHUB_TOKEN` (non-`VITE_` prefixed, so never bundled) is picked up here.
+ */
+function githubLiveDevEndpointPlugin(): Plugin {
+  const ROUTE = '/api/github-live';
+  return {
+    name: 'systems-cartography:github-live-dev-endpoint',
+    apply: 'serve',
+    configureServer(server) {
+      const localEnv = loadEnv(server.config.mode, process.cwd(), '');
+      server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
+        const pathname = (req.url || '').split('?')[0];
+        if (pathname !== ROUTE) {
+          next();
+          return;
+        }
+        try {
+          const { handleLiveGitHubRequest } = await import('./src/services/githubLiveInventory');
+          const result = await handleLiveGitHubRequest({
+            method: req.method,
+            // Real process env wins over .env files (e.g. `GITHUB_TOKEN=x npm run dev`).
+            env: { ...localEnv, ...process.env },
+          });
+          res.statusCode = result.status;
+          for (const [key, value] of Object.entries(result.headers)) {
+            res.setHeader(key, value);
+          }
+          res.end(JSON.stringify(result.body));
+        } catch {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(
+            JSON.stringify({
+              ok: false,
+              owner: '',
+              complete: false,
+              truncated: false,
+              fetchedAt: new Date().toISOString(),
+              authenticated: false,
+              repositoryCount: 0,
+              repositories: [],
+              reason: 'upstream_error',
+            }),
+          );
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig(({command}) => {
   // Fork-safety gate, enforced inside the Vite build pipeline itself so it
@@ -19,7 +79,11 @@ export default defineConfig(({command}) => {
   }
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(command === 'serve' ? [githubLiveDevEndpointPlugin()] : []),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -27,7 +91,7 @@ export default defineConfig(({command}) => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

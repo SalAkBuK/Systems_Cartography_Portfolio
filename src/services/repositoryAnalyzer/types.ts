@@ -33,6 +33,10 @@ export interface RawRepositoryInspection {
   docsFiles?: string[];
   testFiles?: string[];
   configFiles?: string[];
+  /** Repository paths that were content-validated as genuine n8n workflow exports. */
+  n8nWorkflowFiles?: string[];
+  /** path -> raw JSON body for each validated n8n workflow export (bounded during inspection). */
+  n8nWorkflowContents?: Record<string, string>;
 }
 
 export interface AnalyzedDocumentation {

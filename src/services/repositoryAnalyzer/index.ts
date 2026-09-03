@@ -9,6 +9,7 @@ import { RawRepositoryInspection } from './types';
 export * from './types';
 export * from './documentationAnalyzer';
 export * from './dependencyAnalyzer';
+export * from './n8nWorkflowAnalyzer';
 export * from './testAnalyzer';
 export * from './architectureAnalyzer';
 export * from './evidenceMerger';
