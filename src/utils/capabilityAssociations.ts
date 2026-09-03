@@ -34,6 +34,18 @@ const CANONICAL_TECH_MAP: Record<string, string> = {
   'koa': 'Koa',
   'hono': 'Hono',
 
+  // Vercel Functions. Eligible ONLY from STRUCTURED evidence -- the deep
+  // analyzer's vercelFunctionAnalyzer proves a root vercel.json plus a valid
+  // root api/ function path. The spelled-out legacy variants normalize to the
+  // current product name. Bare "vercel" (a common "deployed on Vercel" topic on
+  // frontend repos) is deliberately NOT mapped.
+  'vercel functions': 'Vercel Functions',
+  'vercel function': 'Vercel Functions',
+  'vercel serverless functions': 'Vercel Functions',
+  'vercel serverless function': 'Vercel Functions',
+  'vercel serverless': 'Vercel Functions',
+  'vercel serverless api': 'Vercel Functions',
+
   // React & Web UI
   'react': 'React',
   'react.js': 'React',
@@ -182,6 +194,13 @@ const TECHNOLOGY_FAMILY_MAP: Record<string, string[]> = {
   'Fastify': ['Node.js'],
   'Koa': ['Node.js'],
   'BullMQ': ['Node.js'],
+  // NOTE: 'Vercel Functions' is deliberately NOT mapped to Node.js here. Vercel
+  // Functions run on multiple runtimes (Node.js, Python, Go, Ruby, Edge); the
+  // platform name alone proves no runtime. The deep analyzer's
+  // vercelFunctionAnalyzer emits an explicit 'Node.js' tech alongside it ONLY
+  // for JS/TS (.ts/.js/.mjs/.cjs) function files, so a JS/TS Vercel project
+  // still satisfies the Node.js capability -- through direct evidence, not
+  // through global family ancestry.
 
   // React ecosystem
   'React Native': ['React'],
@@ -490,6 +509,7 @@ export const RECOGNIZED_CAPABILITY_TAXONOMY: Record<string, { category: SystemCa
   'NestJS': { category: 'backend', titleSuffix: 'Modular Monolith Architecture' },
   'Express': { category: 'backend', titleSuffix: 'API Architecture' },
   'Fastify': { category: 'backend', titleSuffix: 'High-Throughput Services' },
+  'Vercel Functions': { category: 'backend', titleSuffix: 'Serverless API Architecture' },
   'PostgreSQL': { category: 'backend', titleSuffix: 'Relational Database Architecture' },
   'MySQL': { category: 'backend', titleSuffix: 'Relational Database Architecture' },
   'SQLite': { category: 'backend', titleSuffix: 'Embedded Storage Architecture' },

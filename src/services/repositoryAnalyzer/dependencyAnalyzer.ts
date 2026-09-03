@@ -1,5 +1,6 @@
 import { AnalyzedDependencies, RawRepositoryInspection } from './types';
 import { analyzeN8nWorkflows } from './n8nWorkflowAnalyzer';
+import { analyzeVercelFunctions } from './vercelFunctionAnalyzer';
 
 /**
  * Known Node/TypeScript packages dictionary with layer mappings
@@ -349,6 +350,22 @@ export function analyzeDependencies(inspection: RawRepositoryInspection): Analyz
       result.primaryEcosystem = 'n8n';
     }
     for (const tech of n8n.technologies) {
+      addFramework(result, 'backend', tech);
+    }
+  }
+
+  // 3c. Vercel Functions (structural evidence: a ROOT vercel.json PLUS at least
+  //     one ROOT api/*.{ts,js,mjs,cjs} function file). The legacy now.json is
+  //     not accepted (Vercel removed support 2026-03-31). Framework-agnostic --
+  //     no Express/Fastify/Nest package required. Node.js leads so architecture
+  //     / techStack read the runtime before the platform capability. Nothing
+  //     here is repository-name aware.
+  const vercel = analyzeVercelFunctions(inspection.treeFiles);
+  if (vercel.isVercelServerlessProject) {
+    if (result.primaryEcosystem === 'General' || !result.primaryEcosystem) {
+      result.primaryEcosystem = 'Node.js';
+    }
+    for (const tech of vercel.technologies) {
       addFramework(result, 'backend', tech);
     }
   }
