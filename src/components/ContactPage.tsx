@@ -78,6 +78,8 @@ export const ContactPage: React.FC<ContactPageProps> = ({ operator, formEndpoint
         setStatusMessage('The configured contact email is invalid. Use another published contact channel.');
       } else if (error instanceof ContactDeliveryError && error.reason === 'timeout') {
         setStatusMessage('The contact service timed out. Try again or use the direct email option.');
+      } else if (error instanceof ContactDeliveryError && error.reason === 'rate-limited') {
+        setStatusMessage('Too many contact attempts. Please wait a few minutes or use the direct email option.');
       } else {
         setStatusMessage('The form could not deliver this message. Use the direct email option instead.');
       }

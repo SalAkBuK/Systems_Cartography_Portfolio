@@ -1,4 +1,7 @@
-import { sanitizeEmailAddress } from './urlSecurity';
+// Explicit `.js` specifier: this module is part of the runtime dependency
+// graph of the `api/contact.ts` Vercel function (via `contactService.ts`),
+// which runs under Node's native ESM loader with no extension inference.
+import { sanitizeEmailAddress } from './urlSecurity.js';
 
 export const CONTACT_FIELD_LIMITS = {
   name: 100,
@@ -6,6 +9,15 @@ export const CONTACT_FIELD_LIMITS = {
   subject: 160,
   message: 5000
 } as const;
+
+/**
+ * Characters that must never appear in a header-adjacent value (name, subject).
+ * Rejecting CR / LF / NUL / other C0 controls + DEL keeps hostile
+ * header-injection payloads ("Foo\nBcc: attacker@x") from ever reaching the
+ * mail provider. The message body itself is NOT subject to this -- it may
+ * legitimately contain newlines.
+ */
+const HEADER_UNSAFE_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 export interface ContactInput {
   name: string;
@@ -35,11 +47,17 @@ export function validateContactInput(input: ContactInput): ContactValidationResu
   if (value.name.length > CONTACT_FIELD_LIMITS.name) {
     return { valid: false, error: `Name must be ${CONTACT_FIELD_LIMITS.name} characters or fewer.` };
   }
+  if (HEADER_UNSAFE_CHARACTER_PATTERN.test(value.name)) {
+    return { valid: false, error: 'Name contains invalid characters.' };
+  }
   if (value.email.length > CONTACT_FIELD_LIMITS.email || !sanitizeEmailAddress(value.email)) {
     return { valid: false, error: 'Enter a valid reply email address.' };
   }
   if (value.subject.length > CONTACT_FIELD_LIMITS.subject) {
     return { valid: false, error: `Subject must be ${CONTACT_FIELD_LIMITS.subject} characters or fewer.` };
+  }
+  if (HEADER_UNSAFE_CHARACTER_PATTERN.test(value.subject)) {
+    return { valid: false, error: 'Subject contains invalid characters.' };
   }
   if (value.message.length > CONTACT_FIELD_LIMITS.message) {
     return { valid: false, error: `Message must be ${CONTACT_FIELD_LIMITS.message} characters or fewer.` };

@@ -42,6 +42,8 @@ import ts from 'typescript';
 const REPO_ROOT = process.cwd();
 /** The Vercel serverless function whose emitted graph must be Node-ESM-safe. */
 const ENTRY = 'api/github-live.ts';
+/** Every other `api/*.ts` function whose emitted graph must ALSO be Node-ESM-safe. */
+const OTHER_ENTRIES = ['api/contact.ts'];
 
 interface EmittedFile {
   /** Repo-relative source path, e.g. `src/services/githubLiveInventory.ts`. */
@@ -240,6 +242,47 @@ test('no emitted file keeps an extensionless local import (Node ESM has no `.js`
     `extensionless local runtime imports fail on Vercel with ERR_MODULE_NOT_FOUND:\n${offenders.join('\n')}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// The SAME guarantees for every OTHER api/*.ts function (contact, ...).
+// The runtime smoke-run above is github-live-specific; the graph checks are
+// generic, so run them per additional entry.
+// ---------------------------------------------------------------------------
+for (const otherEntry of OTHER_ENTRIES) {
+  const otherGraph = buildEmittedGraph(otherEntry);
+  const otherEmitDir = materialize(otherGraph.files);
+  after(() => rmSync(otherEmitDir, { recursive: true, force: true }));
+
+  test(`${otherEntry}: every relative specifier in the emitted graph resolves to a source file`, () => {
+    assert.deepEqual(otherGraph.unresolved, []);
+    const rels = otherGraph.files.map((f) => f.rel).sort();
+    assert.ok(rels.includes(otherEntry));
+  });
+
+  test(`${otherEntry}: no emitted file keeps an extensionless local import`, () => {
+    const offenders: string[] = [];
+    for (const { rel, js } of otherGraph.files) {
+      for (const spec of relativeSpecifiers(js)) {
+        if (!/\.(js|mjs|cjs|json)$/.test(spec)) offenders.push(`${rel}: "${spec}"`);
+      }
+    }
+    assert.deepEqual(offenders, [], `extensionless local imports:\n${offenders.join('\n')}`);
+  });
+
+  test(`${otherEntry}: emitted entry default-exports a handler and imports cleanly under native Node ESM`, () => {
+    const probe = path.join(otherEmitDir, 'probe.mjs');
+    const entryUrl = pathToFileURL(path.join(otherEmitDir, otherEntry.replace(/\.tsx?$/, '.js'))).href;
+    writeFileSync(probe, `const m = await import(${JSON.stringify(entryUrl)});\nprocess.stdout.write(typeof m.default);\n`);
+    let out: string;
+    try {
+      out = execFileSync(process.execPath, [probe], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } });
+    } catch (err) {
+      const e = err as { stderr?: string; stdout?: string; message: string };
+      assert.fail(`native Node ESM could not load ${otherEntry}:\n${e.stderr || e.stdout || e.message}`);
+    }
+    assert.equal(out, 'function');
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Node native ESM load + run  (the exact production failure surface)

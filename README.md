@@ -300,13 +300,29 @@ Not all professional work has a public GitHub repository, and that's fine — th
 
 ### Contact form
 
-The contact page always shows your configured email address directly. Without a configured endpoint, submitting the form opens the visitor's own mail client. To deliver form submissions through a hosted endpoint (e.g. Formspree), set:
+The contact page always shows your configured email address directly. Without a configured endpoint, submitting the form opens the visitor's own mail client. There are two ways to deliver submissions instead:
+
+**1. Built-in first-party endpoint (recommended, functions-capable hosts).** The deployment's own `POST /api/contact` Vercel Node function delivers the message to you via the [Resend](https://resend.com) REST API. Set one public variable plus three server-only variables:
+
+```env
+# Public browser configuration — only an endpoint path, not a secret
+VITE_CONTACT_FORM_ENDPOINT=/api/contact
+
+# Server-side only — NEVER prefix with VITE_ (that inlines them into the browser bundle)
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+CONTACT_TO_EMAIL=owner@example.com
+CONTACT_FROM_EMAIL=Portfolio Contact <onboarding@resend.dev>
+```
+
+The visitor's address is sent as the email's `reply_to` (never `from`), so replying from your inbox reaches them. `onboarding@resend.dev` is Resend's shared sandbox sender — usable for initial testing while Resend restricts delivery to your own account email; for production, verify a custom sending domain in the Resend dashboard and set `CONTACT_FROM_EMAIL` to an address on it (no code change needed). The endpoint enforces, server-side and independent of the browser: POST-only, `application/json` only, a 16 KiB body cap, a same-origin check, the shared field validation, CR/LF rejection in header-adjacent fields, the hidden honeypot (a populated `company_website` returns a generic success and never contacts Resend), and a bounded Resend timeout. Provider errors, credentials, and recipient configuration are never returned to the browser or logged. **Request-rate abuse protection is configured at the edge (Vercel WAF), not in function code** — the client handles an HTTP `429` with a "wait a few minutes" message.
+
+**2. External hosted endpoint (any host).** For template/fork compatibility, `VITE_CONTACT_FORM_ENDPOINT` still accepts any safe absolute HTTPS URL (e.g. a Formspree endpoint); those submissions are posted as multipart form data as before.
 
 ```env
 VITE_CONTACT_FORM_ENDPOINT=https://formspree.io/f/your-form-id
 ```
 
-**Never put SMTP passwords, API keys, or private credentials in a `VITE_` variable** — Vite inlines those values into the client-side JavaScript bundle, so they are visible to anyone who views the page source. Use a hosted form endpoint or a serverless function that keeps real secrets server-side. The contact form includes a hidden honeypot field, but the receiving endpoint should still apply its own rate limiting and abuse protection.
+**Never put an API key, SMTP password, or any private credential in a `VITE_` variable** — Vite inlines `VITE_`-prefixed values into the client-side JavaScript bundle, where anyone viewing page source can read them. `RESEND_API_KEY`, `CONTACT_TO_EMAIL`, and `CONTACT_FROM_EMAIL` are read only by the server function and are never bundled into browser code.
 
 ### Update your portfolio
 
@@ -333,13 +349,14 @@ manifest fails closed and is instructed to run `npm run setup:portfolio`.
 
 **Vercel**
 - Framework preset: Vite. Build command: `npm run build`. Output directory: `dist`.
-- The `api/` directory is auto-detected and deployed as a Node serverless function — this is what powers [live GitHub sync](#live-github-sync). No extra configuration is needed; `vercel.json` only defines security headers.
-- Set `VITE_CONTACT_FORM_ENDPOINT` (if used) as an environment variable in the Vercel project settings, not committed to source.
+- The `api/` directory is auto-detected and its files are deployed as Node serverless functions — `api/github-live.ts` powers [live GitHub sync](#live-github-sync), `api/contact.ts` powers the [built-in contact form](#contact-form). No extra configuration is needed; `vercel.json` only defines security headers.
+- Set `VITE_CONTACT_FORM_ENDPOINT` (public, not a secret) as an environment variable in the Vercel project settings. For the built-in endpoint also set `RESEND_API_KEY`, `CONTACT_TO_EMAIL`, and `CONTACT_FROM_EMAIL` — **server-side only, never `VITE_` variables**.
+- Configure request-rate abuse protection for `/api/contact` at the Vercel WAF / firewall layer (the function code intentionally contains no in-memory rate limiter).
 - Optionally set `GITHUB_TOKEN` (server-side only — **never** a `VITE_` variable) to raise the live-sync GitHub rate limit. Live sync also works with no token.
 
 **Netlify**
 - Build command: `npm run build`. Publish directory: `dist`.
-- Same environment-variable guidance applies. Netlify does not build the `api/` directory, so a Netlify deploy runs snapshot-only (the live endpoint 404s and the site falls back to the committed snapshot). Add a Netlify function + `/api/*` redirect if you want live sync there.
+- Same environment-variable guidance applies. Netlify does not build the `api/` directory, so a Netlify deploy runs snapshot-only: `/api/github-live` and `/api/contact` both 404, so the site falls back to the committed snapshot and the contact form falls back to the visitor's mail client. Add Netlify functions + an `/api/*` redirect if you want either there, or point `VITE_CONTACT_FORM_ENDPOINT` at an external hosted form endpoint.
 
 **Other static Vite hosts** (Cloudflare Pages, GitHub Pages, static S3/CDN, etc.) work the same way: run `npm run build`, deploy the contents of `dist/`. Without a functions runtime the live endpoint is simply absent and the site renders the committed snapshot.
 
@@ -401,10 +418,12 @@ last-refresh time, and a manual refresh control (it re-requests the endpoint
 without reloading the page).
 
 **Local development.** `vite dev` does not run Vercel functions, so
-`vite.config.ts` registers a dev-only middleware that serves the same endpoint
-core at `/api/github-live`. `npm run dev` works unchanged; hit
-`http://localhost:3000/api/github-live` to exercise it. A local non-`VITE_`
-`GITHUB_TOKEN` (e.g. in `.env`) is picked up by the dev middleware only.
+`vite.config.ts` registers dev-only middleware that serves the same
+transport-agnostic cores at `/api/github-live` and `/api/contact`. `npm run
+dev` works unchanged; hit `http://localhost:3000/api/github-live` to exercise
+it. Local non-`VITE_` server values (`GITHUB_TOKEN`, and `RESEND_API_KEY` /
+`CONTACT_TO_EMAIL` / `CONTACT_FROM_EMAIL` for the contact endpoint, e.g. in
+`.env`) are picked up by the dev middleware only, never bundled.
 
 ## Privacy & provenance
 

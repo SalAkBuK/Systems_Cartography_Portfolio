@@ -31,3 +31,13 @@ test('contact validation enforces every server-independent field ceiling', () =>
     assert.equal(result.valid, false, `${field} must reject values beyond its limit`);
   }
 });
+
+test('contact validation rejects CR / LF / control characters in header-adjacent fields but allows newlines in the message body', () => {
+  for (const injection of ['Real\nName', 'Real\r\nName', 'Name\x00', 'Name\x1b[0m']) {
+    assert.equal(validateContactInput({ ...validInput, name: injection }).valid, false, `name: ${JSON.stringify(injection)}`);
+    assert.equal(validateContactInput({ ...validInput, subject: injection }).valid, false, `subject: ${JSON.stringify(injection)}`);
+  }
+  // the message body legitimately contains newlines
+  const ok = validateContactInput({ ...validInput, message: 'First line\nSecond line\n\nSignature' });
+  assert.equal(ok.valid, true);
+});

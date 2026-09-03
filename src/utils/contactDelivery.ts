@@ -3,6 +3,14 @@ import { buildMailtoUrl, sanitizeHttpUrl } from './urlSecurity';
 
 export const DEFAULT_CONTACT_REQUEST_TIMEOUT_MS = 15_000;
 
+/**
+ * The one trusted same-origin relative path for the built-in first-party
+ * contact function (`api/contact.ts`). `sanitizeContactEndpoint` accepts this
+ * EXACT string in addition to safe absolute HTTPS endpoints -- it does not
+ * open the door to arbitrary relative URLs.
+ */
+export const BUILTIN_CONTACT_ENDPOINT_PATH = '/api/contact';
+
 export interface ContactSubmissionLock {
   inFlight: boolean;
 }
@@ -14,7 +22,7 @@ export type ContactDeliveryResult =
 
 export class ContactDeliveryError extends Error {
   constructor(
-    public readonly reason: 'invalid-owner-email' | 'timeout' | 'request-failed',
+    public readonly reason: 'invalid-owner-email' | 'timeout' | 'request-failed' | 'rate-limited',
     message: string
   ) {
     super(message);
@@ -33,8 +41,20 @@ interface ContactDeliveryOptions {
 }
 
 export function sanitizeContactEndpoint(endpoint?: string | null): string | undefined {
+  // The built-in first-party endpoint is the ONE trusted relative path.
+  if (typeof endpoint === 'string' && endpoint.trim() === BUILTIN_CONTACT_ENDPOINT_PATH) {
+    return BUILTIN_CONTACT_ENDPOINT_PATH;
+  }
+  // Everything else must still be a safe absolute HTTPS URL (template / fork
+  // compatibility with hosted form providers). Arbitrary relative paths,
+  // protocol-relative URLs, and non-HTTP schemes stay rejected.
   const safeEndpoint = sanitizeHttpUrl(endpoint);
   return safeEndpoint && new URL(safeEndpoint).protocol === 'https:' ? safeEndpoint : undefined;
+}
+
+/** True only for the built-in first-party `/api/contact` endpoint. */
+export function isBuiltInContactEndpoint(endpoint?: string | null): boolean {
+  return sanitizeContactEndpoint(endpoint) === BUILTIN_CONTACT_ENDPOINT_PATH;
 }
 
 function createOutboundFormData(input: Required<ContactInput>): FormData {
@@ -44,6 +64,17 @@ function createOutboundFormData(input: Required<ContactInput>): FormData {
   data.set('subject', input.subject);
   data.set('message', input.message);
   return data;
+}
+
+/** JSON body for the built-in `/api/contact` endpoint (honeypot field always included, normally empty). */
+function createBuiltInContactBody(input: Required<ContactInput>): string {
+  return JSON.stringify({
+    name: input.name,
+    email: input.email,
+    subject: input.subject,
+    message: input.message,
+    companyWebsite: input.companyWebsite,
+  });
 }
 
 /** Delivers one validated contact request while keeping retry and duplicate behavior deterministic. */
@@ -87,12 +118,23 @@ export async function deliverContact(options: ContactDeliveryOptions): Promise<C
     }, timeoutMs);
 
     try {
+      const isBuiltIn = safeEndpoint === BUILTIN_CONTACT_ENDPOINT_PATH;
       const response = await (options.fetchImpl || globalThis.fetch)(safeEndpoint, {
         method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: createOutboundFormData(options.input),
+        headers: isBuiltIn
+          ? { Accept: 'application/json', 'Content-Type': 'application/json' }
+          : { Accept: 'application/json' },
+        body: isBuiltIn
+          ? createBuiltInContactBody(options.input)
+          : createOutboundFormData(options.input),
         signal: controller.signal
       });
+      if (response.status === 429) {
+        throw new ContactDeliveryError(
+          'rate-limited',
+          'Too many contact attempts. Please wait a few minutes or use the direct email option.'
+        );
+      }
       if (!response.ok) {
         throw new ContactDeliveryError(
           'request-failed',
