@@ -231,3 +231,14 @@ test('TopTelemetryBar consumes the two distinct counts and no longer references 
   // The GITHUB // LIVE label is untouched.
   assert.ok(telemetrySrc.includes('GITHUB // LIVE'));
 });
+
+test('the OWNER PROJECTS card labels activeProjectsCount as PROJECTS, not PUBLIC REPOS (it counts rendered eligible projects, not the raw repo inventory)', () => {
+  assert.ok(
+    telemetrySrc.includes("{activeProjectsCount.toString().padStart(2, '0')} PROJECTS"),
+    'the OWNER PROJECTS card must read "NN PROJECTS"',
+  );
+  assert.ok(
+    !/activeProjectsCount\.toString\(\)\.padStart\(2, '0'\)\} PUBLIC REPOS/.test(telemetrySrc),
+    'activeProjectsCount must never be labelled "PUBLIC REPOS" — that number is the rendered project count',
+  );
+});

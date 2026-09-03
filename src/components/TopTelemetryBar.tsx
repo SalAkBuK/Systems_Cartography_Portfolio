@@ -128,7 +128,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
 
         <div className="flex flex-col bg-[#15150F] text-[#C3E54E] px-2.5 py-1 sm:py-0.5 border border-[#15150F] shadow-[1px_1px_0px_#15150F]">
           <span className="text-[10px] text-[#D4CDA4] tracking-tighter opacity-70">OWNER PROJECTS</span>
-          <span className="text-[#C3E54E] font-bold text-[12px] tracking-wider">{activeProjectsCount.toString().padStart(2, '0')} PUBLIC REPOS</span>
+          <span className="text-[#C3E54E] font-bold text-[12px] tracking-wider">{activeProjectsCount.toString().padStart(2, '0')} PROJECTS</span>
         </div>
 
         <div className="hidden lg:flex flex-col">
