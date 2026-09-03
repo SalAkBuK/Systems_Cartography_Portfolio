@@ -179,11 +179,15 @@ test('3. Technologies unavailable in Simple Icons resolve to deterministic fallb
 });
 
 // ---------------------------------------------------------------------------
-// 4. Complete Snapshot Coverage: All 24 Active Capability Nodes Resolve
+// 4. Complete Snapshot Coverage: every active capability node resolves
 // ---------------------------------------------------------------------------
 test('4. Every capability node in the active snapshot resolves to a valid descriptor', () => {
   const skills = GITHUB_SNAPSHOT.skills;
-  assert.equal(skills.length, 24, 'Snapshot must contain exactly 24 capability skills');
+  // The committed snapshot's capability count tracks whatever `npm run sync:github`
+  // last derived from real repository evidence (currently 27 -- the pre-n8n 24
+  // plus n8n / Google Sheets / WhatsApp Cloud API from physio_bot's workflow
+  // exports). The invariant this test guards is coverage: EVERY one resolves.
+  assert.ok(skills.length >= 24, `expected at least 24 capability skills, got ${skills.length}`);
 
   for (const skill of skills) {
     const coreTech = getCapabilityCoreTechnology(skill);

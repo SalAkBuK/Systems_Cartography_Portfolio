@@ -294,3 +294,207 @@ test('fetchRepoInspection fetches and content-validates n8n workflow JSON, ignor
   assert.ok(deps.frameworks.backend.includes('n8n'));
   assert.ok(deps.frameworks.backend.includes('Google Sheets'));
 });
+
+// ---------------------------------------------------------------------------
+// REGRESSION: nested `n8n/workflows/*.json` (the real-world layout) must flow
+// end-to-end into bidirectional capability links.
+//
+// The committed snapshot was generated before this analyzer shipped, so a
+// repository laid out like SalAkBuK/physio_bot --
+//
+//   n8n/
+//     workflows/
+//       00-google-sheets-slot-poc.json
+//       01-*-intake.json
+//       99-whatsapp-credential-smoke-test.json
+//
+// -- came through as `techStack: ["Codebase"]` / `infrastructureDeps: []` and
+// rendered as a disconnected project block. These tests prove the GENERIC
+// pipeline handles that layout. The synthetic repository is deliberately NOT
+// named `physio_bot`; any repo with the same STRUCTURAL evidence must get the
+// same capability edges.
+// ---------------------------------------------------------------------------
+
+/** manualTrigger + 3 googleSheets + if -- proves Google Sheets, no webhook. */
+const WF_SHEETS_POC = JSON.stringify({
+  name: 'Slot POC',
+  nodes: [
+    { id: 'a', name: "When clicking 'Execute workflow'", type: 'n8n-nodes-base.manualTrigger', position: [0, 0] },
+    { id: 'b', name: 'Find Slot', type: 'n8n-nodes-base.googleSheets', position: [200, 0], parameters: { operation: 'read' } },
+    { id: 'c', name: 'Book Appointment', type: 'n8n-nodes-base.googleSheets', position: [400, 0], parameters: { operation: 'append' } },
+    { id: 'd', name: 'If', type: 'n8n-nodes-base.if', position: [600, 0] },
+    { id: 'e', name: 'Update row in sheet', type: 'n8n-nodes-base.googleSheets', position: [800, 0], parameters: { operation: 'update' } },
+  ],
+  connections: {},
+});
+
+/** manualTrigger + googleSheets. */
+const WF_INTAKE = JSON.stringify({
+  name: 'Intake',
+  nodes: [
+    { id: 'a', name: 'Manual Trigger', type: 'n8n-nodes-base.manualTrigger', position: [0, 0] },
+    { id: 'b', name: 'Get Available Slots', type: 'n8n-nodes-base.googleSheets', position: [200, 0], parameters: { operation: 'read' } },
+  ],
+  connections: {},
+});
+
+/** manualTrigger + whatsApp + whatsAppTrigger + set -- proves WhatsApp, still no webhook. */
+const WF_WHATSAPP_SMOKE = JSON.stringify({
+  name: 'WhatsApp credential smoke test',
+  nodes: [
+    { id: 'a', name: 'Manual Trigger', type: 'n8n-nodes-base.manualTrigger', position: [0, 0] },
+    { id: 'b', name: 'Send WhatsApp Test', type: 'n8n-nodes-base.whatsApp', position: [200, 0] },
+    { id: 'c', name: 'WhatsApp Trigger', type: 'n8n-nodes-base.whatsAppTrigger', position: [200, 200] },
+    { id: 'd', name: 'Inspect Incoming Message', type: 'n8n-nodes-base.set', position: [400, 200] },
+  ],
+  connections: {},
+});
+
+const NESTED_TREE = {
+  truncated: false,
+  tree: [
+    { path: '.gitignore', type: 'blob' },
+    { path: 'AGENTS.md', type: 'blob' },
+    { path: 'README.md', type: 'blob' },
+    { path: 'docs/CURRENT_STATE.md', type: 'blob' },
+    { path: 'n8n/README.md', type: 'blob' },
+    { path: 'n8n/workflows/00-google-sheets-slot-poc.json', type: 'blob' },
+    { path: 'n8n/workflows/01-scheduler-intake.json', type: 'blob' },
+    { path: 'n8n/workflows/99-whatsapp-credential-smoke-test.json', type: 'blob' },
+  ],
+};
+
+function nestedWorkflowFetchers(): { restFetch: typeof fetch; rawFetch: typeof fetch } {
+  const restFetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify(NESTED_TREE), { status: 200 });
+    return new Response('Not Found', { status: 404 });
+  }) as typeof fetch;
+
+  const rawFetch = (async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.endsWith('/README.md')) {
+      return new Response('# Scheduler\nA WhatsApp + Google Sheets appointment flow built on n8n.', { status: 200 });
+    }
+    if (url.endsWith('/n8n/workflows/00-google-sheets-slot-poc.json')) return new Response(WF_SHEETS_POC, { status: 200 });
+    if (url.endsWith('/n8n/workflows/01-scheduler-intake.json')) return new Response(WF_INTAKE, { status: 200 });
+    if (url.endsWith('/n8n/workflows/99-whatsapp-credential-smoke-test.json')) return new Response(WF_WHATSAPP_SMOKE, { status: 200 });
+    return new Response('Not Found', { status: 404 });
+  }) as typeof fetch;
+
+  return { restFetch, rawFetch };
+}
+
+test('isCandidateN8nWorkflowPath accepts the nested n8n/workflows/NN-name.json layout', () => {
+  assert.equal(isCandidateN8nWorkflowPath('n8n/workflows/00-google-sheets-slot-poc.json'), true);
+  assert.equal(isCandidateN8nWorkflowPath('n8n/workflows/99-whatsapp-credential-smoke-test.json'), true);
+  // the directory signal, not the filename, is what qualifies these
+  assert.equal(isCandidateN8nWorkflowPath('n8n/workflows/data.json'), true);
+  // a numeric-prefixed json OUTSIDE any workflow directory is still not a candidate
+  assert.equal(isCandidateN8nWorkflowPath('src/fixtures/00-data.json'), false);
+});
+
+test('fetchRepoInspection discovers EVERY nested n8n/workflows/*.json file, not just a flat one', async () => {
+  const { restFetch, rawFetch } = nestedWorkflowFetchers();
+
+  const inspection = await fetchRepoInspection('SalAkBuK', 'clinic-slot-scheduler', 'main', {
+    fetchImpl: restFetch,
+    rawFetchImpl: rawFetch,
+  });
+
+  assert.deepEqual(
+    [...(inspection.n8nWorkflowFiles ?? [])].sort(),
+    [
+      'n8n/workflows/00-google-sheets-slot-poc.json',
+      'n8n/workflows/01-scheduler-intake.json',
+      'n8n/workflows/99-whatsapp-credential-smoke-test.json',
+    ],
+    'all three nested workflow exports are fetched and content-validated',
+  );
+
+  const analysis = analyzeN8nWorkflows(inspection.n8nWorkflowContents);
+  assert.equal(analysis.workflowCount, 3);
+  assert.deepEqual(
+    analysis.technologies.sort(),
+    ['Google Sheets', 'WhatsApp Cloud API', 'n8n'].sort(),
+    'structurally proven: n8n + Google Sheets + WhatsApp; NO Webhooks (no webhook node exists)',
+  );
+});
+
+test('nested n8n workflow evidence flows to techStack, subsystems, and BIDIRECTIONAL capability links', async () => {
+  const { restFetch, rawFetch } = nestedWorkflowFetchers();
+
+  // Generic repo -- NOT `physio_bot`. Same structural evidence => same edges.
+  const repo = repoFixture({
+    id: 90210,
+    name: 'clinic-slot-scheduler',
+    full_name: 'SalAkBuK/clinic-slot-scheduler',
+    html_url: 'https://github.com/SalAkBuK/clinic-slot-scheduler',
+    description: 'Appointment scheduling automation',
+    language: null,
+    topics: [],
+  });
+
+  const inspection = await fetchRepoInspection(repo.owner.login, repo.name, 'main', {
+    fetchImpl: restFetch,
+    rawFetchImpl: rawFetch,
+  });
+  const project = transformGitHubRepoToProject(repo, 0, 1, inspection);
+
+  // techStack is now evidence-grounded -- NOT the "Codebase" fallback.
+  assert.ok(!project.techStack.includes('Codebase'), 'the inert Codebase fallback is gone');
+  for (const tech of ['n8n', 'Google Sheets', 'WhatsApp Cloud API']) {
+    assert.ok(project.techStack.includes(tech), `techStack should include ${tech}`);
+  }
+  assert.ok(!project.techStack.includes('Webhooks'), 'Webhooks is NOT claimed without a webhook node');
+
+  // a subsystem is derived from the workflow evidence (no longer "single-tier Codebase")
+  assert.ok(project.subsystems.length > 0, 'workflow evidence yields at least one subsystem');
+  assert.ok(
+    project.subsystems.some((s) => s.tech.includes('n8n')),
+    'a subsystem carries the n8n workflow technology',
+  );
+
+  const { skills } = generateGitHubProfileDetails(
+    [project],
+    sanitizeGitHubUser({ login: 'SalAkBuK' }),
+    'SalAkBuK',
+  );
+
+  const capabilityNames = skills.map((s) => s.name);
+  for (const tech of ['n8n ', 'Google Sheets ', 'WhatsApp Cloud API ']) {
+    const skill = skills.find((s) => s.name.startsWith(tech));
+    assert.ok(skill, `a capability node is generated for ${tech.trim()}`);
+    assert.ok(
+      skill!.usedInProjects.includes(project.id),
+      `${tech.trim()} capability.usedInProjects references the project`,
+    );
+    assert.ok(
+      project.infrastructureDeps.includes(skill!.id),
+      `project.infrastructureDeps references the ${tech.trim()} capability`,
+    );
+  }
+  assert.ok(
+    !capabilityNames.some((n) => n.startsWith('Webhooks ')),
+    'no Webhooks capability node -- there is no structural evidence for it',
+  );
+
+  // Full bidirectional consistency: the topology edge set agrees from both ends.
+  const skillById = new Map(skills.map((s) => [s.id, s]));
+  for (const depId of project.infrastructureDeps) {
+    assert.ok(skillById.has(depId), `infrastructureDep ${depId} resolves to a generated capability`);
+    assert.ok(
+      skillById.get(depId)!.usedInProjects.includes(project.id),
+      `capability ${depId} lists the project back`,
+    );
+  }
+  for (const s of skills) {
+    if (s.usedInProjects.includes(project.id)) {
+      assert.ok(
+        project.infrastructureDeps.includes(s.id),
+        `${s.name} lists the project but the project does not list it back`,
+      );
+    }
+  }
+  assert.ok(project.infrastructureDeps.length >= 3, 'at least the three proven capabilities are linked');
+});

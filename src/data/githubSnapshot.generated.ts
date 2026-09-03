@@ -6,12 +6,12 @@ import type { GitHubSyncResult } from '../services/githubService';
 
 export const GITHUB_SNAPSHOT_METADATA: GitHubSnapshotMetadata = {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-29T07:28:03.816Z",
+  "generatedAt": "2026-09-03T15:59:47.197Z",
   "githubTarget": "https://github.com/SalAkBuK",
   "sourceIdentifier": "SalAkBuK",
-  "rawRepositoryCount": 19,
-  "canonicalRepositoryCount": 18,
-  "inspectedRepositoryCount": 18,
+  "rawRepositoryCount": 18,
+  "canonicalRepositoryCount": 17,
+  "inspectedRepositoryCount": 17,
   "inspectionWarnings": []
 };
 
@@ -24,17 +24,394 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     "avatar_url": "https://avatars.githubusercontent.com/u/119301846?v=4",
     "bio": null,
     "html_url": "https://github.com/SalAkBuK",
-    "public_repos": 19,
-    "followers": 13,
-    "following": 20,
+    "public_repos": 18,
+    "followers": 26,
+    "following": 39,
     "company": null,
     "location": null,
-    "blog": ""
+    "blog": null
   },
   "projects": [
     {
-      "id": "gh-1072943348",
+      "id": "gh-1347309405",
       "code": "GH-01",
+      "title": "Systems_Cartography_Portfolio",
+      "tagline": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface.",
+      "category": "frontend",
+      "classifications": [
+        "frontend"
+      ],
+      "status": "ACTIVE",
+      "year": "2026",
+      "dimensions": {
+        "width": 101,
+        "height": 77,
+        "levels": 2
+      },
+      "gridPosition": {
+        "x": -160,
+        "y": -90
+      },
+      "accentColor": "#8EA9DA",
+      "summary": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface. GitHub reports 0 stars, 1 forks, and 0 open issues.",
+      "problem": "Point the importer at a LinkedIn \"Save to PDF\" export (or any CV PDF with a comparable layout). It is parsed **locally, in memory** — the PDF is never uploaded or committed — to populate identity, location, education, and an employment history with promotion/progression detection. Ambiguous fields are surfaced as review warnings rather than...",
+      "solution": "The architecture tab renders sub-service decomposition, protocols, and key architectural decisions for repositories that have a reviewed `repositoryEvidence.ts` entry. Repositories without one show only what generic analysis can support — an explicit evidence gap instead of an invented diagram.",
+      "architectureNotes": "Repository README (Architecture and technical evidence): The architecture tab renders sub-service decomposition, protocols, and key architectural decisions for repositories that have a reviewed `repositoryEvidence.ts` entry. Repositories without one show... GitHub metadata: primary language TypeScript, default branch main, license MIT.",
+      "techStack": [
+        "TypeScript",
+        "Lucide Icons",
+        "Motion",
+        "React",
+        "React DOM",
+        "Tailwind CSS",
+        "Vite"
+      ],
+      "infrastructureDeps": [
+        "gh-infra-1",
+        "gh-infra-2",
+        "gh-infra-3"
+      ],
+      "subsystems": [
+        {
+          "id": "systems_cartography_portfolio-1-interactive-deployed-systems-topology",
+          "name": "Interactive deployed-systems topology",
+          "category": "backend",
+          "role": "— your repositories laid out as a navigable map of systems, not a list.",
+          "description": "— your repositories laid out as a navigable map of systems, not a list.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": -60,
+            "y": -30,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        },
+        {
+          "id": "systems_cartography_portfolio-2-capability-reactor---tech-stack-view",
+          "name": "Capability reactor / tech stack view",
+          "category": "backend",
+          "role": "— technologies synthesized from your repositories' actual languages, dependencies, and topics, orbit",
+          "description": "— technologies synthesized from your repositories' actual languages, dependencies, and topics, orbiting as inspectable capability nodes.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": 0,
+            "y": -35,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        },
+        {
+          "id": "systems_cartography_portfolio-3-project-architecture-inspector",
+          "name": "Project architecture inspector",
+          "category": "backend",
+          "role": "— per-repository problem/solution/subsystems/key-decisions view, generated from repository metadata ",
+          "description": "— per-repository problem/solution/subsystems/key-decisions view, generated from repository metadata and (optionally) your own reviewed notes.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": 60,
+            "y": -25,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        },
+        {
+          "id": "systems_cartography_portfolio-4-github-derived-capabilities",
+          "name": "GitHub-derived capabilities",
+          "category": "backend",
+          "role": "— capability nodes are computed from what your repositories actually contain, not hand-picked from a",
+          "description": "— capability nodes are computed from what your repositories actually contain, not hand-picked from a resume.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": -45,
+            "y": 30,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        },
+        {
+          "id": "systems_cartography_portfolio-5-professional-experience",
+          "name": "Professional experience",
+          "category": "backend",
+          "role": "— imported from a LinkedIn PDF export, with support for progression/promotion within an organization",
+          "description": "— imported from a LinkedIn PDF export, with support for progression/promotion within an organization and persistent curated evidence overlays.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": 10,
+            "y": 35,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        },
+        {
+          "id": "systems_cartography_portfolio-6-evidence-provenance",
+          "name": "Evidence provenance",
+          "category": "telemetry",
+          "role": "— every claim on the site is labeled VERIFIED, DERIVED, CURATED, or UNAVAILABLE so a visitor can tel",
+          "description": "— every claim on the site is labeled VERIFIED, DERIVED, CURATED, or UNAVAILABLE so a visitor can tell what is GitHub-verifiable metadata versus what the owner has personally attested to.",
+          "tech": [
+            "TypeScript"
+          ],
+          "coordinates": {
+            "x": 55,
+            "y": 30,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "VERIFIED"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Stargazers",
+          "value": "0 ★",
+          "note": "GitHub community stars",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Forks",
+          "value": "1 ⑂",
+          "note": "Public downstream forks",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Repo Footprint",
+          "value": "4.0 MB",
+          "note": "Source code & assets",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Open Issues",
+          "value": "0 open",
+          "note": "Issue tracker backlog",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Primary Language",
+          "value": "TypeScript",
+          "note": "Dominant language",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "License Spec",
+          "value": "MIT",
+          "note": "GitHub repository metadata",
+          "provenance": "VERIFIED"
+        }
+      ],
+      "keyDecisions": [],
+      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 47 test files detected in repository structure.",
+      "provenance": {
+        "summary": "VERIFIED",
+        "problem": "VERIFIED",
+        "solution": "VERIFIED",
+        "architectureNotes": "VERIFIED",
+        "subsystems": "VERIFIED",
+        "keyDecisions": "UNAVAILABLE",
+        "resilienceTesting": "VERIFIED",
+        "metrics": "VERIFIED"
+      },
+      "validationEvidence": {
+        "testFrameworks": [],
+        "ciWorkflows": [],
+        "e2eHarnesses": [],
+        "lintersAndFormatters": [
+          "TypeScript Type-Check"
+        ],
+        "buildTools": [
+          "Vite"
+        ],
+        "hasDocker": false,
+        "hasMigrations": false,
+        "testFilesDetected": 47,
+        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 47 test files detected in repository structure.",
+        "provenance": "VERIFIED"
+      },
+      "performanceEvidence": {
+        "claimed": false,
+        "notes": "No runtime benchmarks or production telemetry claimed in repository."
+      },
+      "links": {
+        "github": "https://github.com/SalAkBuK/Systems_Cartography_Portfolio",
+        "demo": "https://systems-cartography-portfolio.vercel.app",
+        "caseStudy": false
+      }
+    },
+    {
+      "id": "gh-1335930004",
+      "code": "GH-02",
+      "title": "physio_bot",
+      "tagline": "Whatsapp Bot for Physio appointments automations with google sheets x n8n",
+      "category": "fullstack",
+      "classifications": [
+        "fullstack",
+        "frontend",
+        "backend"
+      ],
+      "status": "ACTIVE",
+      "year": "2026",
+      "dimensions": {
+        "width": 89,
+        "height": 77,
+        "levels": 2
+      },
+      "gridPosition": {
+        "x": 140,
+        "y": -110
+      },
+      "accentColor": "#C3E54E",
+      "summary": "Whatsapp Bot for Physio appointments automations with google sheets x n8n GitHub reports 0 stars, 0 forks, and 0 open issues.",
+      "problem": "PhysioBot is an n8n-based WhatsApp appointment automation MVP for a physiotherapy clinic. It reduces repetitive appointment intake while keeping final scheduling and physiotherapist assignment under clinic control.",
+      "solution": "No custom backend or administrative dashboard is required. Google Sheets remains the MVP operational source of truth.",
+      "architectureNotes": "Repository README (MVP architecture): No custom backend or administrative dashboard is required. Google Sheets remains the MVP operational source of truth. GitHub metadata: primary language not reported, default branch main, license not reported.",
+      "techStack": [
+        "n8n",
+        "Google Sheets",
+        "WhatsApp Cloud API"
+      ],
+      "infrastructureDeps": [
+        "gh-infra-18",
+        "gh-infra-21",
+        "gh-infra-27"
+      ],
+      "subsystems": [
+        {
+          "id": "physio_bot-layer-1",
+          "name": "n8n Backend Service",
+          "category": "backend",
+          "role": "Business transactions, routing, and workflow orchestration",
+          "protocol": "HTTPS / REST",
+          "description": "Architectural tier derived from verified n8n, Google Sheets, WhatsApp Cloud API configuration.",
+          "tech": [
+            "n8n",
+            "Google Sheets",
+            "WhatsApp Cloud API"
+          ],
+          "coordinates": {
+            "x": 0,
+            "y": 0,
+            "z": 28
+          },
+          "dimensions": {
+            "width": 48,
+            "height": 26,
+            "depth": 34
+          },
+          "provenance": "DERIVED"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "Stargazers",
+          "value": "0 ★",
+          "note": "GitHub community stars",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Forks",
+          "value": "0 ⑂",
+          "note": "Public downstream forks",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Repo Footprint",
+          "value": "0.0 MB",
+          "note": "Source code & assets",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Open Issues",
+          "value": "0 open",
+          "note": "Issue tracker backlog",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "Primary Language",
+          "value": "Mixed Stack",
+          "note": "Dominant language",
+          "provenance": "VERIFIED"
+        },
+        {
+          "label": "License Spec",
+          "value": "Not reported",
+          "note": "GitHub repository metadata",
+          "provenance": "VERIFIED"
+        }
+      ],
+      "keyDecisions": [],
+      "resilienceTesting": "No test harness, test files, or CI workflow detected in repository.",
+      "provenance": {
+        "summary": "VERIFIED",
+        "problem": "VERIFIED",
+        "solution": "VERIFIED",
+        "architectureNotes": "VERIFIED",
+        "subsystems": "DERIVED",
+        "keyDecisions": "UNAVAILABLE",
+        "resilienceTesting": "UNAVAILABLE",
+        "metrics": "VERIFIED"
+      },
+      "validationEvidence": {
+        "testFrameworks": [],
+        "ciWorkflows": [],
+        "e2eHarnesses": [],
+        "lintersAndFormatters": [],
+        "buildTools": [],
+        "hasDocker": false,
+        "hasMigrations": false,
+        "testFilesDetected": 0,
+        "summary": "No test harness, test files, or CI workflow detected in repository.",
+        "provenance": "UNAVAILABLE"
+      },
+      "performanceEvidence": {
+        "claimed": false,
+        "notes": "No runtime benchmarks or production telemetry claimed in repository."
+      },
+      "links": {
+        "github": "https://github.com/SalAkBuK/physio_bot",
+        "caseStudy": false
+      }
+    },
+    {
+      "id": "gh-1072943348",
+      "code": "GH-03",
       "title": "towerdesk-mobile-app",
       "tagline": "Public frontend repository; no description supplied on GitHub.",
       "category": "frontend",
@@ -49,8 +426,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -160,
-        "y": -90
+        "x": -210,
+        "y": 120
       },
       "accentColor": "#8EA9DA",
       "summary": "Public repository owned by SalAkBuK. Primary language: TypeScript.",
@@ -233,346 +610,6 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       }
     },
     {
-      "id": "gh-1348899950",
-      "code": "GH-02",
-      "title": "test-template",
-      "tagline": "test template",
-      "category": "fullstack",
-      "classifications": [
-        "fullstack",
-        "frontend",
-        "backend"
-      ],
-      "status": "ACTIVE",
-      "year": "2026",
-      "dimensions": {
-        "width": 89,
-        "height": 77,
-        "levels": 2
-      },
-      "gridPosition": {
-        "x": 140,
-        "y": -110
-      },
-      "accentColor": "#8EA9DA",
-      "summary": "test template GitHub reports 0 stars, 0 forks, and 0 open issues.",
-      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
-      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
-      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
-      "techStack": [
-        "TypeScript",
-        "Lucide Icons",
-        "Motion",
-        "React",
-        "React DOM",
-        "Tailwind CSS",
-        "Express",
-        "Vite",
-        "esbuild"
-      ],
-      "infrastructureDeps": [
-        "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5"
-      ],
-      "subsystems": [
-        {
-          "id": "test-template-layer-1",
-          "name": "Lucide Icons Client Surface",
-          "category": "frontend",
-          "role": "Client rendering, UI components, and state synchronization",
-          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
-          "tech": [
-            "Lucide Icons",
-            "Motion",
-            "React",
-            "React DOM",
-            "Tailwind CSS"
-          ],
-          "coordinates": {
-            "x": -40,
-            "y": -20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        },
-        {
-          "id": "test-template-layer-2",
-          "name": "Express Backend Service",
-          "category": "backend",
-          "role": "Business transactions, routing, and workflow orchestration",
-          "protocol": "HTTPS / REST",
-          "description": "Architectural tier derived from verified Express configuration.",
-          "tech": [
-            "Express"
-          ],
-          "coordinates": {
-            "x": 40,
-            "y": 20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        }
-      ],
-      "metrics": [
-        {
-          "label": "Stargazers",
-          "value": "0 ★",
-          "note": "GitHub community stars",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Forks",
-          "value": "0 ⑂",
-          "note": "Public downstream forks",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Repo Footprint",
-          "value": "0.5 MB",
-          "note": "Source code & assets",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Open Issues",
-          "value": "0 open",
-          "note": "Issue tracker backlog",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Primary Language",
-          "value": "TypeScript",
-          "note": "Dominant language",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "License Spec",
-          "value": "Not reported",
-          "note": "GitHub repository metadata",
-          "provenance": "VERIFIED"
-        }
-      ],
-      "keyDecisions": [],
-      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
-      "provenance": {
-        "summary": "VERIFIED",
-        "problem": "VERIFIED",
-        "solution": "DERIVED",
-        "architectureNotes": "VERIFIED",
-        "subsystems": "DERIVED",
-        "keyDecisions": "UNAVAILABLE",
-        "resilienceTesting": "VERIFIED",
-        "metrics": "VERIFIED"
-      },
-      "validationEvidence": {
-        "testFrameworks": [],
-        "ciWorkflows": [],
-        "e2eHarnesses": [],
-        "lintersAndFormatters": [
-          "TypeScript Type-Check"
-        ],
-        "buildTools": [
-          "Vite",
-          "esbuild"
-        ],
-        "hasDocker": false,
-        "hasMigrations": false,
-        "testFilesDetected": 8,
-        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
-        "provenance": "VERIFIED"
-      },
-      "performanceEvidence": {
-        "claimed": false,
-        "notes": "No runtime benchmarks or production telemetry claimed in repository."
-      },
-      "links": {
-        "github": "https://github.com/SalAkBuK/test-template",
-        "caseStudy": false
-      }
-    },
-    {
-      "id": "gh-1347309405",
-      "code": "GH-03",
-      "title": "Systems_Cartography_Portfolio",
-      "tagline": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface.",
-      "category": "fullstack",
-      "classifications": [
-        "fullstack",
-        "frontend",
-        "backend"
-      ],
-      "status": "ACTIVE",
-      "year": "2026",
-      "dimensions": {
-        "width": 89,
-        "height": 77,
-        "levels": 2
-      },
-      "gridPosition": {
-        "x": -210,
-        "y": 120
-      },
-      "accentColor": "#8EA9DA",
-      "summary": "Interactive developer portfolio that transforms GitHub repositories, projects, skills, and experience into an explorable brutalist systems cartography interface. GitHub reports 0 stars, 0 forks, and 0 open issues.",
-      "problem": "A self-hostable, brutalist developer portfolio that maps the configured owner's public GitHub repositories as an interactive systems landscape.",
-      "solution": "Layered architecture decomposed into Lucide Icons Client Surface, Express Backend Service.",
-      "architectureNotes": "Verified metadata only: primary language TypeScript, default branch main, license not reported.",
-      "techStack": [
-        "TypeScript",
-        "Lucide Icons",
-        "Motion",
-        "React",
-        "React DOM",
-        "Tailwind CSS",
-        "Express",
-        "Vite",
-        "esbuild"
-      ],
-      "infrastructureDeps": [
-        "gh-infra-1",
-        "gh-infra-2",
-        "gh-infra-3",
-        "gh-infra-4",
-        "gh-infra-5"
-      ],
-      "subsystems": [
-        {
-          "id": "systems_cartography_portfolio-layer-1",
-          "name": "Lucide Icons Client Surface",
-          "category": "frontend",
-          "role": "Client rendering, UI components, and state synchronization",
-          "description": "Architectural tier derived from verified Lucide Icons, Motion, React, React DOM, Tailwind CSS configuration.",
-          "tech": [
-            "Lucide Icons",
-            "Motion",
-            "React",
-            "React DOM",
-            "Tailwind CSS"
-          ],
-          "coordinates": {
-            "x": -40,
-            "y": -20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        },
-        {
-          "id": "systems_cartography_portfolio-layer-2",
-          "name": "Express Backend Service",
-          "category": "backend",
-          "role": "Business transactions, routing, and workflow orchestration",
-          "protocol": "HTTPS / REST",
-          "description": "Architectural tier derived from verified Express configuration.",
-          "tech": [
-            "Express"
-          ],
-          "coordinates": {
-            "x": 40,
-            "y": 20,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "DERIVED"
-        }
-      ],
-      "metrics": [
-        {
-          "label": "Stargazers",
-          "value": "0 ★",
-          "note": "GitHub community stars",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Forks",
-          "value": "0 ⑂",
-          "note": "Public downstream forks",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Repo Footprint",
-          "value": "0.7 MB",
-          "note": "Source code & assets",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Open Issues",
-          "value": "0 open",
-          "note": "Issue tracker backlog",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Primary Language",
-          "value": "TypeScript",
-          "note": "Dominant language",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "License Spec",
-          "value": "Not reported",
-          "note": "GitHub repository metadata",
-          "provenance": "VERIFIED"
-        }
-      ],
-      "keyDecisions": [],
-      "resilienceTesting": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
-      "provenance": {
-        "summary": "VERIFIED",
-        "problem": "VERIFIED",
-        "solution": "DERIVED",
-        "architectureNotes": "VERIFIED",
-        "subsystems": "DERIVED",
-        "keyDecisions": "UNAVAILABLE",
-        "resilienceTesting": "VERIFIED",
-        "metrics": "VERIFIED"
-      },
-      "validationEvidence": {
-        "testFrameworks": [],
-        "ciWorkflows": [],
-        "e2eHarnesses": [],
-        "lintersAndFormatters": [
-          "TypeScript Type-Check"
-        ],
-        "buildTools": [
-          "Vite",
-          "esbuild"
-        ],
-        "hasDocker": false,
-        "hasMigrations": false,
-        "testFilesDetected": 8,
-        "summary": "Static analysis & code quality enforced with TypeScript Type-Check. 8 test files detected in repository structure.",
-        "provenance": "VERIFIED"
-      },
-      "performanceEvidence": {
-        "claimed": false,
-        "notes": "No runtime benchmarks or production telemetry claimed in repository."
-      },
-      "links": {
-        "github": "https://github.com/SalAkBuK/Systems_Cartography_Portfolio",
-        "caseStudy": false
-      }
-    },
-    {
       "id": "gh-1121594562",
       "code": "GH-04",
       "title": "tower-desk",
@@ -619,7 +656,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-7",
+        "gh-infra-6",
         "gh-infra-8",
         "gh-infra-9",
         "gh-infra-11"
@@ -853,14 +890,14 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-2",
-        "gh-infra-4",
+        "gh-infra-5",
         "gh-infra-10",
         "gh-infra-11",
         "gh-infra-13",
         "gh-infra-16",
-        "gh-infra-20",
         "gh-infra-22",
-        "gh-infra-23"
+        "gh-infra-24",
+        "gh-infra-25"
       ],
       "subsystems": [
         {
@@ -1073,133 +1110,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       }
     },
     {
-      "id": "gh-1335930004",
-      "code": "GH-06",
-      "title": "physio_bot",
-      "tagline": "Whatsapp Bot for Physio appointments automations with google sheets x n8n",
-      "category": "fullstack",
-      "classifications": [
-        "fullstack",
-        "frontend",
-        "backend"
-      ],
-      "status": "ACTIVE",
-      "year": "2026",
-      "dimensions": {
-        "width": 89,
-        "height": 77,
-        "levels": 2
-      },
-      "gridPosition": {
-        "x": 260,
-        "y": -40
-      },
-      "accentColor": "#A78BFA",
-      "summary": "Whatsapp Bot for Physio appointments automations with google sheets x n8n GitHub reports 0 stars, 0 forks, and 0 open issues.",
-      "problem": "PhysioBot is an n8n-based WhatsApp appointment automation MVP for a physiotherapy clinic. It reduces repetitive appointment intake while keeping final scheduling and physiotherapist assignment under clinic control.",
-      "solution": "No custom backend or administrative dashboard is required. Google Sheets remains the MVP operational source of truth.",
-      "architectureNotes": "Repository README (MVP architecture): No custom backend or administrative dashboard is required. Google Sheets remains the MVP operational source of truth. GitHub metadata: primary language not reported, default branch main, license not reported.",
-      "techStack": [
-        "Codebase"
-      ],
-      "infrastructureDeps": [],
-      "subsystems": [
-        {
-          "id": "physio_bot-core",
-          "name": "physio_bot Core Module",
-          "category": "worker",
-          "role": "Primary Codebase codebase implementation",
-          "description": "Single-tier codebase in Codebase. No separate distributed sub-services detected.",
-          "tech": [
-            "Codebase"
-          ],
-          "coordinates": {
-            "x": 0,
-            "y": 0,
-            "z": 28
-          },
-          "dimensions": {
-            "width": 48,
-            "height": 26,
-            "depth": 34
-          },
-          "provenance": "VERIFIED"
-        }
-      ],
-      "metrics": [
-        {
-          "label": "Stargazers",
-          "value": "0 ★",
-          "note": "GitHub community stars",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Forks",
-          "value": "0 ⑂",
-          "note": "Public downstream forks",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Repo Footprint",
-          "value": "0.0 MB",
-          "note": "Source code & assets",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Open Issues",
-          "value": "0 open",
-          "note": "Issue tracker backlog",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "Primary Language",
-          "value": "Mixed Stack",
-          "note": "Dominant language",
-          "provenance": "VERIFIED"
-        },
-        {
-          "label": "License Spec",
-          "value": "Not reported",
-          "note": "GitHub repository metadata",
-          "provenance": "VERIFIED"
-        }
-      ],
-      "keyDecisions": [],
-      "resilienceTesting": "No test harness, test files, or CI workflow detected in repository.",
-      "provenance": {
-        "summary": "VERIFIED",
-        "problem": "VERIFIED",
-        "solution": "VERIFIED",
-        "architectureNotes": "VERIFIED",
-        "subsystems": "VERIFIED",
-        "keyDecisions": "UNAVAILABLE",
-        "resilienceTesting": "UNAVAILABLE",
-        "metrics": "VERIFIED"
-      },
-      "validationEvidence": {
-        "testFrameworks": [],
-        "ciWorkflows": [],
-        "e2eHarnesses": [],
-        "lintersAndFormatters": [],
-        "buildTools": [],
-        "hasDocker": false,
-        "hasMigrations": false,
-        "testFilesDetected": 0,
-        "summary": "No test harness, test files, or CI workflow detected in repository.",
-        "provenance": "UNAVAILABLE"
-      },
-      "performanceEvidence": {
-        "claimed": false,
-        "notes": "No runtime benchmarks or production telemetry claimed in repository."
-      },
-      "links": {
-        "github": "https://github.com/SalAkBuK/physio_bot",
-        "caseStudy": false
-      }
-    },
-    {
       "id": "gh-1301560608",
-      "code": "GH-07",
+      "code": "GH-06",
       "title": "formcrash",
       "tagline": "FormCrash Lab is a pre-production resilience-testing workbench for transactional web journeys.  It records a normal journey, lets the developer attach a controlled failure experiment to a precise step",
       "category": "fullstack",
@@ -1217,7 +1129,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -280,
+        "x": 260,
         "y": -40
       },
       "accentColor": "#8EA9DA",
@@ -1244,12 +1156,12 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-4",
-        "gh-infra-7",
+        "gh-infra-5",
+        "gh-infra-6",
         "gh-infra-8",
         "gh-infra-9",
         "gh-infra-17",
-        "gh-infra-24"
+        "gh-infra-26"
       ],
       "subsystems": [
         {
@@ -1437,7 +1349,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1237812647",
-      "code": "GH-08",
+      "code": "GH-07",
       "title": "grok-flow-image-gen",
       "tagline": "Local image-generation console for Grok and Google Flow, built with Node.js, Express, and Playwright. Uses browser UI automation, not official APIs.",
       "category": "backend",
@@ -1452,8 +1364,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 0,
-        "y": 190
+        "x": -280,
+        "y": -40
       },
       "accentColor": "#8EA9DA",
       "summary": "Local image-generation console for Grok and Google Flow, built with Node.js, Express, and Playwright. Uses browser UI automation, not official APIs. GitHub reports 1 stars, 0 forks, and 0 open issues.",
@@ -1476,7 +1388,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-4",
         "gh-infra-5",
-        "gh-infra-6",
+        "gh-infra-7",
         "gh-infra-8"
       ],
       "subsystems": [
@@ -1578,7 +1490,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1299619574",
-      "code": "GH-09",
+      "code": "GH-08",
       "title": "GitArchaeologist",
       "tagline": "A code time machine that traces commits back to the conversations, tickets, and decisions that created them, helping engineers understand historical context instantly.",
       "category": "fullstack",
@@ -1595,8 +1507,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -160,
-        "y": 240
+        "x": 0,
+        "y": 190
       },
       "accentColor": "#F59E0B",
       "summary": "A code time machine that traces commits back to the conversations, tickets, and decisions that created them, helping engineers understand historical context instantly. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -1620,7 +1532,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-7",
+        "gh-infra-6",
         "gh-infra-14"
       ],
       "subsystems": [
@@ -1754,7 +1666,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "buildTools": [],
         "hasDocker": false,
         "hasMigrations": false,
-        "testFilesDetected": 4,
+        "testFilesDetected": 3,
         "summary": "Backend checks from `backend/`:",
         "provenance": "VERIFIED"
       },
@@ -1769,7 +1681,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1300791569",
-      "code": "GH-10",
+      "code": "GH-09",
       "title": "seedstory",
       "tagline": "Scenario-aware demo and test data generation for Prisma applications.",
       "category": "tooling",
@@ -1785,8 +1697,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 220,
-        "y": 220
+        "x": -160,
+        "y": 240
       },
       "accentColor": "#8EA9DA",
       "summary": "Scenario-aware demo and test data generation for Prisma applications. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -1807,7 +1719,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-7",
+        "gh-infra-6",
         "gh-infra-9"
       ],
       "subsystems": [
@@ -1911,7 +1823,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1237757392",
-      "code": "GH-11",
+      "code": "GH-10",
       "title": "pillcheck-public",
       "tagline": "Medication reminder app with caregiver support, dose tracking, refill alerts, and backend-driven notifications.",
       "category": "fullstack",
@@ -1929,8 +1841,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -330,
-        "y": 180
+        "x": 220,
+        "y": 220
       },
       "accentColor": "#8EA9DA",
       "summary": "Medication reminder app with caregiver support, dose tracking, refill alerts, and backend-driven notifications. GitHub reports 0 stars, 1 forks, and 0 open issues.",
@@ -1962,8 +1874,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-2",
-        "gh-infra-4",
         "gh-infra-5",
+        "gh-infra-7",
         "gh-infra-9",
         "gh-infra-12",
         "gh-infra-13",
@@ -2151,7 +2063,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-929426683",
-      "code": "GH-12",
+      "code": "GH-11",
       "title": "AutoExperts-Frontend",
       "tagline": "AutoExperts frontend for car inspection bookings, used-car listings, auctions, member accounts, price prediction, and AI car assistance.",
       "category": "frontend",
@@ -2166,8 +2078,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 320,
-        "y": -180
+        "x": -330,
+        "y": 180
       },
       "accentColor": "#8EA9DA",
       "summary": "AutoExperts frontend for car inspection bookings, used-car listings, auctions, member accounts, price prediction, and AI car assistance. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -2191,7 +2103,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-6"
+        "gh-infra-4"
       ],
       "subsystems": [
         {
@@ -2297,7 +2209,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-929445293",
-      "code": "GH-13",
+      "code": "GH-12",
       "title": "Admin-Dashboard",
       "tagline": "AutoExperts admin dashboard for managing members, inspection bookings, used cars, auction cars, uploads, and real-time auction data.",
       "category": "frontend",
@@ -2312,8 +2224,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -475,
-        "y": 0
+        "x": 320,
+        "y": -180
       },
       "accentColor": "#8EA9DA",
       "summary": "AutoExperts admin dashboard for managing members, inspection bookings, used cars, auction cars, uploads, and real-time auction data. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -2340,7 +2252,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-6"
+        "gh-infra-4"
       ],
       "subsystems": [
         {
@@ -2446,7 +2358,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-913331020",
-      "code": "GH-14",
+      "code": "GH-13",
       "title": "AutoExperts-Server-BACKEND-",
       "tagline": "AutoExperts backend API for bookings, members, used cars, auctions, bidding, payments, uploads, and real-time updates.",
       "category": "backend",
@@ -2462,8 +2374,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": -350,
-        "y": -250
+        "x": -475,
+        "y": 0
       },
       "accentColor": "#8EA9DA",
       "summary": "AutoExperts backend API for bookings, members, used cars, auctions, bidding, payments, uploads, and real-time updates. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -2488,10 +2400,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-4",
         "gh-infra-5",
-        "gh-infra-6",
+        "gh-infra-7",
         "gh-infra-11",
         "gh-infra-12",
-        "gh-infra-18"
+        "gh-infra-19"
       ],
       "subsystems": [
         {
@@ -2638,7 +2550,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1128809227",
-      "code": "GH-15",
+      "code": "GH-14",
       "title": "worthy-crm",
       "tagline": "A PHP/MySQL real estate CRM for managing leads, agent follow-ups, call proof uploads, and performance reporting.",
       "category": "fullstack",
@@ -2655,10 +2567,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 0,
-        "y": -325
+        "x": -350,
+        "y": -250
       },
-      "accentColor": "#F59E0B",
+      "accentColor": "#A78BFA",
       "summary": "A PHP/MySQL real estate CRM for managing leads, agent follow-ups, call proof uploads, and performance reporting. GitHub reports 0 stars, 0 forks, and 0 open issues.",
       "problem": "Coordinate real estate sales workflows, lead assignments, and sequential follow-up attempts while enforcing role isolation between Admin, CEO, and Agents and requiring verified call/WhatsApp evidence.",
       "solution": "A PHP 8 / MySQL web application with session-based RBAC, transaction-safe bulk lead entry, sequential agent follow-up validations with mandatory screenshot proof, structured audit logging, automated system notifications, and an HTTP/cache-backed external property catalogue.",
@@ -2685,8 +2597,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       ],
       "infrastructureDeps": [
         "gh-infra-2",
-        "gh-infra-19",
-        "gh-infra-21"
+        "gh-infra-20",
+        "gh-infra-23"
       ],
       "subsystems": [
         {
@@ -2895,7 +2807,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1133595694",
-      "code": "GH-16",
+      "code": "GH-15",
       "title": "remapp-scraper",
       "tagline": "Remapp Scraper is a small data-fetching and API service that collects project data from Remapp, caches it as JSON, normalizes the results into a consistent schema, and serves the data through a simple Node.js API for downstream systems.",
       "category": "backend",
@@ -2910,8 +2822,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 350,
-        "y": -250
+        "x": 0,
+        "y": -325
       },
       "accentColor": "#8EA9DA",
       "summary": "Remapp Scraper is a small data-fetching and API service that collects project data from Remapp, caches it as JSON, normalizes the results into a consistent schema, and serves the data through a simple Node.js API for downstream systems. GitHub reports 0 stars, 0 forks, and 0 open issues.",
@@ -2941,7 +2853,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-4",
         "gh-infra-5",
-        "gh-infra-6",
+        "gh-infra-7",
         "gh-infra-8",
         "gh-infra-10",
         "gh-infra-14"
@@ -3127,7 +3039,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-1074198727",
-      "code": "GH-17",
+      "code": "GH-16",
       "title": "psych-websites",
       "tagline": "Monorepo containing two frontend websites with different tech stacks",
       "category": "fullstack",
@@ -3144,8 +3056,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 600,
-        "y": 0
+        "x": 350,
+        "y": -250
       },
       "accentColor": "#8EA9DA",
       "summary": "Monorepo containing two frontend websites with different tech stacks GitHub reports 0 stars, 0 forks, and 1 open issues.",
@@ -3168,7 +3080,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-infra-1",
         "gh-infra-2",
         "gh-infra-3",
-        "gh-infra-7"
+        "gh-infra-6"
       ],
       "subsystems": [
         {
@@ -3297,7 +3209,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     },
     {
       "id": "gh-929429993",
-      "code": "GH-18",
+      "code": "GH-17",
       "title": "Auto-Expert-Admin-Dashboard",
       "tagline": "Public frontend repository; no description supplied on GitHub.",
       "category": "frontend",
@@ -3312,8 +3224,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "levels": 2
       },
       "gridPosition": {
-        "x": 425,
-        "y": 300
+        "x": 600,
+        "y": 0
       },
       "accentColor": "#8EA9DA",
       "summary": "Public repository owned by SalAkBuK. Primary language: JavaScript.",
@@ -3333,7 +3245,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "infrastructureDeps": [
         "gh-infra-1",
         "gh-infra-3",
-        "gh-infra-6"
+        "gh-infra-4"
       ],
       "subsystems": [
         {
@@ -3450,11 +3362,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "x": 100,
         "y": 0
       },
-      "systemCount": 12,
+      "systemCount": 11,
       "usedInProjects": [
-        "gh-1072943348",
-        "gh-1348899950",
         "gh-1347309405",
+        "gh-1072943348",
         "gh-1121594562",
         "gh-1301560608",
         "gh-1299619574",
@@ -3466,7 +3377,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-929429993"
       ],
       "primaryUseCases": [
-        "Detected in 12 public GitHub repositories"
+        "Detected in 11 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3484,11 +3395,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "x": 80,
         "y": 20
       },
-      "systemCount": 11,
+      "systemCount": 10,
       "usedInProjects": [
-        "gh-1072943348",
-        "gh-1348899950",
         "gh-1347309405",
+        "gh-1072943348",
         "gh-1121594562",
         "gh-1122295326",
         "gh-1301560608",
@@ -3499,7 +3409,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-1074198727"
       ],
       "primaryUseCases": [
-        "Detected in 11 public GitHub repositories"
+        "Detected in 10 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3515,11 +3425,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": 80,
-        "y": 40
+        "y": 20
       },
-      "systemCount": 9,
+      "systemCount": 8,
       "usedInProjects": [
-        "gh-1348899950",
         "gh-1347309405",
         "gh-1121594562",
         "gh-1299619574",
@@ -3530,7 +3439,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
         "gh-929429993"
       ],
       "primaryUseCases": [
-        "Detected in 9 public GitHub repositories"
+        "Detected in 8 public GitHub repositories"
       ],
       "technicalHighlights": [
         "No proficiency score or years inferred from repository metadata"
@@ -3540,71 +3449,13 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-4",
       "code": "INF-04",
-      "name": "Node.js & Application Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 60,
-        "y": 40
-      },
-      "systemCount": 8,
-      "usedInProjects": [
-        "gh-1348899950",
-        "gh-1347309405",
-        "gh-1122295326",
-        "gh-1301560608",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 8 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-5",
-      "code": "INF-05",
-      "name": "Express & API Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
-        "y": 60
-      },
-      "systemCount": 6,
-      "usedInProjects": [
-        "gh-1348899950",
-        "gh-1347309405",
-        "gh-1237812647",
-        "gh-1237757392",
-        "gh-913331020",
-        "gh-1133595694"
-      ],
-      "primaryUseCases": [
-        "Detected in 6 public GitHub repositories"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-6",
-      "code": "INF-06",
       "name": "JavaScript & Application Engineering",
       "category": "fullstack",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 20,
-        "y": 60
+        "x": 60,
+        "y": 40
       },
       "systemCount": 6,
       "usedInProjects": [
@@ -3624,14 +3475,42 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "samplePattern": "// Evidence source: public GitHub repository metadata"
     },
     {
-      "id": "gh-infra-7",
-      "code": "INF-07",
+      "id": "gh-infra-5",
+      "code": "INF-05",
+      "name": "Node.js & Application Architecture",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 60,
+        "y": 60
+      },
+      "systemCount": 6,
+      "usedInProjects": [
+        "gh-1122295326",
+        "gh-1301560608",
+        "gh-1237812647",
+        "gh-1237757392",
+        "gh-913331020",
+        "gh-1133595694"
+      ],
+      "primaryUseCases": [
+        "Detected in 6 public GitHub repositories"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-6",
+      "code": "INF-06",
       "name": "Next.js & Full-Stack Architecture",
       "category": "fullstack",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 0,
+        "x": 40,
         "y": 60
       },
       "systemCount": 5,
@@ -3651,6 +3530,32 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "samplePattern": "// Evidence source: public GitHub repository metadata"
     },
     {
+      "id": "gh-infra-7",
+      "code": "INF-07",
+      "name": "Express & API Architecture",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 20,
+        "y": 60
+      },
+      "systemCount": 4,
+      "usedInProjects": [
+        "gh-1237812647",
+        "gh-1237757392",
+        "gh-913331020",
+        "gh-1133595694"
+      ],
+      "primaryUseCases": [
+        "Detected in 4 public GitHub repositories"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
       "id": "gh-infra-8",
       "code": "INF-08",
       "name": "Playwright & End-to-End Test Architecture",
@@ -3658,7 +3563,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -20,
+        "x": 0,
         "y": 60
       },
       "systemCount": 4,
@@ -3684,7 +3589,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -60,
+        "x": -40,
         "y": 80
       },
       "systemCount": 4,
@@ -3710,8 +3615,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -80,
-        "y": 60
+        "x": -60,
+        "y": 80
       },
       "systemCount": 3,
       "usedInProjects": [
@@ -3735,8 +3640,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -100,
-        "y": 40
+        "x": -80,
+        "y": 60
       },
       "systemCount": 3,
       "usedInProjects": [
@@ -3760,8 +3665,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -120,
-        "y": 20
+        "x": -100,
+        "y": 40
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3785,7 +3690,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -120,
-        "y": 0
+        "y": 20
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3809,7 +3714,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "proficiencyScore": 0,
       "gridPosition": {
         "x": -120,
-        "y": -20
+        "y": 20
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3832,8 +3737,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -100,
-        "y": -40
+        "x": -120,
+        "y": -20
       },
       "systemCount": 2,
       "usedInProjects": [
@@ -3856,8 +3761,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -80,
-        "y": -60
+        "x": -120,
+        "y": -20
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3879,8 +3784,8 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -80,
-        "y": -100
+        "x": -140,
+        "y": -60
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -3897,12 +3802,35 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-18",
       "code": "INF-18",
+      "name": "Google Sheets & Spreadsheet Data Integration",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": -100,
+        "y": -80
+      },
+      "systemCount": 1,
+      "usedInProjects": [
+        "gh-1335930004"
+      ],
+      "primaryUseCases": [
+        "Detected in 1 public GitHub repository"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-19",
+      "code": "INF-19",
       "name": "MongoDB & Document Storage Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": -40,
+        "x": -80,
         "y": -100
       },
       "systemCount": 1,
@@ -3918,42 +3846,19 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "samplePattern": "// Evidence source: public GitHub repository metadata"
     },
     {
-      "id": "gh-infra-19",
-      "code": "INF-19",
+      "id": "gh-infra-20",
+      "code": "INF-20",
       "name": "MySQL & Relational Database Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 0,
-        "y": -120
-      },
-      "systemCount": 1,
-      "usedInProjects": [
-        "gh-1128809227"
-      ],
-      "primaryUseCases": [
-        "Detected in 1 public GitHub repository"
-      ],
-      "technicalHighlights": [
-        "No proficiency score or years inferred from repository metadata"
-      ],
-      "samplePattern": "// Evidence source: public GitHub repository metadata"
-    },
-    {
-      "id": "gh-infra-20",
-      "code": "INF-20",
-      "name": "NestJS & Modular Monolith Architecture",
-      "category": "backend",
-      "yearsActive": 0,
-      "proficiencyScore": 0,
-      "gridPosition": {
-        "x": 40,
+        "x": -40,
         "y": -100
       },
       "systemCount": 1,
       "usedInProjects": [
-        "gh-1122295326"
+        "gh-1128809227"
       ],
       "primaryUseCases": [
         "Detected in 1 public GitHub repository"
@@ -3966,17 +3871,17 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-21",
       "code": "INF-21",
-      "name": "PHP & Web Application Architecture",
-      "category": "backend",
+      "name": "n8n & Workflow Automation & Orchestration",
+      "category": "infrastructure",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 80,
-        "y": -100
+        "x": 0,
+        "y": -120
       },
       "systemCount": 1,
       "usedInProjects": [
-        "gh-1128809227"
+        "gh-1335930004"
       ],
       "primaryUseCases": [
         "Detected in 1 public GitHub repository"
@@ -3989,13 +3894,13 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-22",
       "code": "INF-22",
-      "name": "Prisma & Data Access & Schema Architecture",
+      "name": "NestJS & Modular Monolith Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 120,
-        "y": -80
+        "x": 20,
+        "y": -120
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -4012,13 +3917,36 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     {
       "id": "gh-infra-23",
       "code": "INF-23",
-      "name": "Redis & In-Memory & Caching Systems",
-      "category": "infrastructure",
+      "name": "PHP & Web Application Architecture",
+      "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 140,
-        "y": -60
+        "x": 60,
+        "y": -100
+      },
+      "systemCount": 1,
+      "usedInProjects": [
+        "gh-1128809227"
+      ],
+      "primaryUseCases": [
+        "Detected in 1 public GitHub repository"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-24",
+      "code": "INF-24",
+      "name": "Prisma & Data Access & Schema Architecture",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 100,
+        "y": -80
       },
       "systemCount": 1,
       "usedInProjects": [
@@ -4033,19 +3961,65 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "samplePattern": "// Evidence source: public GitHub repository metadata"
     },
     {
-      "id": "gh-infra-24",
-      "code": "INF-24",
+      "id": "gh-infra-25",
+      "code": "INF-25",
+      "name": "Redis & In-Memory & Caching Systems",
+      "category": "infrastructure",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 140,
+        "y": -80
+      },
+      "systemCount": 1,
+      "usedInProjects": [
+        "gh-1122295326"
+      ],
+      "primaryUseCases": [
+        "Detected in 1 public GitHub repository"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-26",
+      "code": "INF-26",
       "name": "SQLite & Embedded Storage Architecture",
       "category": "backend",
       "yearsActive": 0,
       "proficiencyScore": 0,
       "gridPosition": {
-        "x": 160,
-        "y": -20
+        "x": 180,
+        "y": -60
       },
       "systemCount": 1,
       "usedInProjects": [
         "gh-1301560608"
+      ],
+      "primaryUseCases": [
+        "Detected in 1 public GitHub repository"
+      ],
+      "technicalHighlights": [
+        "No proficiency score or years inferred from repository metadata"
+      ],
+      "samplePattern": "// Evidence source: public GitHub repository metadata"
+    },
+    {
+      "id": "gh-infra-27",
+      "code": "INF-27",
+      "name": "WhatsApp Cloud API & Messaging Platform Integration",
+      "category": "backend",
+      "yearsActive": 0,
+      "proficiencyScore": 0,
+      "gridPosition": {
+        "x": 180,
+        "y": -40
+      },
+      "systemCount": 1,
+      "usedInProjects": [
+        "gh-1335930004"
       ],
       "primaryUseCases": [
         "Detected in 1 public GitHub repository"
@@ -4062,7 +4036,7 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
     "role": "GitHub profile",
     "location": "Not provided on GitHub",
     "status": "ACTIVE_BUILD // GITHUB SNAPSHOT",
-    "focus": "Public GitHub repositories using React, TypeScript, Tailwind CSS, Node.js",
+    "focus": "Public GitHub repositories using React, TypeScript, Tailwind CSS, JavaScript",
     "yearsActive": 0,
     "commitsIndexed": "Not indexed",
     "productionUptime": "Not claimed",
@@ -4070,10 +4044,10 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "React",
       "TypeScript",
       "Tailwind CSS",
-      "Node.js",
-      "Express",
       "JavaScript",
-      "Next.js"
+      "Node.js",
+      "Next.js",
+      "Express"
     ],
     "systemManifesto": "Profile synthesized from public GitHub repository metadata. Verify personal and architectural claims before publication.",
     "contact": {
@@ -4096,21 +4070,21 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       "location": "Not provided on GitHub",
       "systemDomain": "Public repository metadata",
       "keyOutputs": [
-        "Mapped 18 public repositories returned by GitHub.",
-        "Detected repository languages and topics: React, TypeScript, Tailwind CSS, Node.js, Express.",
+        "Mapped 17 public repositories returned by GitHub.",
+        "Detected repository languages and topics: React, TypeScript, Tailwind CSS, JavaScript, Node.js.",
         "No employment history or performance claims inferred."
       ],
       "systemsArchitected": [
-        "towerdesk-mobile-app",
-        "test-template",
-        "Systems_Cartography_Portfolio"
+        "Systems_Cartography_Portfolio",
+        "physio_bot",
+        "towerdesk-mobile-app"
       ],
       "technologies": [
         "React",
         "TypeScript",
         "Tailwind CSS",
-        "Node.js",
-        "Express"
+        "JavaScript",
+        "Node.js"
       ],
       "gridPosition": {
         "x": -260,
@@ -4118,10 +4092,11 @@ export const GITHUB_SNAPSHOT: GitHubSyncResult = {
       }
     }
   ],
-  "rawCount": 19,
+  "rawCount": 18,
+  "repositoryInventoryTruncated": false,
   "inspectionSummary": {
-    "canonicalRepositoryCount": 18,
-    "inspectedRepositoryCount": 18,
+    "canonicalRepositoryCount": 17,
+    "inspectedRepositoryCount": 17,
     "warnings": []
   }
 };

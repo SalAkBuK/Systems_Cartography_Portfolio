@@ -8,6 +8,8 @@ import {
   checkAABBOverlap,
   computeFitViewport,
   getConduitPresentationState,
+  ORBIT_RADIUS_GROWTH_STEP,
+  ORBIT_RADIUS_GROWTH_ASPECT,
 } from '../src/utils/topologyLayout.ts';
 import { project3DToIso } from '../src/utils/isometricProjection.ts';
 import {
@@ -618,4 +620,132 @@ test('topologyLayout.ts: getConduitPresentationState association/state-machine r
     showBackgroundRelationships: false,
   });
   assert.equal(focused, 'focused');
+});
+
+// ---------------------------------------------------------------------------
+// 9. Deterministic radius growth also guarantees INTERACTIVE-REORDER safety
+//    (not merely the canonical project ordering)
+//
+// Regression for: a live-membership snapshot whose project count / dimensions
+// drift can leave the ellipse just large enough for canonical order but too
+// tight when a visitor drags the two widest blocks adjacent. The radius search
+// in buildStaticProjectOrbit must return the SMALLEST deterministic radius that
+// keeps EVERY ordered project pair collision-free at one-slot separation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Each project's rendered visual envelope taken relative to its own orbiting
+ * centre — invariant under translation along the ellipse (orientation never
+ * rotates), so a radius sweep is pure arithmetic. Mirrors the precompute the
+ * layout and the projectDocking "arbitrary interactive order safety" test use;
+ * no approximate geometry.
+ */
+function envelopesAtOrbitCentre(projects: ProjectData[]) {
+  const iso0 = project3DToIso(0, 0, 0);
+  return projects.map(p => {
+    const dims = getTopologyProjectDimensions(p);
+    return getTopologyProjectVisualBounds(p, { x: iso0.x - dims.width / 2, y: iso0.y - dims.depth / 2 });
+  });
+}
+
+function ellipseCentre(geom: { centerIso: { x: number; y: number } }, rx: number, ry: number, angle: number) {
+  return { x: geom.centerIso.x + rx * Math.cos(angle), y: geom.centerIso.y + ry * Math.sin(angle) };
+}
+
+const translate = (
+  e: { minX: number; maxX: number; minY: number; maxY: number },
+  c: { x: number; y: number },
+) => ({ minX: e.minX + c.x, maxX: e.maxX + c.x, minY: e.minY + c.y, maxY: e.maxY + c.y });
+
+/** Canonical-order full-revolution pair sweep (the pre-existing invariant), at an arbitrary radius. */
+function canonicalOrderOverlaps(projects: ProjectData[], geom: any, rx: number, ry: number): boolean {
+  const rel = envelopesAtOrbitCentre(projects);
+  const N = projects.length;
+  for (let s = 0; s < 72; s++) {
+    const off = (s / 72) * 2 * Math.PI;
+    const boxes = rel.map((e, i) => translate(e, ellipseCentre(geom, rx, ry, (i / N) * 2 * Math.PI - Math.PI / 2 + off)));
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      if (checkAABBOverlap(boxes[i], boxes[j], 0)) return true;
+    }
+  }
+  return false;
+}
+
+/** Every ordered project pair placed one slot apart, swept across the revolution, at an arbitrary radius. */
+function arbitraryAdjacencyOverlaps(projects: ProjectData[], geom: any, rx: number, ry: number): boolean {
+  const rel = envelopesAtOrbitCentre(projects);
+  const N = projects.length;
+  const step = (2 * Math.PI) / N;
+  const samples = N * 72;
+  for (let m = 0; m < samples; m++) {
+    const lead = (m / samples) * 2 * Math.PI - Math.PI / 2;
+    const lc = ellipseCentre(geom, rx, ry, lead);
+    const tc = ellipseCentre(geom, rx, ry, lead + step);
+    for (let a = 0; a < N; a++) {
+      const boxA = translate(rel[a], lc);
+      for (let b = 0; b < N; b++) {
+        if (a === b) continue;
+        if (checkAABBOverlap(boxA, translate(rel[b], tc), 0)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+const STEP_X = ORBIT_RADIUS_GROWTH_STEP;
+const STEP_Y = ORBIT_RADIUS_GROWTH_STEP * ORBIT_RADIUS_GROWTH_ASPECT;
+
+test('staticOrbitalLattice: 17 heterogeneous-width projects — the reorder invariant deterministically grows the radius to the smallest safe value', () => {
+  // A couple of wide blocks among narrower ones (the live 17-repo snapshot shape).
+  const projects = generateMockProjects(17, [160, 135, 95, 100, 110]);
+  const skills = generateMockSkills(9);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const { radiusX, radiusY } = orbitGeometry;
+
+  // (a) SAFE: no ordered project pair, placed one slot apart, ever overlaps.
+  assert.equal(arbitraryAdjacencyOverlaps(projects, orbitGeometry, radiusX, radiusY), false);
+  assert.equal(canonicalOrderOverlaps(projects, orbitGeometry, radiusX, radiusY), false);
+
+  // (b) The EXTRA radius came specifically from the reorder invariant: one growth
+  //     step smaller, the canonical sweep is already clean but the reorder sweep
+  //     is not. (If the reorder gate were absent, the search would have stopped
+  //     one step short and shipped an overlap.)
+  assert.equal(canonicalOrderOverlaps(projects, orbitGeometry, radiusX - STEP_X, radiusY - STEP_Y), false);
+  assert.equal(arbitraryAdjacencyOverlaps(projects, orbitGeometry, radiusX - STEP_X, radiusY - STEP_Y), true);
+});
+
+test('staticOrbitalLattice: a layout already reorder-safe at its canonical radius is NOT enlarged by the reorder invariant', () => {
+  // Uniform width -> canonical slot spacing is the binding constraint; every
+  // pair is identical, so canonical safety already implies reorder safety.
+  const projects = generateMockProjects(17);
+  const skills = generateMockSkills(9);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const { radiusX, radiusY } = orbitGeometry;
+
+  assert.equal(arbitraryAdjacencyOverlaps(projects, orbitGeometry, radiusX, radiusY), false);
+  // One step smaller already breaks the CANONICAL sweep, so canonical growth set
+  // this radius; the reorder gate added zero further growth.
+  assert.equal(canonicalOrderOverlaps(projects, orbitGeometry, radiusX - STEP_X, radiusY - STEP_Y), true);
+});
+
+test('staticOrbitalLattice: a comfortably-spaced small ring is left at its heuristic radius (no invariant forces growth)', () => {
+  const projects = generateMockProjects(6);
+  const skills = generateMockSkills(9);
+  const { orbitGeometry } = assembleTopologyLayout(projects, skills);
+  const { radiusX, radiusY } = orbitGeometry;
+
+  assert.equal(arbitraryAdjacencyOverlaps(projects, orbitGeometry, radiusX, radiusY), false);
+  // Neither invariant is even close to binding: a full growth step smaller is
+  // still collision-free on both sweeps -> the growth loop never ran.
+  assert.equal(canonicalOrderOverlaps(projects, orbitGeometry, radiusX - STEP_X, radiusY - STEP_Y), false);
+  assert.equal(arbitraryAdjacencyOverlaps(projects, orbitGeometry, radiusX - STEP_X, radiusY - STEP_Y), false);
+});
+
+test('staticOrbitalLattice: the reorder-safe radius is deterministic and independent of input array order', () => {
+  const projects = generateMockProjects(17, [160, 135, 95, 100, 110]);
+  const skills = generateMockSkills(9);
+  const a = assembleTopologyLayout(projects, skills).orbitGeometry;
+  const b = assembleTopologyLayout([...projects].reverse(), skills).orbitGeometry;
+  assert.equal(a.radiusX, b.radiusX);
+  assert.equal(a.radiusY, b.radiusY);
 });

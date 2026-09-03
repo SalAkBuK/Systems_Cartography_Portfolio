@@ -869,34 +869,36 @@ test('real committed snapshot: canonical order derived from staticOrbitalLattice
   }
 });
 
-test('real committed snapshot: detaching one real project (18 -> 17) preserves identity integrity — no duplicate, no missing, relative order otherwise unchanged', () => {
+test('real committed snapshot: detaching one real project (N -> N-1) preserves identity integrity — no duplicate, no missing, relative order otherwise unchanged', () => {
   const projects = GITHUB_SNAPSHOT.projects;
   const skills = GITHUB_SNAPSHOT.skills;
   const { orbitGeometry } = assembleTopologyLayout(projects, skills);
   const canonicalOrder = orbitGeometry.slots.map(s => s.projectId);
+  const N = canonicalOrder.length;
 
-  const detachedId = canonicalOrder[7];
+  const detachedId = canonicalOrder[7 % N];
   const after = canonicalOrder.filter(id => id !== detachedId);
 
-  assert.equal(after.length, 17);
-  assert.equal(new Set(after).size, 17, 'no duplicate identities after detach');
+  assert.equal(after.length, N - 1);
+  assert.equal(new Set(after).size, N - 1, 'no duplicate identities after detach');
   assert.ok(!after.includes(detachedId));
   assert.deepEqual(after, canonicalOrder.filter(id => id !== detachedId), 'relative order of every other identity is untouched — no resort');
 });
 
-test('real committed snapshot: reinserting a detached real project (17 -> 18) preserves identity integrity', () => {
+test('real committed snapshot: reinserting a detached real project (N-1 -> N) preserves identity integrity', () => {
   const projects = GITHUB_SNAPSHOT.projects;
   const skills = GITHUB_SNAPSHOT.skills;
   const { orbitGeometry } = assembleTopologyLayout(projects, skills);
   const canonicalOrder = orbitGeometry.slots.map(s => s.projectId);
+  const N = canonicalOrder.length;
 
-  const detachedId = canonicalOrder[3];
+  const detachedId = canonicalOrder[3 % N];
   const reduced = canonicalOrder.filter(id => id !== detachedId);
   const reinserted = [...reduced];
   reinserted.splice(3, 0, detachedId);
 
-  assert.equal(reinserted.length, 18);
-  assert.equal(new Set(reinserted).size, 18, 'no duplicate identities after reinsertion');
+  assert.equal(reinserted.length, N);
+  assert.equal(new Set(reinserted).size, N, 'no duplicate identities after reinsertion');
   assert.deepEqual(reinserted, canonicalOrder, 'reinserting at the same logical position must exactly reproduce the original canonical order');
 });
 
@@ -1053,7 +1055,12 @@ test('arbitrary interactive order safety: every real project pair, adjacent at a
   const skills = GITHUB_SNAPSHOT.skills;
   const { orbitGeometry } = assembleTopologyLayout(projects, skills) as { orbitGeometry: StaticOrbitGeometry };
   const N = projects.length;
-  assert.equal(N, 18, 'this regression is defined against the real, densest 18-project ring');
+  // This regression runs against whatever the committed snapshot currently
+  // holds; it was originally pinned to an 18-project ring, but the snapshot's
+  // real project count moves with `npm run sync:github`. Guard only that the
+  // ring is still dense enough for the worst-case-adjacency check to be
+  // meaningful.
+  assert.ok(N >= 12, `expected a dense multi-project ring, got ${N}`);
 
   // getTopologyProjectVisualBounds/project3DToIso are both linear in the
   // world-space translation applied — so a project's visual envelope at any

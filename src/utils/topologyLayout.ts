@@ -380,7 +380,15 @@ function isoFootprintHalfExtent(width: number, depth: number): { x: number; y: n
 
 const ORBIT_CORE_CLEARANCE_ISO = 100; // breathing room (iso units) between capability core and orbit ellipse
 const ORBIT_SLOT_MARGIN = 28; // additional iso-space margin reserved per project along the ellipse perimeter (preliminary heuristic only — actual visual-envelope validation below is authoritative)
-const ORBIT_RADIUS_GROWTH_STEP = 24;
+/**
+ * Single deterministic increment by which the project orbit ellipse grows when
+ * a candidate radius fails a collision-safety invariant. `radiusX` grows by
+ * this; `radiusY` grows by `ORBIT_RADIUS_GROWTH_STEP * ORBIT_RADIUS_GROWTH_ASPECT`
+ * so the ellipse keeps its shape. Exported so layout regressions can assert the
+ * returned radius is the SMALLEST multiple-of-step that satisfies every invariant.
+ */
+export const ORBIT_RADIUS_GROWTH_STEP = 24;
+export const ORBIT_RADIUS_GROWTH_ASPECT = 0.72;
 const ORBIT_MAX_GROWTH_ITERATIONS = 400;
 const FIT_VIEWPORT_PADDING = 40; // modest final padding around the union of everything actually rendered
 
@@ -518,7 +526,7 @@ function buildStaticProjectOrbit(
   let growthIterations = 0;
   while (ellipsePerimeter(radiusX, radiusY) < totalSlotRequirement && growthIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
     radiusX += ORBIT_RADIUS_GROWTH_STEP;
-    radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
+    radiusY += ORBIT_RADIUS_GROWTH_STEP * ORBIT_RADIUS_GROWTH_ASPECT;
     growthIterations++;
   }
 
@@ -600,19 +608,79 @@ function buildStaticProjectOrbit(
     return false;
   };
 
+  // Interactive project reordering (projectDocking.ts / interactiveOrbitOrder)
+  // lets a visitor drop ANY project immediately before ANY other on this same
+  // ellipse. The canonical sweep above only proves the ONE adjacency each
+  // project has in canonical order — so a radius that is canonical-safe can
+  // still let a visitor place the two widest blocks side by side and overlap.
+  // This proves the stronger invariant: EVERY ordered project pair stays
+  // collision-free when placed one slot apart (angular separation 2*PI/N) at
+  // every point on the orbit. It is bounded, never factorial: O(N^2) pairs x a
+  // full-revolution sweep, reusing the identical visual-envelope + AABB
+  // primitives. Each project's rendered envelope, taken relative to its own
+  // orbiting centre, is invariant under translation along the ellipse (project
+  // orientation never rotates — the same property motionVisualBounds relies
+  // on), so it is precomputed once and the sweep is pure arithmetic. Wider slot
+  // separations only ever gain chord clearance on this ellipse, so proving the
+  // 1-slot adjacency is sufficient for every wider reordering.
+  const slotAngularStep = (2 * Math.PI) / totalProjects;
+  // Same effective angular resolution as the "arbitrary interactive order
+  // safety" regression (its nested slot x phase sweep resolves to ~2*PI/(N*72)).
+  const REORDER_SWEEP_SAMPLES = totalProjects * MOTION_SWEEP_SAMPLES;
+  const isoZeroWorld = projectIsoTo3D(0, 0);
+  const envelopeAtOrbitCentre: TopologyVisualBounds[] = sortedProjects.map((project, i) => {
+    const dims = projectDims[i];
+    return getTopologyProjectVisualBounds(project, {
+      x: isoZeroWorld.x - dims.width / 2,
+      y: isoZeroWorld.y - dims.depth / 2,
+    });
+  });
+  const translatedBox = (i: number, isoCentre: { x: number; y: number }): TopologyVisualBounds => {
+    const e = envelopeAtOrbitCentre[i];
+    return {
+      minX: e.minX + isoCentre.x,
+      maxX: e.maxX + isoCentre.x,
+      minY: e.minY + isoCentre.y,
+      maxY: e.maxY + isoCentre.y,
+    };
+  };
+
+  const hasReorderAdjacencyOverlap = (rx: number, ry: number): boolean => {
+    for (let m = 0; m < REORDER_SWEEP_SAMPLES; m++) {
+      const leadAngle = (m / REORDER_SWEEP_SAMPLES) * 2 * Math.PI - Math.PI / 2;
+      const trailAngle = leadAngle + slotAngularStep;
+      const leadCentre = { x: centerIso.x + rx * Math.cos(leadAngle), y: centerIso.y + ry * Math.sin(leadAngle) };
+      const trailCentre = { x: centerIso.x + rx * Math.cos(trailAngle), y: centerIso.y + ry * Math.sin(trailAngle) };
+      for (let a = 0; a < totalProjects; a++) {
+        const boxLead = translatedBox(a, leadCentre);
+        for (let b = 0; b < totalProjects; b++) {
+          if (a === b) continue;
+          if (checkAABBOverlap(boxLead, translatedBox(b, trailCentre), 0)) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const isOrbitRadiusSafe = (rx: number, ry: number): boolean =>
+    !hasOverlapAcrossRevolution(rx, ry) && !hasReorderAdjacencyOverlap(rx, ry);
+
   // 5. Validate zero-overlap ACROSS THE FULL REVOLUTION against the actual
-  // rendered visual envelopes; if the heuristic radius wasn't quite enough,
-  // grow the whole ellipse uniformly and re-check (never nudge a single slot
-  // independently — the perimeter must stay one coherent ellipse, safe at
-  // every phase, not just phase 0).
+  // rendered visual envelopes — for the canonical ordering AND for every
+  // supported interactive reordering; if the heuristic radius wasn't quite
+  // enough, grow the whole ellipse uniformly and re-check (never nudge a single
+  // slot independently — the perimeter must stay one coherent ellipse, safe at
+  // every phase, not just phase 0). The loop returns the smallest radius under
+  // ORBIT_RADIUS_GROWTH_STEP that satisfies both invariants; an already-safe
+  // radius grows zero times.
   let validationIterations = 0;
-  while (hasOverlapAcrossRevolution(radiusX, radiusY) && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
+  while (!isOrbitRadiusSafe(radiusX, radiusY) && validationIterations < ORBIT_MAX_GROWTH_ITERATIONS) {
     radiusX += ORBIT_RADIUS_GROWTH_STEP;
-    radiusY += ORBIT_RADIUS_GROWTH_STEP * 0.72;
+    radiusY += ORBIT_RADIUS_GROWTH_STEP * ORBIT_RADIUS_GROWTH_ASPECT;
     validationIterations++;
   }
 
-  if (hasOverlapAcrossRevolution(radiusX, radiusY)) {
+  if (!isOrbitRadiusSafe(radiusX, radiusY)) {
     throw new Error('Deterministic layout failed: unable to place a motion-safe static project orbit without collision.');
   }
 
