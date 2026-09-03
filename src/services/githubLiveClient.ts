@@ -139,8 +139,38 @@ export interface FetchLiveInventoryOptions {
   timeoutMs?: number;
   /** Injectable transport for tests. */
   fetchImpl?: typeof fetch;
-  /** Bypass the browser's own HTTP cache on a manual refresh (the CDN edge cache still applies). */
+  /**
+   * Manual reload only. Automatic / background / initial syncs leave this
+   * false and request the plain `/api/github-live`, which stays served through
+   * the ordinary Vercel CDN edge cache (`s-maxage` / `stale-while-revalidate`)
+   * -- correct and efficient for a normal visitor.
+   *
+   * A manual reload sets this true, which (a) bypasses the browser's own HTTP
+   * cache (`cache: 'no-cache'`) and (b) appends a unique `?refresh=<token>`
+   * query parameter. Because Vercel's CDN cache key includes the query string,
+   * that URL is a distinct cache entry the edge has never seen, so the request
+   * reaches a fresh function execution instead of reusing the ordinary cached
+   * inventory. The token is a pure cache-key discriminator: it carries no
+   * owner, no secret, and the server never reads or interprets it.
+   */
   bustBrowserCache?: boolean;
+  /** Test seam: source of the manual-refresh cache-key timestamp. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+/**
+ * Monotonic per-session counter mixed into the manual-refresh token so two
+ * manual reloads within the same millisecond still produce distinct URLs (and
+ * therefore distinct CDN cache keys). Resets on every page load.
+ */
+let manualRefreshSequence = 0;
+
+/** Builds the same-origin request URL: plain for background sync, `?refresh=<token>` for a manual reload. */
+function resolveLiveInventoryRequestUrl(options: FetchLiveInventoryOptions): string {
+  if (!options.bustBrowserCache) return LIVE_ENDPOINT_PATH;
+  const nowMs = (options.now ?? Date.now)();
+  const token = `${nowMs}.${++manualRefreshSequence}`;
+  return `${LIVE_ENDPOINT_PATH}?refresh=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -151,6 +181,7 @@ export async function fetchLiveGitHubInventory(
 ): Promise<LiveInventoryFetchResult> {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_LIVE_FETCH_TIMEOUT_MS;
+  const requestUrl = resolveLiveInventoryRequestUrl(options);
 
   if (typeof fetchImpl !== 'function') {
     return { response: null, transport: 'error', ageSeconds: null, error: 'fetch unavailable' };
@@ -168,7 +199,7 @@ export async function fetchLiveGitHubInventory(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetchImpl(LIVE_ENDPOINT_PATH, {
+    const res = await fetchImpl(requestUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,

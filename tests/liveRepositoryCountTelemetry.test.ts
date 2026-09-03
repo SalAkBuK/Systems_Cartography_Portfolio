@@ -7,6 +7,7 @@ import { reconcileLiveRepositories } from '../src/utils/reconcileLiveRepositorie
 import { resolveLiveRepositoryCount } from '../src/hooks/useLiveGitHubInventory.ts';
 import { formatLiveInventoryCounts } from '../src/components/TopTelemetryBar.tsx';
 import { GITHUB_SNAPSHOT } from '../src/data/githubSnapshot.generated.ts';
+import { fetchLiveGitHubInventory } from '../src/services/githubLiveClient.ts';
 
 // Regression coverage for a misleading telemetry label:
 //
@@ -241,4 +242,62 @@ test('the OWNER PROJECTS card labels activeProjectsCount as PROJECTS, not PUBLIC
     !/activeProjectsCount\.toString\(\)\.padStart\(2, '0'\)\} PUBLIC REPOS/.test(telemetrySrc),
     'activeProjectsCount must never be labelled "PUBLIC REPOS" — that number is the rendered project count',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Manual CDN-bypass refresh keeps the raw-count semantics intact.
+//
+// Scenario the fix targets: an empty public repo (`portfolio`) is deleted on
+// GitHub. The manual reload must reach a fresh function execution (not a stale
+// CDN entry) and then report the raw live count straight from
+// `response.repositoryCount` — 17, not the rendered project count via some
+// other path — while reconciliation of the 17 real project repos is unchanged.
+// ---------------------------------------------------------------------------
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+test('a manual-refresh fetch of a complete 17-repo inventory yields liveRepositoryCount 17 from response.repositoryCount', async () => {
+  const live = inventory(liveReposMatchingSnapshot()); // one live repo per rendered project; repositoryCount === repositories.length
+  assert.equal(live.repositoryCount, snapshotProjects.length);
+
+  let requestedUrl = '';
+  const result = await fetchLiveGitHubInventory({
+    bustBrowserCache: true,
+    now: () => 1_700_000_000_001,
+    fetchImpl: (async (input: RequestInfo | URL) => {
+      requestedUrl = input.toString();
+      return jsonResponse(live);
+    }) as typeof fetch,
+  });
+
+  // The manual reload used the distinct CDN cache key...
+  assert.match(requestedUrl, /^\/api\/github-live\?refresh=/);
+  assert.ok(result.response, 'the fresh response parsed');
+
+  // ...and the raw live count comes straight off the envelope.
+  const reconciled = reconcileLiveRepositories(snapshotProjects, result.response!, { configuredGithubTarget: OWNER_TARGET });
+  assert.equal(reconciled.stats.applied, true);
+  assert.equal(reconciled.stats.removed, 0, 'the 17 real project repos still all match — nothing removed');
+  assert.equal(reconciled.projects.length, snapshotProjects.length);
+
+  const liveRepositoryCount = resolveLiveRepositoryCount(18, reconciled.stats.applied, result.response!);
+  assert.equal(liveRepositoryCount, snapshotProjects.length, 'raw live count follows the payload down from 18 to 17');
+  assert.equal(liveRepositoryCount, 17);
+  assert.equal(formatLiveInventoryCounts(liveRepositoryCount, reconciled.projects.length), '17 REPOS // 17 PROJECTS');
+});
+
+test('reconciliation still removes a project that a COMPLETE live inventory no longer contains (CDN-bypass change did not touch this path)', () => {
+  // Drop one project's repo from the live set entirely, as if it were deleted/privatised.
+  const shrunk = liveReposMatchingSnapshot().slice(1);
+  const live = inventory(shrunk); // complete: true
+  const reconciled = reconcileLiveRepositories(snapshotProjects, live, { configuredGithubTarget: OWNER_TARGET });
+
+  assert.equal(reconciled.stats.applied, true);
+  assert.equal(reconciled.stats.removed, 1);
+  assert.equal(reconciled.projects.length, snapshotProjects.length - 1);
+  assert.equal(resolveLiveRepositoryCount(null, true, live), snapshotProjects.length - 1);
 });

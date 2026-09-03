@@ -92,6 +92,82 @@ test('an x-vercel-cache HIT marks the payload as CDN-cached', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Manual reload vs automatic sync: CDN cache-key discrimination
+//
+// The manual reload button bypasses the browser HTTP cache but NOT the Vercel
+// CDN edge cache, so it could echo a stale cached inventory (e.g. still count a
+// since-deleted repo). A manual reload must therefore hit a distinct URL
+// (`?refresh=<token>`) that is a fresh CDN cache key; automatic/background
+// syncs must keep requesting exactly `/api/github-live` so normal visitors stay
+// CDN-efficient.
+// ---------------------------------------------------------------------------
+function captureRequest() {
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: input.toString(), init });
+    return jsonResponse(envelope());
+  }) as typeof fetch;
+  return { calls, fetchImpl };
+}
+
+test('an automatic / background sync (bustBrowserCache: false) requests EXACTLY /api/github-live with no refresh param', async () => {
+  const { calls, fetchImpl } = captureRequest();
+  await fetchLiveGitHubInventory({ fetchImpl, bustBrowserCache: false });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, LIVE_ENDPOINT_PATH);
+  assert.doesNotMatch(calls[0].url, /[?&]refresh=/);
+  assert.equal(calls[0].init?.cache, 'default', 'automatic sync keeps the browser default cache and the CDN edge cache');
+});
+
+test('the default (no options) call is also the plain CDN-cached endpoint', async () => {
+  const { calls, fetchImpl } = captureRequest();
+  await fetchLiveGitHubInventory({ fetchImpl });
+  assert.equal(calls[0].url, LIVE_ENDPOINT_PATH);
+});
+
+test('a manual reload (bustBrowserCache: true) requests /api/github-live?refresh=<non-empty token> and keeps GET / omit / error', async () => {
+  const { calls, fetchImpl } = captureRequest();
+  await fetchLiveGitHubInventory({ fetchImpl, bustBrowserCache: true, now: () => 1_700_000_000_000 });
+
+  assert.equal(calls.length, 1);
+  const url = new URL(calls[0].url, 'https://portfolio.example');
+  assert.equal(url.pathname, LIVE_ENDPOINT_PATH);
+  const token = url.searchParams.get('refresh');
+  assert.ok(token && token.length > 0, 'refresh token must be present and non-empty');
+  assert.match(token, /^1700000000000\./, 'token is derived from the injected clock');
+
+  assert.equal(calls[0].init?.method, 'GET');
+  assert.equal(calls[0].init?.credentials, 'omit');
+  assert.equal(calls[0].init?.redirect, 'error');
+  assert.equal(calls[0].init?.cache, 'no-cache', 'manual reload also bypasses the browser HTTP cache');
+});
+
+test('the manual reload URL carries ONLY the refresh cache-key discriminator (no owner, token, or other params)', async () => {
+  const { calls, fetchImpl } = captureRequest();
+  await fetchLiveGitHubInventory({ fetchImpl, bustBrowserCache: true, now: () => 42 });
+  const url = new URL(calls[0].url, 'https://portfolio.example');
+  assert.deepEqual([...url.searchParams.keys()], ['refresh']);
+});
+
+test('two manual reloads never reuse the same URL / CDN cache key, even at the same millisecond', async () => {
+  const { calls, fetchImpl } = captureRequest();
+  const frozenClock = () => 1_700_000_000_000;
+  await fetchLiveGitHubInventory({ fetchImpl, bustBrowserCache: true, now: frozenClock });
+  await fetchLiveGitHubInventory({ fetchImpl, bustBrowserCache: true, now: frozenClock });
+  assert.equal(calls.length, 2);
+  assert.notEqual(calls[0].url, calls[1].url, 'the monotonic sequence keeps same-millisecond reloads distinct');
+});
+
+test('a manual reload still parses a normal 200 payload (only the URL changes, not the response handling)', async () => {
+  const result = await fetchLiveGitHubInventory({
+    bustBrowserCache: true,
+    fetchImpl: (async () => jsonResponse(envelope({ repositoryCount: 17 }))) as typeof fetch,
+  });
+  assert.equal(result.transport, 'live');
+  assert.equal(result.response?.ok, true);
+});
+
+// ---------------------------------------------------------------------------
 // Failure modes -> null response, never throws
 // ---------------------------------------------------------------------------
 test('a non-200 response resolves to a null response the caller treats as fallback', async () => {
