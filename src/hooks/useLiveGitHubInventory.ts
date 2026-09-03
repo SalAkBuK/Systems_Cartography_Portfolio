@@ -27,8 +27,31 @@ import {
   type ReconcileStats,
 } from '../utils/reconcileLiveRepositories';
 import { fetchLiveGitHubInventory } from '../services/githubLiveClient';
+import type { LiveInventoryResponse } from '../services/githubLiveTypes';
 
 export type LiveInventoryStatus = 'snapshot' | 'syncing' | 'live' | 'cached' | 'fallback';
+
+/**
+ * The RAW live repository count to surface in telemetry, given the previously
+ * tracked value and the latest live fetch attempt.
+ *
+ *  - A successful (applied) live/cached payload publishes ITS OWN
+ *    `repositoryCount` — the number of repositories GitHub's inventory returned
+ *    after the server's live inventory rules. This is never derived from how
+ *    many projects ended up rendered.
+ *  - Any other outcome (snapshot before first response, owner-mismatch
+ *    fallback, network failure, malformed payload) keeps the last known-good
+ *    value — `null` if a live payload has never succeeded. Telemetry must not
+ *    invent a live count in those states.
+ */
+export function resolveLiveRepositoryCount(
+  previous: number | null,
+  applied: boolean,
+  response: Pick<LiveInventoryResponse, 'repositoryCount'> | null,
+): number | null {
+  if (applied && response) return response.repositoryCount;
+  return previous;
+}
 
 export interface UseLiveGitHubInventoryParams {
   /** RAW committed-snapshot projects (before link overrides). */
@@ -48,8 +71,18 @@ export interface UseLiveGitHubInventoryResult {
   status: LiveInventoryStatus;
   /** ISO timestamp of the last successful live payload (fresh or cached). */
   lastRefreshedAt: string | null;
-  /** Project count currently rendered in the topology. */
-  repositoryCount: number;
+  /**
+   * RAW count of public repositories the last successful live inventory
+   * returned (after the server's live inventory rules) — NOT the rendered
+   * project count. `null` until a live/cached payload has succeeded; a
+   * snapshot/fallback state never fabricates this.
+   */
+  liveRepositoryCount: number | null;
+  /**
+   * Projects currently rendered in the topology after reconciliation /
+   * filtering — always `projects.length`.
+   */
+  renderedProjectCount: number;
   stats: ReconcileStats | null;
   isRefreshing: boolean;
   /** Manual re-request of the live inventory; preserves topology state. */
@@ -69,6 +102,10 @@ export function useLiveGitHubInventory(
   const [projects, setProjects] = useState<ProjectData[]>(snapshotWithLinks);
   const [status, setStatus] = useState<LiveInventoryStatus>(enabled ? 'syncing' : 'snapshot');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  // RAW live repository count from the last successful live payload. Starts
+  // null (no live payload yet) and only ever advances on an applied response —
+  // a fallback keeps the last known-good value rather than reverting to null.
+  const [liveRepositoryCount, setLiveRepositoryCount] = useState<number | null>(null);
   const [stats, setStats] = useState<ReconcileStats | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -119,14 +156,18 @@ export function useLiveGitHubInventory(
             return;
           }
 
-          const reconciled = reconcileLiveRepositories(snapshotProjects, result.response, {
+          const response = result.response;
+          const reconciled = reconcileLiveRepositories(snapshotProjects, response, {
             configuredGithubTarget,
           });
           setStats(reconciled.stats);
 
           if (reconciled.stats.applied) {
             setStatus(result.transport === 'cached' ? 'cached' : 'live');
-            setLastRefreshedAt(result.response.fetchedAt);
+            setLastRefreshedAt(response.fetchedAt);
+            setLiveRepositoryCount((prev) =>
+              resolveLiveRepositoryCount(prev, reconciled.stats.applied, response),
+            );
             if (reconciled.changed) {
               setProjects(applyProjectLinkOverrides(reconciled.projects, projectLinks));
             }
@@ -166,7 +207,8 @@ export function useLiveGitHubInventory(
     projects,
     status,
     lastRefreshedAt,
-    repositoryCount: projects.length,
+    liveRepositoryCount,
+    renderedProjectCount: projects.length,
     stats,
     isRefreshing,
     refresh,

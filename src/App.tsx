@@ -72,7 +72,8 @@ export default function App() {
     projects,
     status: liveInventoryStatus,
     lastRefreshedAt: liveInventoryRefreshedAt,
-    repositoryCount: liveRepositoryCount,
+    liveRepositoryCount,
+    renderedProjectCount,
     isRefreshing: liveInventoryRefreshing,
     refresh: refreshLiveInventory,
   } = useLiveGitHubInventory({
@@ -319,7 +320,8 @@ export default function App() {
           available: Boolean(configuredSnapshot),
           status: liveInventoryStatus,
           lastRefreshedAt: liveInventoryRefreshedAt,
-          repositoryCount: liveRepositoryCount,
+          liveRepositoryCount,
+          renderedProjectCount,
           isRefreshing: liveInventoryRefreshing,
           onRefresh: refreshLiveInventory,
         }}

@@ -2259,16 +2259,33 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setIsDragging(false);
   };
 
-  // Wheel zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(Math.max(viewport.zoom * zoomFactor, 0.45), 2.5);
-    setViewport(prev => ({
-      ...prev,
-      zoom: newZoom,
-    }));
-  };
+  // Wheel zoom — installed as a NATIVE, non-passive listener on the canvas
+  // container rather than a React `onWheel` prop. React attaches its synthetic
+  // wheel listener at the root as PASSIVE, so `e.preventDefault()` inside a
+  // React `onWheel` handler is silently ignored ("Unable to preventDefault
+  // inside passive event listener invocation.") and the page scrolls while the
+  // canvas zooms. Binding directly to `containerRef` with `{ passive: false }`
+  // is the only way to suppress that page scroll. The zoom math is unchanged
+  // from the previous handler: same direction, same 1.1 / 0.9 step, same
+  // 0.45–2.5 clamp, same center-relative (non-pointer-anchored) zoom, and no
+  // viewport translation — the functional updater reads `prev.zoom`, which is
+  // exactly the value the old closure read from `viewport.zoom`.
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const handleWheelZoom = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      setViewport(prev => ({
+        ...prev,
+        zoom: Math.min(Math.max(prev.zoom * zoomFactor, 0.45), 2.5),
+      }));
+    };
+
+    element.addEventListener('wheel', handleWheelZoom, { passive: false });
+    return () => element.removeEventListener('wheel', handleWheelZoom);
+  }, [setViewport]);
 
   // Touch handlers for mobile pan/zoom
   const [touchStartDist, setTouchStartDist] = useState<number | null>(null);
@@ -2522,7 +2539,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

@@ -10,9 +10,32 @@ export interface LiveGitHubSyncTelemetry {
   status: LiveGitHubStatus;
   /** ISO timestamp of the last successful live payload (fresh or cached). */
   lastRefreshedAt: string | null;
-  repositoryCount: number;
+  /**
+   * RAW count of public repositories the last successful live GitHub inventory
+   * returned. `null` until a live/cached payload has succeeded — a
+   * snapshot/fallback state must not fabricate a live count.
+   */
+  liveRepositoryCount: number | null;
+  /** Projects currently rendered in the topology after reconciliation. */
+  renderedProjectCount: number;
   isRefreshing: boolean;
   onRefresh: () => void;
+}
+
+/**
+ * The brutalist telemetry token that distinguishes the RAW live GitHub
+ * repository count from the RENDERED topology project count, e.g.
+ * `18 REPOS // 17 PROJECTS`. Before a live payload has ever succeeded there is
+ * no honest live count, so only the project count is shown — the repo count is
+ * never inferred from `renderedProjectCount`.
+ */
+export function formatLiveInventoryCounts(
+  liveRepositoryCount: number | null,
+  renderedProjectCount: number,
+): string {
+  const projects = `${renderedProjectCount.toString().padStart(2, '0')} PROJECTS`;
+  if (liveRepositoryCount === null) return projects;
+  return `${liveRepositoryCount.toString().padStart(2, '0')} REPOS // ${projects}`;
 }
 
 interface TopTelemetryBarProps {
@@ -118,7 +141,7 @@ export const TopTelemetryBar: React.FC<TopTelemetryBarProps> = ({
                 <>
                   <span className="opacity-40">·</span>
                   <span className="opacity-70 tracking-normal">
-                    {liveSync.repositoryCount.toString().padStart(2, '0')} REPOS
+                    {formatLiveInventoryCounts(liveSync.liveRepositoryCount, liveSync.renderedProjectCount)}
                     {refreshStamp ? ` · ${refreshStamp}` : ''}
                   </span>
                   <button
