@@ -225,7 +225,7 @@ ${p.links?.github ? `- **Repository:** ${p.links.github}\n` : ''}`).join('\n')}
         {/* Scrollable Printable Content */}
         <div className="flex-1 overflow-y-auto p-6 sm:p-8 flex flex-col gap-6 leading-relaxed bg-[#DCD6B2]/40 text-[#15150F]">
           {/* Header Block */}
-          <div className="border-b-2 border-precision pb-4 flex flex-col gap-1.5">
+          <div className="border-b-2 border-precision px-3.5 pb-4 flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[18px] font-bold tracking-tight text-[#15150F]">
                 {activeOperator.name}
