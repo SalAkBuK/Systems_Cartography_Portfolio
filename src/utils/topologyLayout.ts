@@ -415,31 +415,56 @@ const CAPABILITY_NODE_FOOTPRINT = 48;
 const CAPABILITY_NODE_HALF_FOOTPRINT = CAPABILITY_NODE_FOOTPRINT / 2;
 
 /**
- * Explicit minimum radial clearance (world units) enforced between one
- * capability ring's REALIZED outer envelope (see `outerX`/`outerY` on
- * `CapabilityRingPlacement` -- measured from where nodes actually land,
- * including any collision-driven radial adjustment, never the nominal seed
- * radius that only describes where slots started) and the next ring's own
- * node footprint. This is the capability-ring analog of
- * `PROJECT_RING_SPACING_ISO`: an explicit, count-independent breathing-room
- * invariant, replacing a flat "rx += 80 / ry += 60" increment that had no
- * relationship to what actually got placed (for the committed portfolio's
- * real ~28-capability data, that flat increment left as little as ~2 world
- * units of actual Y clearance once ring 0's realized packing is accounted
- * for). One `GRID_SNAP_STEP` -- the same grid unit every capability position
- * is already snapped to -- is a deliberate, legible minimum gap rather than
- * an arbitrary constant.
+ * Initial radial guess (world units) enforced between one capability ring's
+ * REALIZED outer envelope (see `outerX`/`outerY` on `CapabilityRingPlacement`
+ * -- measured from where nodes actually land, including any collision-driven
+ * radial adjustment, never the nominal seed radius that only describes where
+ * slots started) and the next ring's own node footprint, before the
+ * measured-clearance growth loop below takes over. Replaces a flat
+ * "rx += 80 / ry += 60" increment that had no relationship to what actually
+ * got placed (for the committed portfolio's real ~28-capability data, that
+ * flat increment left as little as ~2 world units of actual Y clearance once
+ * ring 0's realized packing was accounted for).
+ *
+ * This alone is NOT the spacing invariant -- it is only a starting point for
+ * `CAPABILITY_RING_MIN_ISO_CLEARANCE` below to refine, because a world-space
+ * radial gap measured only along a ring's cardinal X/Y axes does not
+ * guarantee a genuine gap at every other angle around two elliptical rings
+ * populated at different angles/densities: a node's collision-driven radial
+ * push (below) moves it outward along ITS OWN angle, not necessarily X or Y,
+ * so this axis-only floor can under-count how far a node actually landed.
  */
-export const CAPABILITY_RING_MIN_CLEARANCE = GRID_SNAP_STEP;
+const CAPABILITY_RING_SEED_CLEARANCE = GRID_SNAP_STEP * 3;
+
+/**
+ * The REAL spacing invariant: minimum allowed gap, in isometric/visual space
+ * -- the same coordinate space `ORBIT_CORE_CLEARANCE_ISO` already measures
+ * capability-core-to-project-orbit breathing room in -- between the NEAREST
+ * rendered envelopes of two adjacent capability rings' actual placed nodes.
+ * Verified directly by measurement (`measureMinIsoGapToPreviousRing` below),
+ * not inferred from seed-radius arithmetic: the isometric projection turns
+ * each axis-aligned 48x48 node footprint into a rotated diamond, so two
+ * nodes comfortably separated along a ring's cardinal axes can still project
+ * to near-touching iso bounding boxes if the offset between them runs along
+ * a different direction -- exactly how the previous (seed-radius-only) fix
+ * still measured as little as ~2-4 iso units of actual rendered gap despite
+ * satisfying its own formula. `tests/capabilityRingSpacing.test.ts` asserts
+ * this same measurement against real placed positions, not just the formula.
+ */
+export const CAPABILITY_RING_MIN_ISO_CLEARANCE = 60;
+
+/** World-unit step by which a ring's radius grows when the measured ISO clearance to the previous ring falls short of the invariant. */
+const CAPABILITY_RING_CLEARANCE_GROWTH_STEP = 16;
+const CAPABILITY_RING_MAX_CLEARANCE_GROWTH_ITERATIONS = 200;
 
 /** One concentric capability ring's placement diagnostics -- see `buildCapabilityRingLayout`. */
 export interface CapabilityRingPlacement {
   ringIndex: number;
   skillIds: string[];
-  /** Nominal radii this ring's slots were placed from, before any per-node collision-driven adjustment. */
+  /** Radii this ring's slots were actually placed at (after any clearance-driven growth), before per-node collision-driven adjustment. */
   seedRadiusX: number;
   seedRadiusY: number;
-  /** Realized outer envelope after placement -- authoritative floor input for the next ring's clearance. */
+  /** Realized outer envelope after placement -- input for the next ring's initial seed guess. */
   outerX: number;
   outerY: number;
 }
@@ -448,20 +473,67 @@ function snapToGrid(val: number, step: number = GRID_SNAP_STEP): number {
   return (Math.round(val / step) * step) || 0;
 }
 
+/** Projects a world-space AABB's four corners into isometric/visual space and returns their bounding box -- the same technique used for the capability core and project visual bounds elsewhere in this module. Exported so regressions can measure the same real, rendered gap this invariant is defined against. */
+export function isoBoxFromWorldBounds(bounds: { minX: number; maxX: number; minY: number; maxY: number }): TopologyVisualBounds {
+  const corners = [
+    project3DToIso(bounds.minX, bounds.minY, 0),
+    project3DToIso(bounds.maxX, bounds.minY, 0),
+    project3DToIso(bounds.maxX, bounds.maxY, 0),
+    project3DToIso(bounds.minX, bounds.maxY, 0),
+  ];
+  return {
+    minX: Math.min(...corners.map(c => c.x)),
+    maxX: Math.max(...corners.map(c => c.x)),
+    minY: Math.min(...corners.map(c => c.y)),
+    maxY: Math.max(...corners.map(c => c.y)),
+  };
+}
+
+/** Minimum Euclidean distance between two axis-aligned rectangles (0 if they touch or overlap). */
+export function minRectDistance(a: TopologyVisualBounds, b: TopologyVisualBounds): number {
+  const dx = Math.max(b.minX - a.maxX, a.minX - b.maxX, 0);
+  const dy = Math.max(b.minY - a.maxY, a.minY - b.maxY, 0);
+  return Math.hypot(dx, dy);
+}
+
+/** Smallest measured iso-space gap between any node of the candidate ring and any node of the previous ring (Infinity if there is no previous ring). */
+function measureMinIsoGapToPreviousRing(candidateBoxes: PlacedNodeBounds[], previousRingIsoBoxes: TopologyVisualBounds[]): number {
+  if (previousRingIsoBoxes.length === 0) return Infinity;
+  let min = Infinity;
+  for (const box of candidateBoxes) {
+    const isoBox = isoBoxFromWorldBounds(box);
+    for (const prevIsoBox of previousRingIsoBoxes) {
+      min = Math.min(min, minRectDistance(isoBox, prevIsoBox));
+    }
+  }
+  return min;
+}
+
 /**
  * Builds one or more concentric capability rings around the topology center.
  * Skills are batched onto each ring by how many fit its perimeter (unchanged
  * heuristic), then each is placed via the existing deterministic
- * collision-avoidance search (unchanged). The one behavior this changes from
- * the original single fixed-increment loop: ring N+1's seed radius is
- * derived from ring N's REALIZED outer envelope (the actual placed bounds,
- * including any collision-driven pushback) plus this ring's own footprint
- * plus `CAPABILITY_RING_MIN_CLEARANCE` -- instead of a flat "+80/+60" that
- * had no relationship to what actually got placed and could let a
- * heavily-packed ring's pushed-out nodes sit right up against the next
- * ring's nominal start. Because the floor is measured from what was
- * actually placed, not a nominal seed, it can only ever grow to
- * accommodate collision pushback -- never leave a stale gap.
+ * collision-avoidance search (unchanged in mechanism, but re-runnable at a
+ * larger radius -- see below). What this changes from the original
+ * fixed-increment loop, in two layers:
+ *
+ * 1. Ring N+1's INITIAL radius guess derives from ring N's REALIZED outer
+ *    envelope (the actual placed bounds, including any collision-driven
+ *    pushback) plus this ring's own footprint plus
+ *    `CAPABILITY_RING_SEED_CLEARANCE` -- instead of a flat "+80/+60" with no
+ *    relationship to what actually got placed.
+ * 2. That guess is then verified by ACTUALLY PLACING the ring and measuring
+ *    the real isometric-space gap to the previous ring's actual placed
+ *    nodes (`measureMinIsoGapToPreviousRing`). If the measured gap falls
+ *    short of `CAPABILITY_RING_MIN_ISO_CLEARANCE`, the radius grows and the
+ *    ENTIRE ring is re-placed (never a single slot nudged independently),
+ *    repeating until the real invariant holds. Only the immediately
+ *    preceding ring is checked -- exactly the same reasoning
+ *    `buildProjectOrbitRings` already documents for project rings: because
+ *    each ring's radius is only ever grown outward from its predecessor's
+ *    realized state, a verified gap to the immediate neighbor, combined with
+ *    strictly increasing radii, rules out any farther-out ring ever being
+ *    closer.
  */
 export function buildCapabilityRingLayout(
   sortedSkills: InfrastructureSkill[]
@@ -476,11 +548,12 @@ export function buildCapabilityRingLayout(
   let ry = 65;
   let previousOuterX = 0;
   let previousOuterY = 0;
+  let previousRingIsoBoxes: TopologyVisualBounds[] = [];
 
   while (unplacedSkills.length > 0) {
     if (ringIndex > 0) {
-      rx = previousOuterX + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
-      ry = previousOuterY + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
+      rx = previousOuterX + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_SEED_CLEARANCE;
+      ry = previousOuterY + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_SEED_CLEARANCE;
     }
 
     // Approximate ellipse perimeter = 2 * PI * sqrt((rx^2 + ry^2) / 2)
@@ -492,63 +565,96 @@ export function buildCapabilityRingLayout(
     unplacedSkills = unplacedSkills.slice(batchCount);
 
     const angleStagger = ringIndex > 0 ? (ringIndex * Math.PI) / batchCount : 0;
-    let ringOuterX = 0;
-    let ringOuterY = 0;
 
-    for (let i = 0; i < batch.length; i++) {
-      const skill = batch[i];
-      const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
-      const rawX = Math.cos(angle) * rx;
-      const rawY = Math.sin(angle) * ry;
+    // Places this ring's fixed batch at the given (attemptRx, attemptRy),
+    // reusing the existing per-node deterministic collision-avoidance search
+    // unchanged. Callable repeatedly at growing radii by the clearance loop
+    // below without mutating any outer state until an attempt is accepted --
+    // checks each candidate against both already-COMMITTED boxes from prior
+    // rings (`placedBoxes`) and this attempt's own boxes placed so far.
+    const placeBatchAt = (attemptRx: number, attemptRy: number) => {
+      const positions: Record<string, { x: number; y: number }> = {};
+      const boxes: PlacedNodeBounds[] = [];
+      let ringOuterX = 0;
+      let ringOuterY = 0;
 
-      let candX = snapToGrid(rawX);
-      let candY = snapToGrid(rawY);
-      let candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
+      for (let i = 0; i < batch.length; i++) {
+        const skill = batch[i];
+        const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
 
-      // Deterministic collision search with radial stepping & candidate ring expansion
-      let isCollisionFree = false;
-      let step = 0;
-      let currentCandRx = rx;
-      let currentCandRy = ry;
+        let candX = snapToGrid(Math.cos(angle) * attemptRx);
+        let candY = snapToGrid(Math.sin(angle) * attemptRy);
+        let candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
 
-      while (!isCollisionFree && step < 80) {
-        if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 12))) {
-          isCollisionFree = true;
-          break;
+        // Deterministic collision search with radial stepping & candidate ring expansion
+        let isCollisionFree = false;
+        let step = 0;
+        let currentCandRx = attemptRx;
+        let currentCandRy = attemptRy;
+
+        const collidesWithAnyPlaced = () =>
+          placedBoxes.some(box => checkAABBOverlap(candBounds, box, 12)) ||
+          boxes.some(box => checkAABBOverlap(candBounds, box, 12));
+
+        while (!isCollisionFree && step < 80) {
+          if (!collidesWithAnyPlaced()) {
+            isCollisionFree = true;
+            break;
+          }
+          step++;
+          if (step % 8 === 0) {
+            currentCandRx += GRID_SNAP_STEP * 2;
+            currentCandRy += GRID_SNAP_STEP * 2;
+          }
+          const rayOffset = (step % 8) * GRID_SNAP_STEP;
+          candX = snapToGrid(Math.cos(angle) * (currentCandRx + rayOffset));
+          candY = snapToGrid(Math.sin(angle) * (currentCandRy + rayOffset));
+          candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
         }
-        step++;
-        if (step % 8 === 0) {
-          currentCandRx += GRID_SNAP_STEP * 2;
-          currentCandRy += GRID_SNAP_STEP * 2;
+
+        if (!isCollisionFree) {
+          throw new Error(`Deterministic layout failed: unable to place capability ${skill.id} without collision.`);
         }
-        const rayOffset = (step % 8) * GRID_SNAP_STEP;
-        candX = snapToGrid(Math.cos(angle) * (currentCandRx + rayOffset));
-        candY = snapToGrid(Math.sin(angle) * (currentCandRy + rayOffset));
-        candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
+
+        positions[skill.id] = { x: candX, y: candY };
+        boxes.push({ id: skill.id, type: 'skill' as const, ...candBounds });
+        ringOuterX = Math.max(ringOuterX, Math.abs(candBounds.minX), Math.abs(candBounds.maxX));
+        ringOuterY = Math.max(ringOuterY, Math.abs(candBounds.minY), Math.abs(candBounds.maxY));
       }
 
-      if (!isCollisionFree) {
-        throw new Error(`Deterministic layout failed: unable to place capability ${skill.id} without collision.`);
-      }
+      return { positions, boxes, ringOuterX, ringOuterY };
+    };
 
-      skillPositions[skill.id] = { x: candX, y: candY };
-      const placedBox = { id: skill.id, type: 'skill' as const, ...candBounds };
-      placedBoxes.push(placedBox);
-      ringOuterX = Math.max(ringOuterX, Math.abs(candBounds.minX), Math.abs(candBounds.maxX));
-      ringOuterY = Math.max(ringOuterY, Math.abs(candBounds.minY), Math.abs(candBounds.maxY));
+    let placement = placeBatchAt(rx, ry);
+    let growthIterations = 0;
+    while (
+      measureMinIsoGapToPreviousRing(placement.boxes, previousRingIsoBoxes) < CAPABILITY_RING_MIN_ISO_CLEARANCE &&
+      growthIterations < CAPABILITY_RING_MAX_CLEARANCE_GROWTH_ITERATIONS
+    ) {
+      rx += CAPABILITY_RING_CLEARANCE_GROWTH_STEP;
+      ry += CAPABILITY_RING_CLEARANCE_GROWTH_STEP;
+      placement = placeBatchAt(rx, ry);
+      growthIterations++;
     }
+    if (measureMinIsoGapToPreviousRing(placement.boxes, previousRingIsoBoxes) < CAPABILITY_RING_MIN_ISO_CLEARANCE) {
+      throw new Error(`Deterministic layout failed: unable to maintain minimum capability ring clearance at ring ${ringIndex}.`);
+    }
+
+    Object.assign(skillPositions, placement.positions);
+    placedBoxes.push(...placement.boxes);
 
     rings.push({
       ringIndex,
       skillIds: batch.map(s => s.id),
       seedRadiusX: rx,
       seedRadiusY: ry,
-      outerX: ringOuterX,
-      outerY: ringOuterY,
+      outerX: placement.ringOuterX,
+      outerY: placement.ringOuterY,
     });
 
-    previousOuterX = ringOuterX;
-    previousOuterY = ringOuterY;
+    previousOuterX = placement.ringOuterX;
+    previousOuterY = placement.ringOuterY;
+    previousRingIsoBoxes = placement.boxes.map(box => isoBoxFromWorldBounds(box));
     ringIndex++;
   }
 
@@ -813,8 +919,35 @@ function buildStaticProjectOrbit(
     return false;
   };
 
+  // The canonical per-project core check inside hasOverlapAcrossRevolution
+  // above samples MOTION_SWEEP_SAMPLES (72) angles for each project, offset
+  // by THAT PROJECT'S OWN canonical index -- proven sufficient for the
+  // canonical rotating ring (every project always at its own slot). Under
+  // interactive reordering, though, a project can land at ANY of the N slot
+  // indices, which (because N and 72 share no common structure in general)
+  // sweeps a angles the per-project canonical grid never sampled — up to
+  // REORDER_SWEEP_SAMPLES (N*72) distinct positions, the same resolution
+  // hasReorderAdjacencyOverlap already requires for project-vs-project
+  // safety above. A radius could satisfy the coarser canonical check while
+  // still letting a reordered project's envelope clip the capability core at
+  // one of the finer, unsampled angles — exactly the gap that let a larger
+  // capability core (PR: capability ring spacing) slip through undetected
+  // here despite failing the dedicated arbitrary-reorder core-clearance
+  // regression. This closes that gap directly, at the same fine resolution,
+  // reusing the identical translatedBox primitive.
+  const hasReorderCoreInvasion = (rx: number, ry: number): boolean => {
+    for (let m = 0; m < REORDER_SWEEP_SAMPLES; m++) {
+      const angle = (m / REORDER_SWEEP_SAMPLES) * 2 * Math.PI - Math.PI / 2;
+      const centre = { x: centerIso.x + rx * Math.cos(angle), y: centerIso.y + ry * Math.sin(angle) };
+      for (let a = 0; a < totalProjects; a++) {
+        if (checkAABBOverlap(translatedBox(a, centre), coreIsoBounds, 0)) return true;
+      }
+    }
+    return false;
+  };
+
   const isOrbitRadiusSafe = (rx: number, ry: number): boolean =>
-    !hasOverlapAcrossRevolution(rx, ry) && !hasReorderAdjacencyOverlap(rx, ry);
+    !hasOverlapAcrossRevolution(rx, ry) && !hasReorderAdjacencyOverlap(rx, ry) && !hasReorderCoreInvasion(rx, ry);
 
   // 5. Validate zero-overlap ACROSS THE FULL REVOLUTION against the actual
   // rendered visual envelopes — for the canonical ordering AND for every

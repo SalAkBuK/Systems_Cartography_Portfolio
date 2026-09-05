@@ -1,17 +1,26 @@
-// Capability (skill) ring spacing regression coverage. The capability ring
-// loop in topologyLayout.ts used to grow from one ring to the next by a flat
-// "rx += 80 / ry += 60" increment that had no relationship to a ring's own
-// realized envelope (which can be pushed outward by the loop's own
-// collision-driven radial stepping). As capability count grew (~28+), that
-// flat increment could leave adjacent rings visually crowded, or in the
-// worst case let a heavily-packed ring's pushed-out nodes sit right up
-// against the next ring's nominal start. This suite pins the replacement
-// invariant: ring N+1's seed radius must derive from ring N's REALIZED outer
-// envelope plus the capability node footprint plus an explicit minimum
-// clearance -- matching this codebase's established convention (pure-function
-// node:test assertions, no React/jsdom harness -- see
-// adaptiveProjectRings.test.ts, which this suite mirrors for capability
-// rings).
+// Capability (skill) ring spacing regression coverage.
+//
+// History: the capability ring loop in topologyLayout.ts originally grew
+// from one ring to the next by a flat "rx += 80 / ry += 60" increment with
+// no relationship to a ring's own realized envelope. A first fix (see git
+// history) replaced that with a seed-radius formula measured against each
+// ring's realized outer envelope on its cardinal X/Y axes -- but production
+// screenshots showed the two capability bands still visibly crowded. The
+// reason: a world-space radial gap measured only along a ring's cardinal
+// axes does not guarantee a genuine gap at every OTHER angle around two
+// elliptical, differently-populated rings -- a node's collision-driven
+// radial push moves it outward along ITS OWN angle, not necessarily X or Y,
+// so the axis-only floor under-counted how far some nodes actually landed.
+// Measuring the ACTUAL rendered (isometric-space) gap between real placed
+// nodes on the committed snapshot found ring-to-ring gaps as small as ~2-4
+// iso units even though the seed-radius formula was satisfied.
+//
+// This suite tests the CURRENT fix directly against that failure mode: it
+// measures the real minimum isometric-space separation between adjacent
+// rings' actual placed node envelopes (not the seed-radius formula), the
+// same measurement production now enforces via a grow-and-reverify loop.
+// Matches this codebase's established convention (pure-function node:test
+// assertions, no React/jsdom harness -- see adaptiveProjectRings.test.ts).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -19,7 +28,9 @@ import {
   buildCapabilityRingLayout,
   checkAABBOverlap,
   getNodeBounds,
-  CAPABILITY_RING_MIN_CLEARANCE,
+  isoBoxFromWorldBounds,
+  minRectDistance,
+  CAPABILITY_RING_MIN_ISO_CLEARANCE,
 } from '../src/utils/topologyLayout.ts';
 import { GITHUB_SNAPSHOT } from '../src/data/githubSnapshot.generated.ts';
 import { InfrastructureSkill } from '../src/types.ts';
@@ -27,10 +38,8 @@ import { InfrastructureSkill } from '../src/types.ts';
 // Capability nodes are placed as fixed 48x48 logical footprints throughout
 // topologyLayout.ts (every getNodeBounds('skill', ..., 48, 48) call, and
 // already hardcoded the same way by tests/staticOrbitalLattice.test.ts and
-// tests/staticOrbitalLatticeSnapshot.test.ts). This is the footprint the
-// ring-spacing invariant below is measured against.
+// tests/staticOrbitalLatticeSnapshot.test.ts).
 const CAPABILITY_NODE_FOOTPRINT = 48;
-const CAPABILITY_NODE_HALF_FOOTPRINT = CAPABILITY_NODE_FOOTPRINT / 2;
 
 function generateMockSkills(count: number): InfrastructureSkill[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -63,65 +72,68 @@ function sortSkillsCanonically(skills: InfrastructureSkill[]): InfrastructureSki
   });
 }
 
+/** The exact real-world measurement production uses: minimum isometric-space gap between every node of ring A and every node of ring B. */
+function measureMinIsoRingGap(
+  skillPositions: Record<string, { x: number; y: number }>,
+  ringAIds: string[],
+  ringBIds: string[]
+): number {
+  const isoBoxesA = ringAIds.map(id => isoBoxFromWorldBounds(getNodeBounds('skill', skillPositions[id], CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT)));
+  const isoBoxesB = ringBIds.map(id => isoBoxFromWorldBounds(getNodeBounds('skill', skillPositions[id], CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT)));
+  let min = Infinity;
+  for (const a of isoBoxesA) {
+    for (const b of isoBoxesB) {
+      min = Math.min(min, minRectDistance(a, b));
+    }
+  }
+  return min;
+}
+
 // ---------------------------------------------------------------------------
-// SPACING INVARIANT
+// ACTUAL RENDERED RING SEPARATION (the real invariant)
 // ---------------------------------------------------------------------------
 
-test('capability ring counts: 28 (current), 35, and 50 capabilities all require more than one ring', () => {
+test('every adjacent capability ring pair maintains at least CAPABILITY_RING_MIN_ISO_CLEARANCE of ACTUAL isometric-space separation for 28, 35, and 50 capabilities', () => {
   for (const count of [28, 35, 50]) {
-    const { rings } = buildCapabilityRingLayout(generateMockSkills(count));
+    const { skillPositions, rings } = buildCapabilityRingLayout(generateMockSkills(count));
     assert.ok(rings.length > 1, `${count} capabilities should require multiple rings to reproduce the reported crowding`);
-    assert.equal(rings.reduce((sum, r) => sum + r.skillIds.length, 0), count, `every capability must be assigned to exactly one ring for ${count}`);
-  }
-});
-
-test('every ring after the first seeds its radius from the PREVIOUS ring\'s realized outer envelope plus footprint plus CAPABILITY_RING_MIN_CLEARANCE -- never a flat increment', () => {
-  for (const count of [28, 35, 50]) {
-    const { rings } = buildCapabilityRingLayout(generateMockSkills(count));
     for (let i = 1; i < rings.length; i++) {
-      const prev = rings[i - 1];
-      const ring = rings[i];
-      const expectedSeedX = prev.outerX + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
-      const expectedSeedY = prev.outerY + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
+      const gap = measureMinIsoRingGap(skillPositions, rings[i - 1].skillIds, rings[i].skillIds);
       assert.ok(
-        Math.abs(ring.seedRadiusX - expectedSeedX) < 1e-9,
-        `count=${count} ring ${i}: seedRadiusX ${ring.seedRadiusX} must equal previous ring's realized outerX (${prev.outerX}) + footprint + clearance (${expectedSeedX})`
-      );
-      assert.ok(
-        Math.abs(ring.seedRadiusY - expectedSeedY) < 1e-9,
-        `count=${count} ring ${i}: seedRadiusY ${ring.seedRadiusY} must equal previous ring's realized outerY (${prev.outerY}) + footprint + clearance (${expectedSeedY})`
+        gap >= CAPABILITY_RING_MIN_ISO_CLEARANCE - 1e-9,
+        `count=${count} ring ${i - 1}->${i}: measured iso gap ${gap.toFixed(2)} fell below the ${CAPABILITY_RING_MIN_ISO_CLEARANCE}-unit invariant`
       );
     }
   }
 });
 
-test('minimum inter-ring clearance invariant: every ring maintains at least CAPABILITY_RING_MIN_CLEARANCE of breathing room beyond the previous ring\'s realized envelope and its own footprint', () => {
-  for (const count of [28, 35, 50]) {
-    const { rings } = buildCapabilityRingLayout(generateMockSkills(count));
-    for (let i = 1; i < rings.length; i++) {
-      const prev = rings[i - 1];
-      const ring = rings[i];
-      const clearanceX = ring.seedRadiusX - prev.outerX - CAPABILITY_NODE_HALF_FOOTPRINT;
-      const clearanceY = ring.seedRadiusY - prev.outerY - CAPABILITY_NODE_HALF_FOOTPRINT;
-      assert.ok(clearanceX >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9, `count=${count} ring ${i}: X clearance ${clearanceX} fell below the invariant`);
-      assert.ok(clearanceY >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9, `count=${count} ring ${i}: Y clearance ${clearanceY} fell below the invariant`);
-    }
+test('the real committed snapshot (~28 capabilities) maintains the same measured minimum iso-space ring separation', () => {
+  const skills = sortSkillsCanonically(GITHUB_SNAPSHOT.skills);
+  assert.ok(skills.length >= 25, 'expected the committed snapshot to still be in the ~28-capability regime this fix targets');
+
+  const { skillPositions, rings } = buildCapabilityRingLayout(skills);
+  assert.ok(rings.length > 1, 'the real snapshot should still require multiple capability rings');
+  for (let i = 1; i < rings.length; i++) {
+    const gap = measureMinIsoRingGap(skillPositions, rings[i - 1].skillIds, rings[i].skillIds);
+    assert.ok(
+      gap >= CAPABILITY_RING_MIN_ISO_CLEARANCE - 1e-9,
+      `real snapshot ring ${i - 1}->${i}: measured iso gap ${gap.toFixed(2)} fell below the ${CAPABILITY_RING_MIN_ISO_CLEARANCE}-unit invariant`
+    );
   }
 });
 
-test('regression: 28-capability ring 1 seed radius now clears further than the original flat "+80/+60" increment ever guaranteed', () => {
-  // Documents the actual reported bug: the old code always seeded ring 1 at
-  // exactly rx=90+80=170, ry=65+60=125, regardless of how far ring 0's own
-  // nodes actually landed. With 28 capabilities, ring 0 packs enough nodes
-  // that its realized envelope alone (before any clearance is even added)
-  // already approaches that old fixed seed -- proving the old increment left
-  // little to no real breathing room.
-  const { rings } = buildCapabilityRingLayout(generateMockSkills(28));
-  const OLD_FIXED_RING1_RX = 90 + 80;
-  const OLD_FIXED_RING1_RY = 65 + 60;
-  assert.ok(rings[0].outerX > OLD_FIXED_RING1_RX * 0.6, 'sanity: ring 0 must actually pack out far enough for this regression to be meaningful');
-  assert.ok(rings[1].seedRadiusX > OLD_FIXED_RING1_RX, `new ring 1 seedRadiusX (${rings[1].seedRadiusX}) must exceed the old flat increment (${OLD_FIXED_RING1_RX})`);
-  assert.ok(rings[1].seedRadiusY > OLD_FIXED_RING1_RY, `new ring 1 seedRadiusY (${rings[1].seedRadiusY}) must exceed the old flat increment (${OLD_FIXED_RING1_RY})`);
+test('regression: the real committed snapshot no longer reproduces the ~2-4 iso-unit near-touching gap the seed-radius-only fix left behind', () => {
+  // Documents the actual reported bug concretely: measuring the previous
+  // fix's output against the real snapshot found ring 1->2 separated by as
+  // little as ~2 iso units -- effectively touching at production scale. The
+  // current measured gap must be substantially larger, not just technically
+  // above zero.
+  const skills = sortSkillsCanonically(GITHUB_SNAPSHOT.skills);
+  const { skillPositions, rings } = buildCapabilityRingLayout(skills);
+  for (let i = 1; i < rings.length; i++) {
+    const gap = measureMinIsoRingGap(skillPositions, rings[i - 1].skillIds, rings[i].skillIds);
+    assert.ok(gap > 30, `ring ${i - 1}->${i}: measured gap ${gap.toFixed(2)} is still near the previously-reported crowded range`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -142,19 +154,12 @@ test('no two capability nodes overlap for 28, 35, or 50 capabilities', () => {
   }
 });
 
-test('collision-driven radial adjustment (if any triggers) cannot push a ring\'s nodes into the next ring: no cross-ring overlap even where per-node pushback occurred', () => {
-  // 50 capabilities packs ring 2 with 26 nodes -- the densest ring, most
-  // likely to trigger the per-node collision-avoidance radial stepping.
-  const { skillPositions, rings } = buildCapabilityRingLayout(generateMockSkills(50));
-  assert.ok(rings.length >= 3);
-  const boxesByRing = rings.map(ring =>
-    ring.skillIds.map(id => ({ id, ...getNodeBounds('skill', skillPositions[id], CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT) }))
-  );
-  for (let r = 0; r < boxesByRing.length - 1; r++) {
-    for (const a of boxesByRing[r]) {
-      for (const b of boxesByRing[r + 1]) {
-        assert.equal(checkAABBOverlap(a, b, 0), false, `${a.id} (ring ${r}) overlaps ${b.id} (ring ${r + 1})`);
-      }
+test('no two capability nodes overlap on the real committed snapshot', () => {
+  const { skillPositions } = buildCapabilityRingLayout(sortSkillsCanonically(GITHUB_SNAPSHOT.skills));
+  const boxes = Object.entries(skillPositions).map(([id, pos]) => ({ id, ...getNodeBounds('skill', pos, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT) }));
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      assert.equal(checkAABBOverlap(boxes[i], boxes[j], 0), false, `${boxes[i].id} overlaps ${boxes[j].id}`);
     }
   }
 });
@@ -181,38 +186,19 @@ test('deterministic output holds end-to-end through assembleTopologyLayout as we
 });
 
 // ---------------------------------------------------------------------------
-// REAL COMMITTED SNAPSHOT (current ~28 capability count)
+// PROJECT-ORBIT INTEGRATION (real committed data: 28 capabilities + 17 projects)
 // ---------------------------------------------------------------------------
 
-test('real committed snapshot currently has ~28 capabilities and maintains the same spacing invariant', () => {
-  const skills = sortSkillsCanonically(GITHUB_SNAPSHOT.skills);
-  assert.ok(skills.length >= 25, 'expected the committed snapshot to still be in the ~28-capability regime this fix targets');
-
-  const { rings, skillPositions } = buildCapabilityRingLayout(skills);
-  assert.equal(Object.keys(skillPositions).length, skills.length);
-
-  for (let i = 1; i < rings.length; i++) {
-    const prev = rings[i - 1];
-    const ring = rings[i];
-    const clearanceX = ring.seedRadiusX - prev.outerX - CAPABILITY_NODE_HALF_FOOTPRINT;
-    const clearanceY = ring.seedRadiusY - prev.outerY - CAPABILITY_NODE_HALF_FOOTPRINT;
-    assert.ok(clearanceX >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9);
-    assert.ok(clearanceY >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9);
-  }
-
-  const boxes = Object.entries(skillPositions).map(([id, pos]) => ({ id, ...getNodeBounds('skill', pos, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT) }));
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      assert.equal(checkAABBOverlap(boxes[i], boxes[j], 0), false, `${boxes[i].id} overlaps ${boxes[j].id}`);
-    }
-  }
-});
-
-test('assembleTopologyLayout on the real committed snapshot produces finite, fully-populated capability positions', () => {
-  const { skillPositions } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
+test('assembleTopologyLayout on the real committed snapshot produces finite, fully-populated, non-overlapping capability AND project positions together', () => {
+  const { skillPositions, projectPositions } = assembleTopologyLayout(GITHUB_SNAPSHOT.projects, GITHUB_SNAPSHOT.skills);
   for (const skill of GITHUB_SNAPSHOT.skills) {
     const pos = skillPositions[skill.id];
     assert.ok(pos, `skill ${skill.id} has no canonical position`);
+    assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y));
+  }
+  for (const project of GITHUB_SNAPSHOT.projects) {
+    const pos = projectPositions[project.id];
+    assert.ok(pos, `project ${project.id} has no canonical position`);
     assert.ok(Number.isFinite(pos.x) && Number.isFinite(pos.y));
   }
 });
@@ -237,15 +223,22 @@ test('single-capability and small (<=6) counts are unaffected -- ring 0\'s own s
   assert.equal(rings[0].seedRadiusY, 65);
 });
 
-test('does not hard-code the current 28-capability count: the same invariant holds for an arbitrary count with no special-casing', () => {
+test('does not hard-code the current 28-capability count: the same measured-separation invariant holds for an arbitrary count with no special-casing', () => {
   for (const count of [29, 41, 63]) {
-    const { rings } = buildCapabilityRingLayout(generateMockSkills(count));
+    const { skillPositions, rings } = buildCapabilityRingLayout(generateMockSkills(count));
     assert.equal(rings.reduce((sum, r) => sum + r.skillIds.length, 0), count);
     for (let i = 1; i < rings.length; i++) {
-      const prev = rings[i - 1];
-      const ring = rings[i];
-      assert.ok(ring.seedRadiusX - prev.outerX - CAPABILITY_NODE_HALF_FOOTPRINT >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9);
-      assert.ok(ring.seedRadiusY - prev.outerY - CAPABILITY_NODE_HALF_FOOTPRINT >= CAPABILITY_RING_MIN_CLEARANCE - 1e-9);
+      const gap = measureMinIsoRingGap(skillPositions, rings[i - 1].skillIds, rings[i].skillIds);
+      assert.ok(gap >= CAPABILITY_RING_MIN_ISO_CLEARANCE - 1e-9, `count=${count} ring ${i - 1}->${i}: gap ${gap.toFixed(2)} below invariant`);
     }
   }
+});
+
+test('ordering is preserved: ring membership/order derives from the canonically sorted skill list, not insertion order', () => {
+  const skills = generateMockSkills(28);
+  const shuffled = [...skills].reverse();
+  const a = buildCapabilityRingLayout(sortSkillsCanonically(skills));
+  const b = buildCapabilityRingLayout(sortSkillsCanonically(shuffled));
+  assert.deepEqual(a.skillPositions, b.skillPositions);
+  assert.deepEqual(a.rings.map(r => r.skillIds), b.rings.map(r => r.skillIds));
 });
