@@ -47,8 +47,13 @@ export default async function handler(
   // A little beyond the core's own Resend deadline so the core returns a
   // structured generic failure rather than being hard-aborted first.
   const timeout = setTimeout(() => controller.abort(), CONTACT_RESEND_TIMEOUT_MS + 1_500);
-  const onClose = () => controller.abort();
-  req.on('close', onClose);
+  // IncomingMessage `close` fires when a request completes normally on modern
+  // Node, so it must not be treated as a client disconnect. Abort only when
+  // the response closes before we have finished writing it.
+  const onClose = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  res.on('close', onClose);
 
   try {
     const { body, tooLarge } = await readBoundedRequestBody(req, CONTACT_MAX_BODY_BYTES);
@@ -85,6 +90,6 @@ export default async function handler(
     res.end(JSON.stringify({ ok: false, error: 'The contact service encountered an unexpected error.' }));
   } finally {
     clearTimeout(timeout);
-    req.off('close', onClose);
+    res.off('close', onClose);
   }
 }
