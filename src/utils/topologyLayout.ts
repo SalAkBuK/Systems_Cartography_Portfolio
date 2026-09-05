@@ -404,6 +404,157 @@ const FIT_VIEWPORT_PADDING = 40; // modest final padding around the union of eve
  */
 const PROJECT_RING_SPACING_ISO = ORBIT_SLOT_MARGIN + PROJECT_CALLOUT_WIDTH;
 
+/**
+ * Capability (skill) nodes are placed as fixed 48x48 logical footprints --
+ * every getNodeBounds('skill', ..., width, height) call in the capability
+ * ring loop below passes this exact size. It is the footprint the ring
+ * spacing invariant below is measured against: what actually gets rendered
+ * and collision-checked, never a separately-assumed size.
+ */
+const CAPABILITY_NODE_FOOTPRINT = 48;
+const CAPABILITY_NODE_HALF_FOOTPRINT = CAPABILITY_NODE_FOOTPRINT / 2;
+
+/**
+ * Explicit minimum radial clearance (world units) enforced between one
+ * capability ring's REALIZED outer envelope (see `outerX`/`outerY` on
+ * `CapabilityRingPlacement` -- measured from where nodes actually land,
+ * including any collision-driven radial adjustment, never the nominal seed
+ * radius that only describes where slots started) and the next ring's own
+ * node footprint. This is the capability-ring analog of
+ * `PROJECT_RING_SPACING_ISO`: an explicit, count-independent breathing-room
+ * invariant, replacing a flat "rx += 80 / ry += 60" increment that had no
+ * relationship to what actually got placed (for the committed portfolio's
+ * real ~28-capability data, that flat increment left as little as ~2 world
+ * units of actual Y clearance once ring 0's realized packing is accounted
+ * for). One `GRID_SNAP_STEP` -- the same grid unit every capability position
+ * is already snapped to -- is a deliberate, legible minimum gap rather than
+ * an arbitrary constant.
+ */
+export const CAPABILITY_RING_MIN_CLEARANCE = GRID_SNAP_STEP;
+
+/** One concentric capability ring's placement diagnostics -- see `buildCapabilityRingLayout`. */
+export interface CapabilityRingPlacement {
+  ringIndex: number;
+  skillIds: string[];
+  /** Nominal radii this ring's slots were placed from, before any per-node collision-driven adjustment. */
+  seedRadiusX: number;
+  seedRadiusY: number;
+  /** Realized outer envelope after placement -- authoritative floor input for the next ring's clearance. */
+  outerX: number;
+  outerY: number;
+}
+
+function snapToGrid(val: number, step: number = GRID_SNAP_STEP): number {
+  return (Math.round(val / step) * step) || 0;
+}
+
+/**
+ * Builds one or more concentric capability rings around the topology center.
+ * Skills are batched onto each ring by how many fit its perimeter (unchanged
+ * heuristic), then each is placed via the existing deterministic
+ * collision-avoidance search (unchanged). The one behavior this changes from
+ * the original single fixed-increment loop: ring N+1's seed radius is
+ * derived from ring N's REALIZED outer envelope (the actual placed bounds,
+ * including any collision-driven pushback) plus this ring's own footprint
+ * plus `CAPABILITY_RING_MIN_CLEARANCE` -- instead of a flat "+80/+60" that
+ * had no relationship to what actually got placed and could let a
+ * heavily-packed ring's pushed-out nodes sit right up against the next
+ * ring's nominal start. Because the floor is measured from what was
+ * actually placed, not a nominal seed, it can only ever grow to
+ * accommodate collision pushback -- never leave a stale gap.
+ */
+export function buildCapabilityRingLayout(
+  sortedSkills: InfrastructureSkill[]
+): { skillPositions: Record<string, { x: number; y: number }>; placedBoxes: PlacedNodeBounds[]; rings: CapabilityRingPlacement[] } {
+  const skillPositions: Record<string, { x: number; y: number }> = {};
+  const placedBoxes: PlacedNodeBounds[] = [];
+  const rings: CapabilityRingPlacement[] = [];
+
+  let unplacedSkills = [...sortedSkills];
+  let ringIndex = 0;
+  let rx = 90;
+  let ry = 65;
+  let previousOuterX = 0;
+  let previousOuterY = 0;
+
+  while (unplacedSkills.length > 0) {
+    if (ringIndex > 0) {
+      rx = previousOuterX + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
+      ry = previousOuterY + CAPABILITY_NODE_HALF_FOOTPRINT + CAPABILITY_RING_MIN_CLEARANCE;
+    }
+
+    // Approximate ellipse perimeter = 2 * PI * sqrt((rx^2 + ry^2) / 2)
+    const perimeter = 2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2);
+    // Capability footprint is 48x48; safe arc spacing ~75px per node along perimeter
+    const capacity = Math.max(3, Math.floor(perimeter / 75));
+    const batchCount = Math.min(unplacedSkills.length, capacity);
+    const batch = unplacedSkills.slice(0, batchCount);
+    unplacedSkills = unplacedSkills.slice(batchCount);
+
+    const angleStagger = ringIndex > 0 ? (ringIndex * Math.PI) / batchCount : 0;
+    let ringOuterX = 0;
+    let ringOuterY = 0;
+
+    for (let i = 0; i < batch.length; i++) {
+      const skill = batch[i];
+      const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
+      const rawX = Math.cos(angle) * rx;
+      const rawY = Math.sin(angle) * ry;
+
+      let candX = snapToGrid(rawX);
+      let candY = snapToGrid(rawY);
+      let candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
+
+      // Deterministic collision search with radial stepping & candidate ring expansion
+      let isCollisionFree = false;
+      let step = 0;
+      let currentCandRx = rx;
+      let currentCandRy = ry;
+
+      while (!isCollisionFree && step < 80) {
+        if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 12))) {
+          isCollisionFree = true;
+          break;
+        }
+        step++;
+        if (step % 8 === 0) {
+          currentCandRx += GRID_SNAP_STEP * 2;
+          currentCandRy += GRID_SNAP_STEP * 2;
+        }
+        const rayOffset = (step % 8) * GRID_SNAP_STEP;
+        candX = snapToGrid(Math.cos(angle) * (currentCandRx + rayOffset));
+        candY = snapToGrid(Math.sin(angle) * (currentCandRy + rayOffset));
+        candBounds = getNodeBounds('skill', { x: candX, y: candY }, CAPABILITY_NODE_FOOTPRINT, CAPABILITY_NODE_FOOTPRINT);
+      }
+
+      if (!isCollisionFree) {
+        throw new Error(`Deterministic layout failed: unable to place capability ${skill.id} without collision.`);
+      }
+
+      skillPositions[skill.id] = { x: candX, y: candY };
+      const placedBox = { id: skill.id, type: 'skill' as const, ...candBounds };
+      placedBoxes.push(placedBox);
+      ringOuterX = Math.max(ringOuterX, Math.abs(candBounds.minX), Math.abs(candBounds.maxX));
+      ringOuterY = Math.max(ringOuterY, Math.abs(candBounds.minY), Math.abs(candBounds.maxY));
+    }
+
+    rings.push({
+      ringIndex,
+      skillIds: batch.map(s => s.id),
+      seedRadiusX: rx,
+      seedRadiusY: ry,
+      outerX: ringOuterX,
+      outerY: ringOuterY,
+    });
+
+    previousOuterX = ringOuterX;
+    previousOuterY = ringOuterY;
+    ringIndex++;
+  }
+
+  return { skillPositions, placedBoxes, rings };
+}
+
 /** Worst-case iso-space footprint half-extent across a set of projects (0 for an empty set). */
 function computeMaxProjectFootprintIsoHalfExtent(projects: ProjectData[]): { x: number; y: number } {
   if (projects.length === 0) return { x: 0, y: 0 };
@@ -890,8 +1041,6 @@ export function assembleTopologyLayout(
   const skillPositions: Record<string, { x: number; y: number }> = {};
   const placedBoxes: PlacedNodeBounds[] = [];
 
-  const snap = (val: number, step: number = GRID_SNAP_STEP) => (Math.round(val / step) * step) || 0;
-
   // 1. Stable Sort: Skills (code -> name -> id)
   const sortedSkills = [...skills].sort((a, b) => {
     const codeCmp = (a.code || '').localeCompare(b.code || '');
@@ -921,67 +1070,9 @@ export function assembleTopologyLayout(
     skillPositions[skill.id] = pos;
     placedBoxes.push({ id: skill.id, type: 'skill', ...bounds });
   } else if (totalSkills > 1) {
-    let unplacedSkills = [...sortedSkills];
-    let ringIndex = 0;
-    let rx = 90;
-    let ry = 65;
-
-    while (unplacedSkills.length > 0) {
-      // Approximate ellipse perimeter = 2 * PI * sqrt((rx^2 + ry^2) / 2)
-      const perimeter = 2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2);
-      // Capability footprint is 48x48; safe arc spacing ~75px per node along perimeter
-      const capacity = Math.max(3, Math.floor(perimeter / 75));
-      const batchCount = Math.min(unplacedSkills.length, capacity);
-      const batch = unplacedSkills.slice(0, batchCount);
-      unplacedSkills = unplacedSkills.slice(batchCount);
-
-      const angleStagger = ringIndex > 0 ? (ringIndex * Math.PI) / batchCount : 0;
-
-      for (let i = 0; i < batch.length; i++) {
-        const skill = batch[i];
-        const angle = (i / batchCount) * 2 * Math.PI - Math.PI / 2 + angleStagger;
-        const rawX = Math.cos(angle) * rx;
-        const rawY = Math.sin(angle) * ry;
-
-        let candX = snap(rawX);
-        let candY = snap(rawY);
-        let candBounds = getNodeBounds('skill', { x: candX, y: candY }, 48, 48);
-
-        // Deterministic collision search with radial stepping & candidate ring expansion
-        let isCollisionFree = false;
-        let step = 0;
-        let currentCandRx = rx;
-        let currentCandRy = ry;
-
-        while (!isCollisionFree && step < 80) {
-          if (!placedBoxes.some(box => checkAABBOverlap(candBounds, box, 12))) {
-            isCollisionFree = true;
-            break;
-          }
-          step++;
-          if (step % 8 === 0) {
-            currentCandRx += GRID_SNAP_STEP * 2;
-            currentCandRy += GRID_SNAP_STEP * 2;
-          }
-          const rayOffset = (step % 8) * GRID_SNAP_STEP;
-          candX = snap(Math.cos(angle) * (currentCandRx + rayOffset));
-          candY = snap(Math.sin(angle) * (currentCandRy + rayOffset));
-          candBounds = getNodeBounds('skill', { x: candX, y: candY }, 48, 48);
-        }
-
-        if (!isCollisionFree) {
-          throw new Error(`Deterministic layout failed: unable to place capability ${skill.id} without collision.`);
-        }
-
-        skillPositions[skill.id] = { x: candX, y: candY };
-        placedBoxes.push({ id: skill.id, type: 'skill', ...candBounds });
-      }
-
-      // Expand to next capability ring
-      rx += 80;
-      ry += 60;
-      ringIndex++;
-    }
+    const { skillPositions: ringSkillPositions, placedBoxes: ringPlacedBoxes } = buildCapabilityRingLayout(sortedSkills);
+    Object.assign(skillPositions, ringSkillPositions);
+    placedBoxes.push(...ringPlacedBoxes);
   }
 
   // 4. Layout Projects: one or more concentric elliptical project rings
