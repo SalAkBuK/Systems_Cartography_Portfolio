@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { 
   ActiveView, 
   ViewportState, 
@@ -19,17 +19,41 @@ import { TopologyCanvas } from './components/TopologyCanvas';
 import { ProjectSubsystemCanvas } from './components/ProjectSubsystemCanvas';
 import { RightInspectorPanel } from './components/RightInspectorPanel';
 import { BottomCommandStrip } from './components/BottomCommandStrip';
-import { CaseStudyModal } from './components/CaseStudyModal';
-import { ContactPage } from './components/ContactPage';
-import { ResumeModal } from './components/ResumeModal';
 import { GITHUB_SNAPSHOT, GITHUB_SNAPSHOT_METADATA } from './data/githubSnapshot.generated';
 import { resolveExperience, resolveGitHubSnapshotForTarget } from './utils/portfolioUtils';
 import { projectIdStillPresent } from './utils/reconcileLiveRepositories';
 import { useLiveGitHubInventory } from './hooks/useLiveGitHubInventory';
 import { Menu, X } from 'lucide-react';
 
+// Deferred: none of these three are needed for the initial topology render
+// (case study / resume are modals opened on demand; contact is a secondary
+// view reached via navigation). Each is mounted only once actually
+// opened/entered below, so the dynamic import fires on first use, not on
+// initial app load.
+const CaseStudyModal = lazy(() => import('./components/CaseStudyModal').then(m => ({ default: m.CaseStudyModal })));
+const ContactPage = lazy(() => import('./components/ContactPage').then(m => ({ default: m.ContactPage })));
+const ResumeModal = lazy(() => import('./components/ResumeModal').then(m => ({ default: m.ResumeModal })));
+
 /** Stable empty base so the live-inventory hook never re-seeds from a fresh array each render. */
 const EMPTY_PROJECTS: ProjectData[] = [];
+
+/** Minimal brutalist loading state for a deferred surface's Suspense boundary -- shown only for the brief window while its chunk downloads on first use. */
+function DeferredSurfaceFallback({ variant }: { variant: 'modal' | 'page' }) {
+  if (variant === 'page') {
+    return (
+      <div className="flex-1 flex items-center justify-center text-[11px] font-bold tracking-wider uppercase text-[#15150F]" aria-hidden="true">
+        LOADING...
+      </div>
+    );
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-[#15150F]/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6" aria-hidden="true">
+      <div className="bg-[#D4CDA4] border-2 border-precision text-[#15150F] px-4 py-3 text-[11px] font-bold tracking-wider uppercase shadow-[8px_8px_0px_#15150F]">
+        LOADING...
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('system_overview');
@@ -375,7 +399,9 @@ export default function App() {
         {/* Central Spatial Landscape / Decomposed Subsystem View */}
         <main className="flex-1 flex flex-col relative overflow-hidden bg-[#D4CDA4]">
           {activeView === 'contact' ? (
-            <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
+            <Suspense fallback={<DeferredSurfaceFallback variant="page" />}>
+              <ContactPage operator={operator} formEndpoint={PORTFOLIO_CONFIG.contactFormEndpoint} />
+            </Suspense>
           ) : (
             <>
               {/* TopologyCanvas stays mounted, full-size, and layout-
@@ -467,23 +493,34 @@ export default function App() {
         operatorLinkedin={operator.contact.linkedin}
       />
 
-      {/* Deep Dive Case Study Spec Modal */}
-      <CaseStudyModal
-        project={selectedProject}
-        isOpen={isCaseStudyOpen}
-        onClose={() => setIsCaseStudyOpen(false)}
-        operator={operator}
-      />
+      {/* Deep Dive Case Study Spec Modal -- mounted (and its chunk fetched)
+          only once actually opened; closing unmounts it again since it has
+          no exit animation or state worth preserving across opens (its own
+          `if (!isOpen) return null` already made open/closed instant). */}
+      {isCaseStudyOpen && (
+        <Suspense fallback={<DeferredSurfaceFallback variant="modal" />}>
+          <CaseStudyModal
+            project={selectedProject}
+            isOpen={isCaseStudyOpen}
+            onClose={() => setIsCaseStudyOpen(false)}
+            operator={operator}
+          />
+        </Suspense>
+      )}
 
-      {/* Technical Resume & Spec Modal */}
-      <ResumeModal
-        isOpen={isResumeOpen}
-        onClose={() => setIsResumeOpen(false)}
-        operator={operator}
-        projects={projects}
-        skills={skills}
-        experience={experience}
-      />
+      {/* Technical Resume & Spec Modal -- same on-demand mount as above. */}
+      {isResumeOpen && (
+        <Suspense fallback={<DeferredSurfaceFallback variant="modal" />}>
+          <ResumeModal
+            isOpen={isResumeOpen}
+            onClose={() => setIsResumeOpen(false)}
+            operator={operator}
+            projects={projects}
+            skills={skills}
+            experience={experience}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
